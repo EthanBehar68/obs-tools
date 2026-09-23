@@ -1,0 +1,436 @@
+/*
+obs-unified-chat
+Copyright (C) 2026 ebehar
+
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 2 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along
+with this program. If not, see <https://www.gnu.org/licenses/>
+*/
+
+#include "youtube-api.hpp"
+#include "text-util.hpp"
+
+#include <algorithm>
+#include <json.hpp>
+
+using json = nlohmann::json;
+
+namespace unified_chat::youtube {
+
+static constexpr int kWaitForBroadcastMs = 30000;
+static constexpr int kNetworkRetryMs = 10000;
+static constexpr int kErrorRetryMs = 60000;
+static constexpr int kQuotaRetryMs = 15 * 60 * 1000;
+
+static std::string StringAt(const json &obj, std::initializer_list<const char *> path)
+{
+	const json *node = &obj;
+	for (const char *key : path) {
+		if (!node->is_object())
+			return {};
+		auto it = node->find(key);
+		if (it == node->end())
+			return {};
+		node = &*it;
+	}
+	return node->is_string() ? node->get<std::string>() : std::string();
+}
+
+static bool BoolAt(const json &obj, const char *section, const char *key)
+{
+	auto it = obj.find(section);
+	if (it == obj.end() || !it->is_object())
+		return false;
+	auto value = it->find(key);
+	return value != it->end() && value->is_boolean() && value->get<bool>();
+}
+
+static std::optional<ChatMessage> MessageFromItem(const json &item)
+{
+	if (!item.is_object())
+		return std::nullopt;
+
+	ChatMessage chat;
+	chat.platform = Platform::YouTube;
+	chat.id = StringAt(item, {"id"});
+	chat.author = StringAt(item, {"authorDetails", "displayName"});
+	chat.text = StringAt(item, {"snippet", "displayMessage"});
+	if (chat.text.empty())
+		chat.text = StringAt(item, {"snippet", "textMessageDetails", "messageText"});
+	if (chat.text.empty())
+		return std::nullopt;
+
+	if (BoolAt(item, "authorDetails", "isChatOwner"))
+		chat.color = "#ffd600";
+	else if (BoolAt(item, "authorDetails", "isChatModerator"))
+		chat.color = "#5e84f1";
+	else if (BoolAt(item, "authorDetails", "isChatSponsor"))
+		chat.color = "#2ba640";
+	return chat;
+}
+
+std::optional<MessagesPage> ParseMessagesPage(const std::string &body)
+{
+	json obj = json::parse(body, nullptr, false);
+	if (!obj.is_object())
+		return std::nullopt;
+
+	MessagesPage page;
+	page.nextPageToken = StringAt(obj, {"nextPageToken"});
+	auto interval = obj.find("pollingIntervalMillis");
+	if (interval != obj.end() && interval->is_number_integer())
+		page.pollingIntervalMs = interval->get<int>();
+	page.chatEnded = obj.contains("offlineAt");
+
+	auto items = obj.find("items");
+	if (items != obj.end() && items->is_array()) {
+		for (const auto &item : *items) {
+			if (StringAt(item, {"snippet", "type"}) == "chatEndedEvent") {
+				page.chatEnded = true;
+				continue;
+			}
+			if (auto chat = MessageFromItem(item))
+				page.messages.push_back(std::move(*chat));
+		}
+	}
+	return page;
+}
+
+std::optional<ChatMessage> ParseChatMessage(const std::string &body)
+{
+	json obj = json::parse(body, nullptr, false);
+	return MessageFromItem(obj);
+}
+
+static std::optional<std::string> FirstItemString(const std::string &body, std::initializer_list<const char *> path)
+{
+	json obj = json::parse(body, nullptr, false);
+	if (!obj.is_object())
+		return std::nullopt;
+	auto items = obj.find("items");
+	if (items == obj.end() || !items->is_array())
+		return std::nullopt;
+	for (const auto &item : *items) {
+		std::string value = StringAt(item, path);
+		if (!value.empty())
+			return value;
+	}
+	return std::nullopt;
+}
+
+std::optional<std::string> ParseBroadcastLiveChatId(const std::string &body)
+{
+	return FirstItemString(body, {"snippet", "liveChatId"});
+}
+
+std::optional<std::string> ParseVideoLiveChatId(const std::string &body)
+{
+	return FirstItemString(body, {"liveStreamingDetails", "activeLiveChatId"});
+}
+
+static std::optional<std::string> ParseChannelTitle(const std::string &body)
+{
+	return FirstItemString(body, {"snippet", "title"});
+}
+
+std::string ParseErrorReason(const std::string &body)
+{
+	json obj = json::parse(body, nullptr, false);
+	if (!obj.is_object())
+		return {};
+	auto error = obj.find("error");
+	if (error == obj.end())
+		return {};
+	if (error->is_string())
+		return error->get<std::string>();
+	if (!error->is_object())
+		return {};
+	auto errors = error->find("errors");
+	if (errors != error->end() && errors->is_array() && !errors->empty()) {
+		std::string reason = StringAt((*errors)[0], {"reason"});
+		if (!reason.empty())
+			return reason;
+	}
+	return StringAt(*error, {"message"});
+}
+
+std::string BuildInsertBody(const std::string &liveChatId, std::string_view text)
+{
+	json body = {{"snippet",
+		      {{"liveChatId", liveChatId},
+		       {"type", "textMessageEvent"},
+		       {"textMessageDetails", {{"messageText", Trim(StripLineBreaks(text))}}}}}};
+	return body.dump();
+}
+
+static bool IsVideoIdChar(char c)
+{
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_';
+}
+
+static bool IsVideoId(std::string_view value)
+{
+	return value.size() == 11 && std::all_of(value.begin(), value.end(), IsVideoIdChar);
+}
+
+std::string ExtractVideoId(std::string_view input)
+{
+	std::string value = Trim(input);
+	if (IsVideoId(value))
+		return value;
+
+	std::string candidate;
+	auto v = value.find("v=");
+	if (v != std::string::npos && (v == 0 || value[v - 1] == '?' || value[v - 1] == '&')) {
+		candidate = value.substr(v + 2);
+	} else {
+		for (const char *marker : {"youtu.be/", "/live/", "/shorts/", "/embed/", "/video/"}) {
+			auto pos = value.find(marker);
+			if (pos != std::string::npos) {
+				candidate = value.substr(pos + std::char_traits<char>::length(marker));
+				break;
+			}
+		}
+	}
+	auto end = candidate.find_first_of("?&#/");
+	if (end != std::string::npos)
+		candidate.resize(end);
+	return IsVideoId(candidate) ? candidate : std::string();
+}
+
+bool RecentIds::Insert(const std::string &id)
+{
+	if (id.empty())
+		return true;
+	if (!ids_.insert(id).second)
+		return false;
+	order_.push_back(id);
+	if (order_.size() > capacity_) {
+		ids_.erase(order_.front());
+		order_.pop_front();
+	}
+	return true;
+}
+
+ChatSession::ChatSession(HttpClient &http, oauth::Provider provider, oauth::Token token, std::string videoId,
+			 int minPollMs, TokenChanged onTokenChanged)
+	: http_(http),
+	  provider_(std::move(provider)),
+	  token_(std::move(token)),
+	  videoId_(ExtractVideoId(videoId)),
+	  minPollMs_(std::max(minPollMs, 1000)),
+	  onTokenChanged_(std::move(onTokenChanged))
+{
+	state_ = token_.IsValid() ? State::WaitingForBroadcast : State::SignedOut;
+}
+
+bool ChatSession::Refresh(int64_t now)
+{
+	if (token_.refreshToken.empty())
+		return false;
+	auto res = http_.Post(provider_.tokenUrl, {}, oauth::BuildRefreshBody(provider_, token_.refreshToken),
+			      "application/x-www-form-urlencoded");
+	if (res.status == 0)
+		return false;
+	auto parsed = oauth::ParseTokenResponse(res.status, res.body, now, token_.refreshToken);
+	if (parsed.status != oauth::PollStatus::Granted) {
+		token_ = {};
+		state_ = State::SignedOut;
+		if (onTokenChanged_)
+			onTokenChanged_(token_);
+		return false;
+	}
+	token_ = parsed.token;
+	if (onTokenChanged_)
+		onTokenChanged_(token_);
+	return true;
+}
+
+HttpResponse ChatSession::Authorized(bool post, const std::string &url, const std::string &body, int64_t now)
+{
+	if (token_.NeedsRefresh(now))
+		Refresh(now);
+	if (!token_.IsValid())
+		return {401, {}, "signed out"};
+
+	auto send = [&]() {
+		std::vector<std::string> headers{"Authorization: Bearer " + token_.accessToken};
+		return post ? http_.Post(url, headers, body, "application/json") : http_.Get(url, headers);
+	};
+
+	HttpResponse res = send();
+	if (res.status == 401 && Refresh(now))
+		res = send();
+	return res;
+}
+
+int ChatSession::HandleError(const HttpResponse &res, StepResult &out)
+{
+	if (res.status == 0) {
+		out.notices.push_back("YouTube: network error (" + res.error + "), retrying");
+		return kNetworkRetryMs;
+	}
+	if (state_ == State::SignedOut) {
+		out.notices.push_back("YouTube: sign-in expired, sign in again from the chat settings");
+		return kErrorRetryMs;
+	}
+
+	std::string reason = ParseErrorReason(res.body);
+	if (reason == "quotaExceeded" || reason == "rateLimitExceeded") {
+		state_ = State::Error;
+		out.notices.push_back("YouTube: API quota exceeded, pausing for 15 minutes");
+		return kQuotaRetryMs;
+	}
+	if (reason == "liveChatEnded" || reason == "liveChatNotFound" || reason == "liveChatDisabled" ||
+	    res.status == 404) {
+		liveChatId_.clear();
+		pageToken_.clear();
+		state_ = State::WaitingForBroadcast;
+		announcedWaiting_ = false;
+		out.notices.push_back("YouTube: live chat is no longer available");
+		return kWaitForBroadcastMs;
+	}
+
+	state_ = State::Error;
+	out.notices.push_back("YouTube: request failed (HTTP " + std::to_string(res.status) +
+			      (reason.empty() ? std::string() : ", " + reason) + ")");
+	return kErrorRetryMs;
+}
+
+void ChatSession::FindLiveChat(int64_t now, StepResult &out)
+{
+	std::string url;
+	if (!videoId_.empty()) {
+		url = std::string(kApiBase) + "/videos?part=liveStreamingDetails&id=" + UrlEncode(videoId_);
+	} else {
+		url = std::string(kApiBase) +
+		      "/liveBroadcasts?part=snippet&broadcastStatus=active&broadcastType=all&maxResults=5";
+	}
+
+	HttpResponse res = Authorized(false, url, {}, now);
+	if (!res.Ok()) {
+		out.nextDelayMs = HandleError(res, out);
+		return;
+	}
+
+	auto chatId = videoId_.empty() ? ParseBroadcastLiveChatId(res.body) : ParseVideoLiveChatId(res.body);
+	if (!chatId) {
+		state_ = State::WaitingForBroadcast;
+		if (!announcedWaiting_) {
+			out.notices.push_back("YouTube: waiting for a live broadcast");
+			announcedWaiting_ = true;
+		}
+		out.nextDelayMs = kWaitForBroadcastMs;
+		return;
+	}
+
+	liveChatId_ = *chatId;
+	pageToken_.clear();
+	state_ = State::Polling;
+	announcedWaiting_ = false;
+	out.notices.push_back("YouTube: connected to live chat");
+
+	if (ownName_.empty()) {
+		HttpResponse channel =
+			Authorized(false, std::string(kApiBase) + "/channels?part=snippet&mine=true", {}, now);
+		if (channel.Ok())
+			ownName_ = ParseChannelTitle(channel.body).value_or(std::string());
+	}
+	out.nextDelayMs = 0;
+}
+
+void ChatSession::Poll(int64_t now, StepResult &out)
+{
+	std::string url = std::string(kApiBase) + "/liveChat/messages?part=snippet,authorDetails&maxResults=200" +
+			  "&liveChatId=" + UrlEncode(liveChatId_);
+	if (!pageToken_.empty())
+		url += "&pageToken=" + UrlEncode(pageToken_);
+
+	HttpResponse res = Authorized(false, url, {}, now);
+	if (!res.Ok()) {
+		out.nextDelayMs = HandleError(res, out);
+		return;
+	}
+
+	auto page = ParseMessagesPage(res.body);
+	if (!page) {
+		out.notices.push_back("YouTube: unexpected response from the live chat API");
+		out.nextDelayMs = kErrorRetryMs;
+		return;
+	}
+
+	state_ = State::Polling;
+	for (auto &chat : page->messages) {
+		if (seen_.Insert(chat.id))
+			out.messages.push_back(std::move(chat));
+	}
+
+	if (page->chatEnded) {
+		liveChatId_.clear();
+		pageToken_.clear();
+		state_ = State::WaitingForBroadcast;
+		out.notices.push_back("YouTube: live chat ended");
+		out.nextDelayMs = kWaitForBroadcastMs;
+		return;
+	}
+
+	if (!page->nextPageToken.empty())
+		pageToken_ = page->nextPageToken;
+	out.nextDelayMs = std::max(page->pollingIntervalMs, minPollMs_);
+}
+
+StepResult ChatSession::Step(int64_t now)
+{
+	StepResult out;
+	if (!token_.IsValid()) {
+		state_ = State::SignedOut;
+		out.nextDelayMs = kErrorRetryMs;
+		return out;
+	}
+	if (liveChatId_.empty())
+		FindLiveChat(now, out);
+	else
+		Poll(now, out);
+	return out;
+}
+
+SendResult ChatSession::Send(std::string_view text, int64_t now)
+{
+	SendResult result;
+	if (!CanSend()) {
+		result.error = "YouTube chat is not connected";
+		return result;
+	}
+
+	HttpResponse res = Authorized(true, std::string(kApiBase) + "/liveChat/messages?part=snippet",
+				      BuildInsertBody(liveChatId_, text), now);
+	if (!res.Ok()) {
+		std::string reason = ParseErrorReason(res.body);
+		result.error = res.status == 0 ? res.error
+					       : "HTTP " + std::to_string(res.status) +
+							 (reason.empty() ? std::string() : " (" + reason + ")");
+		return result;
+	}
+
+	result.ok = true;
+	if (auto chat = ParseChatMessage(res.body)) {
+		seen_.Insert(chat->id);
+		if (chat->author.empty())
+			chat->author = ownName_.empty() ? std::string("You") : ownName_;
+		chat->isSelf = true;
+		chat->color = "#ffd600";
+		result.echo = std::move(*chat);
+	}
+	return result;
+}
+
+} // namespace unified_chat::youtube

@@ -1,0 +1,62 @@
+/*
+obs-unified-chat
+Copyright (C) 2026 ebehar
+
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 2 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along
+with this program. If not, see <https://www.gnu.org/licenses/>
+*/
+
+#pragma once
+
+#include "twitch-connection.hpp"
+
+#include <atomic>
+#include <condition_variable>
+#include <deque>
+#include <mutex>
+#include <string>
+#include <thread>
+
+namespace unified_chat {
+
+// Owns a worker thread that polls one YouTube live chat and posts outgoing messages.
+// Callbacks run on the worker thread.
+class YouTubeConnection {
+public:
+	YouTubeConnection(std::string clientId, std::string clientSecret, oauth::Token token, std::string video,
+			  int pollSeconds, ConnectionCallbacks callbacks);
+	~YouTubeConnection();
+
+	YouTubeConnection(const YouTubeConnection &) = delete;
+	YouTubeConnection &operator=(const YouTubeConnection &) = delete;
+
+	void Send(std::string text);
+
+private:
+	void Run();
+
+	std::string clientId_;
+	std::string clientSecret_;
+	oauth::Token token_;
+	std::string video_;
+	int pollSeconds_;
+	ConnectionCallbacks callbacks_;
+
+	std::atomic<bool> stop_ = false;
+	std::mutex mutex_;
+	std::condition_variable cv_;
+	std::deque<std::string> outgoing_;
+	std::thread thread_;
+};
+
+} // namespace unified_chat

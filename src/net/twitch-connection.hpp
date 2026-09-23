@@ -1,0 +1,78 @@
+/*
+obs-unified-chat
+Copyright (C) 2026 ebehar
+
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 2 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along
+with this program. If not, see <https://www.gnu.org/licenses/>
+*/
+
+#pragma once
+
+#include "core/chat-message.hpp"
+#include "core/oauth-device.hpp"
+
+#include <atomic>
+#include <condition_variable>
+#include <deque>
+#include <functional>
+#include <mutex>
+#include <string>
+#include <thread>
+
+namespace unified_chat {
+
+enum class LinkState { Disconnected, Connecting, ReadOnly, Connected };
+
+struct ConnectionCallbacks {
+	std::function<void(const ChatMessage &)> onMessage;
+	std::function<void(const std::string &)> onNotice;
+	std::function<void(LinkState)> onState;
+	std::function<void(const oauth::Token &, const std::string &login)> onTokenChanged;
+};
+
+// Owns a worker thread holding one Twitch IRC connection (TLS via libcurl CONNECT_ONLY).
+// Callbacks run on the worker thread.
+class TwitchConnection {
+public:
+	TwitchConnection(std::string channel, std::string clientId, std::string login, oauth::Token token,
+			 ConnectionCallbacks callbacks);
+	~TwitchConnection();
+
+	TwitchConnection(const TwitchConnection &) = delete;
+	TwitchConnection &operator=(const TwitchConnection &) = delete;
+
+	void Send(std::string text);
+
+private:
+	void Run();
+	bool ValidateToken(bool allowRefresh);
+	bool RefreshToken();
+	void RunSession(void *curl);
+	void WaitFor(int ms);
+	void Notice(const std::string &text);
+	void SetState(LinkState state);
+
+	std::string channel_;
+	std::string clientId_;
+	std::string login_;
+	oauth::Token token_;
+	ConnectionCallbacks callbacks_;
+
+	std::atomic<bool> stop_ = false;
+	std::mutex mutex_;
+	std::condition_variable cv_;
+	std::deque<std::string> outgoing_;
+	std::thread thread_;
+};
+
+} // namespace unified_chat
