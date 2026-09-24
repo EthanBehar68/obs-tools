@@ -22,6 +22,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace unified_chat {
 
@@ -35,6 +36,8 @@ std::string_view IconResource(Platform platform);
 // Renders one chat line as Qt rich text: platform icon, display name, message.
 // All user-controlled text is escaped.
 std::string FormatMessageHtml(const ChatMessage &message, int iconSize);
+// Same, with one icon per platform, for a message you sent to several platforms at once.
+std::string FormatMessageHtml(const ChatMessage &message, int iconSize, const std::vector<Platform> &platforms);
 std::string FormatNoticeHtml(std::string_view text);
 
 } // namespace unified_chat

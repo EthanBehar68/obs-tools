@@ -19,6 +19,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #pragma once
 
 #include "core/chat-config.hpp"
+#include "core/echo-merger.hpp"
 #include "net/twitch-connection.hpp"
 #include "net/youtube-connection.hpp"
 
@@ -28,6 +29,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 class QLineEdit;
 class QTextBrowser;
+class QTimer;
 class QToolButton;
 
 namespace unified_chat {
@@ -53,6 +55,7 @@ private:
 	void SendCurrent();
 
 	void AppendMessage(const ChatMessage &message);
+	void AppendLines(const std::vector<DisplayLine> &lines);
 	void AppendNotice(const QString &text);
 	void AppendHtml(const QString &html);
 	void SetLinkState(Platform platform, LinkState state);
@@ -68,6 +71,8 @@ private:
 	bool started_ = false;
 	bool empty_ = true;
 	int iconSize_ = 16;
+	EchoMerger merger_;
+	QTimer *echoTimer_;
 
 	QToolButton *twitchStatus_;
 	QToolButton *youtubeStatus_;

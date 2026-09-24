@@ -38,6 +38,13 @@ struct ConnectionCallbacks {
 	std::function<void(const std::string &)> onNotice;
 	std::function<void(LinkState)> onState;
 	std::function<void(const oauth::Token &, const std::string &login)> onTokenChanged;
+	// A message queued with Send() could not be delivered (the reason is reported via onNotice).
+	std::function<void(uint64_t sendId)> onSendFailed;
+};
+
+struct OutgoingMessage {
+	std::string text;
+	uint64_t sendId = 0;
 };
 
 // Owns a worker thread holding one Twitch IRC connection (TLS via libcurl CONNECT_ONLY).
@@ -51,7 +58,8 @@ public:
 	TwitchConnection(const TwitchConnection &) = delete;
 	TwitchConnection &operator=(const TwitchConnection &) = delete;
 
-	void Send(std::string text);
+	// sendId is copied onto the local echo so the dock can match it up.
+	void Send(std::string text, uint64_t sendId = 0);
 
 private:
 	void Run();
@@ -71,7 +79,7 @@ private:
 	std::atomic<bool> stop_ = false;
 	std::mutex mutex_;
 	std::condition_variable cv_;
-	std::deque<std::string> outgoing_;
+	std::deque<OutgoingMessage> outgoing_;
 	std::thread thread_;
 };
 

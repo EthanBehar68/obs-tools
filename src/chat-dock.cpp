@@ -26,6 +26,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <plugin-support.h>
 #include <util/platform.h>
 
+#include <QDateTime>
 #include <QHBoxLayout>
 #include <QLineEdit>
 #include <QScrollBar>
@@ -33,6 +34,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QTextBrowser>
 #include <QTextCursor>
 #include <QTextDocument>
+#include <QTimer>
 #include <QToolButton>
 #include <QUrl>
 #include <QVBoxLayout>
@@ -107,6 +109,11 @@ ChatDock::ChatDock(QWidget *parent) : QWidget(parent)
 	layout->addLayout(footer);
 
 	iconSize_ = qMax(14, fontMetrics().height());
+
+	echoTimer_ = new QTimer(this);
+	echoTimer_->setInterval(500);
+	connect(echoTimer_, &QTimer::timeout, this,
+		[this]() { AppendLines(merger_.Expire(QDateTime::currentMSecsSinceEpoch())); });
 	RegisterIcons();
 
 	connect(input_, &QLineEdit::returnPressed, this, &ChatDock::SendCurrent);
@@ -219,6 +226,11 @@ ConnectionCallbacks ChatDock::MakeCallbacks(Platform platform)
 			},
 			Qt::QueuedConnection);
 	};
+	callbacks.onSendFailed = [this, platform](uint64_t sendId) {
+		QMetaObject::invokeMethod(
+			this, [this, platform, sendId]() { AppendLines(merger_.Fail(sendId, platform)); },
+			Qt::QueuedConnection);
+	};
 	return callbacks;
 }
 
@@ -286,11 +298,16 @@ void ChatDock::SendCurrent()
 	if (plan.blocked)
 		return;
 
+	// Your own message comes back from each platform; the merger turns those echoes into one line.
+	uint64_t sendId = merger_.Begin(plan.targets, QDateTime::currentMSecsSinceEpoch());
+	echoTimer_->start();
 	for (Platform platform : plan.targets) {
 		if (platform == Platform::Twitch && twitch_)
-			twitch_->Send(plan.text);
+			twitch_->Send(plan.text, sendId);
 		else if (platform == Platform::YouTube && youtube_)
-			youtube_->Send(plan.text);
+			youtube_->Send(plan.text, sendId);
+		else
+			AppendLines(merger_.Fail(sendId, platform));
 	}
 	input_->clear();
 }
@@ -313,7 +330,15 @@ void ChatDock::AppendHtml(const QString &html)
 
 void ChatDock::AppendMessage(const ChatMessage &message)
 {
-	AppendHtml(QString::fromStdString(FormatMessageHtml(message, iconSize_)));
+	AppendLines(merger_.Offer(message));
+}
+
+void ChatDock::AppendLines(const std::vector<DisplayLine> &lines)
+{
+	for (const auto &line : lines)
+		AppendHtml(QString::fromStdString(FormatMessageHtml(line.message, iconSize_, line.platforms)));
+	if (!merger_.HasPending())
+		echoTimer_->stop();
 }
 
 void ChatDock::AppendNotice(const QString &text)

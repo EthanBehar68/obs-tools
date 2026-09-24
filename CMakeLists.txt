@@ -24,6 +24,8 @@ target_sources(
     src/core/chat-message.hpp
     src/core/chat-router.cpp
     src/core/chat-router.hpp
+    src/core/echo-merger.cpp
+    src/core/echo-merger.hpp
     src/core/http-client.hpp
     src/core/oauth-device.cpp
     src/core/oauth-device.hpp
@@ -111,6 +113,7 @@ if(ENABLE_TESTS)
   target_sources(
     unified-chat-tests
     PRIVATE
+      tests/test-echo-merger.cpp
       tests/test-main.cpp
       tests/test-oauth.cpp
       tests/test-router-format-config.cpp

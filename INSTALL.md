@@ -70,7 +70,8 @@ These are estimates. Your actual usage is under **APIs & Services → YouTube Da
 
 - **Status buttons** (top left) show each platform's state: *Connected*, *Read-only* (Twitch without sign-in), *Connecting…*, or *Offline*. Click one to open Settings.
 - **Target switch** (bottom right): Twitch, YouTube, or both. The choice is saved.
-- Press **Enter** to send. Your own messages appear right away.
+- Press **Enter** to send. A message sent to both platforms shows as **one line with both icons** once both have accepted it (about a second).
+  If your Twitch and YouTube names differ it shows `TwitchName / YouTubeName`. If one platform rejects the message, only the other icon is shown.
   - Twitch allows 500 characters and YouTube allows 200. If a message is too long for any selected platform, nothing is sent and the text stays in the box so you can shorten it.
   - If one selected platform is disconnected, the message still goes to the other and the dock notes which one was skipped.
   - `/me waves` sends a Twitch action (shown in italics).

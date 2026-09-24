@@ -18,6 +18,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #pragma once
 
+#include <cstdint>
 #include <string>
 #include <string_view>
 
@@ -33,6 +34,7 @@ struct ChatMessage {
 	std::string color; // "#RRGGBB" or empty
 	bool isAction = false;
 	bool isSelf = false;
+	uint64_t sendId = 0; // set on local echoes of a message sent from the dock
 };
 
 inline std::string_view PlatformName(Platform platform)

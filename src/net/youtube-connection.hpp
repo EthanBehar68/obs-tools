@@ -40,7 +40,8 @@ public:
 	YouTubeConnection(const YouTubeConnection &) = delete;
 	YouTubeConnection &operator=(const YouTubeConnection &) = delete;
 
-	void Send(std::string text);
+	// sendId is copied onto the local echo so the dock can match it up.
+	void Send(std::string text, uint64_t sendId = 0);
 
 private:
 	void Run();
@@ -55,7 +56,7 @@ private:
 	std::atomic<bool> stop_ = false;
 	std::mutex mutex_;
 	std::condition_variable cv_;
-	std::deque<std::string> outgoing_;
+	std::deque<OutgoingMessage> outgoing_;
 	std::thread thread_;
 };
 

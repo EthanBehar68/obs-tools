@@ -33,14 +33,20 @@ std::string_view IconResource(Platform platform)
 
 std::string FormatMessageHtml(const ChatMessage &message, int iconSize)
 {
+	return FormatMessageHtml(message, iconSize, {message.platform});
+}
+
+std::string FormatMessageHtml(const ChatMessage &message, int iconSize, const std::vector<Platform> &platforms)
+{
 	std::string color = SanitizeColor(message.color);
 	if (color.empty())
 		color = std::string(DefaultNameColor(message.platform));
 
 	std::string size = std::to_string(iconSize);
 	std::string html;
-	html += "<img src=\"" + std::string(IconResource(message.platform)) + "\" width=\"" + size + "\" height=\"" +
-		size + "\" style=\"vertical-align: middle;\"> ";
+	for (Platform platform : platforms)
+		html += "<img src=\"" + std::string(IconResource(platform)) + "\" width=\"" + size + "\" height=\"" +
+			size + "\" style=\"vertical-align: middle;\"> ";
 	html += "<span style=\"color: " + color + "; font-weight: bold;\">" + HtmlEscape(message.author) + "</span>";
 
 	if (message.isAction)

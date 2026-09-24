@@ -59,11 +59,11 @@ YouTubeConnection::~YouTubeConnection()
 		thread_.join();
 }
 
-void YouTubeConnection::Send(std::string text)
+void YouTubeConnection::Send(std::string text, uint64_t sendId)
 {
 	{
 		std::lock_guard lock(mutex_);
-		outgoing_.push_back(std::move(text));
+		outgoing_.push_back({std::move(text), sendId});
 	}
 	cv_.notify_all();
 }
@@ -93,7 +93,7 @@ void YouTubeConnection::Run()
 	auto nextStep = Clock::now();
 
 	while (!stop_) {
-		std::deque<std::string> pending;
+		std::deque<OutgoingMessage> pending;
 		{
 			std::unique_lock lock(mutex_);
 			cv_.wait_until(lock, nextStep, [this] { return stop_.load() || !outgoing_.empty(); });
@@ -102,12 +102,19 @@ void YouTubeConnection::Run()
 		if (stop_)
 			break;
 
-		for (const auto &text : pending) {
-			auto result = session.Send(text, (int64_t)std::time(nullptr));
-			if (result.echo && callbacks_.onMessage)
-				callbacks_.onMessage(*result.echo);
-			else if (!result.ok)
+		for (const auto &outgoing : pending) {
+			auto result = session.Send(outgoing.text, (int64_t)std::time(nullptr));
+			if (result.echo) {
+				result.echo->sendId = outgoing.sendId;
+				if (callbacks_.onMessage)
+					callbacks_.onMessage(*result.echo);
+				continue;
+			}
+			if (!result.ok)
 				notice("YouTube: message not sent (" + result.error + ")");
+			// Sent without an echo in the response: the next poll will show it instead.
+			if (callbacks_.onSendFailed)
+				callbacks_.onSendFailed(outgoing.sendId);
 		}
 
 		if (Clock::now() >= nextStep) {

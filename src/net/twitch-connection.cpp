@@ -101,11 +101,11 @@ TwitchConnection::~TwitchConnection()
 		thread_.join();
 }
 
-void TwitchConnection::Send(std::string text)
+void TwitchConnection::Send(std::string text, uint64_t sendId)
 {
 	{
 		std::lock_guard lock(mutex_);
-		outgoing_.push_back(std::move(text));
+		outgoing_.push_back({std::move(text), sendId});
 	}
 	cv_.notify_all();
 }
@@ -199,24 +199,37 @@ void TwitchConnection::RunSession(void *handle)
 	bool wasJoined = false;
 
 	while (!stop_) {
-		std::deque<std::string> pending;
+		std::deque<OutgoingMessage> pending;
 		{
 			std::lock_guard lock(mutex_);
 			pending.swap(outgoing_);
 		}
-		for (const auto &text : pending) {
+		for (const auto &outgoing : pending) {
+			auto failed = [&]() {
+				if (callbacks_.onSendFailed)
+					callbacks_.onSendFailed(outgoing.sendId);
+			};
 			if (!session.CanSend()) {
 				Notice(session.IsAuthenticated() ? "not joined yet, message not sent"
 								 : "sign in to send messages");
+				failed();
 				continue;
 			}
-			auto line = session.BuildPrivmsg(text);
-			if (!line)
+			auto line = session.BuildPrivmsg(outgoing.text);
+			if (!line) {
+				failed();
 				continue;
-			if (!SendLine(curl, sock, *line))
+			}
+			if (!SendLine(curl, sock, *line)) {
+				Notice("message not sent, connection lost");
+				failed();
 				return;
-			if (callbacks_.onMessage)
-				callbacks_.onMessage(session.LocalEcho(text));
+			}
+			if (callbacks_.onMessage) {
+				ChatMessage echo = session.LocalEcho(outgoing.text);
+				echo.sendId = outgoing.sendId;
+				callbacks_.onMessage(echo);
+			}
 		}
 
 		char data[16384];
