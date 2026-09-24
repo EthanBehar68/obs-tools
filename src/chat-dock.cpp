@@ -242,11 +242,21 @@ void ChatDock::Disconnect()
 
 void ChatDock::OpenSettings()
 {
+	const ChatConfig before = config_;
 	SettingsDialog dialog(config_, this);
 	if (dialog.exec() != QDialog::Accepted)
 		return;
 
-	config_ = dialog.Result();
+	// Tokens may have been refreshed in the background while the dialog was open. Twitch refresh
+	// tokens are single-use, so keep the live ones unless the user signed in or out in the dialog.
+	ChatConfig result = dialog.Result();
+	if (result.twitchToken.accessToken == before.twitchToken.accessToken) {
+		result.twitchToken = config_.twitchToken;
+		result.twitchLogin = config_.twitchLogin;
+	}
+	if (result.youtubeToken.accessToken == before.youtubeToken.accessToken)
+		result.youtubeToken = config_.youtubeToken;
+	config_ = result;
 	view_->document()->setMaximumBlockCount(config_.maxMessages);
 	SaveConfig();
 	if (started_)
