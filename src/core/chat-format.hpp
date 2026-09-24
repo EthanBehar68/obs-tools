@@ -33,11 +33,15 @@ constexpr const char *kYouTubeIconResource = "unified-chat://icon/youtube";
 std::string_view DefaultNameColor(Platform platform);
 std::string_view IconResource(Platform platform);
 
+class NameColorResolver;
+
 // Renders one chat line as Qt rich text: platform icon, display name, message.
 // All user-controlled text is escaped.
 std::string FormatMessageHtml(const ChatMessage &message, int iconSize);
 // Same, with one icon per platform, for a message you sent to several platforms at once.
-std::string FormatMessageHtml(const ChatMessage &message, int iconSize, const std::vector<Platform> &platforms);
+// With colors, the name color is made readable on the chat background.
+std::string FormatMessageHtml(const ChatMessage &message, int iconSize, const std::vector<Platform> &platforms,
+			      NameColorResolver *colors = nullptr);
 std::string FormatNoticeHtml(std::string_view text);
 
 } // namespace unified_chat

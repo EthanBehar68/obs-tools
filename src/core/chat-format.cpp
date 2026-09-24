@@ -17,6 +17,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
 #include "chat-format.hpp"
+#include "name-color.hpp"
 #include "text-util.hpp"
 
 namespace unified_chat {
@@ -36,11 +37,14 @@ std::string FormatMessageHtml(const ChatMessage &message, int iconSize)
 	return FormatMessageHtml(message, iconSize, {message.platform});
 }
 
-std::string FormatMessageHtml(const ChatMessage &message, int iconSize, const std::vector<Platform> &platforms)
+std::string FormatMessageHtml(const ChatMessage &message, int iconSize, const std::vector<Platform> &platforms,
+			      NameColorResolver *colors)
 {
 	std::string color = SanitizeColor(message.color);
 	if (color.empty())
 		color = std::string(DefaultNameColor(message.platform));
+	if (colors)
+		color = colors->Resolve(color);
 
 	std::string size = std::to_string(iconSize);
 	std::string html;

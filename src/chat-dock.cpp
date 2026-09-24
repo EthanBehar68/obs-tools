@@ -335,10 +335,26 @@ void ChatDock::AppendMessage(const ChatMessage &message)
 
 void ChatDock::AppendLines(const std::vector<DisplayLine> &lines)
 {
+	if (backgroundStale_ && !lines.empty()) {
+		backgroundStale_ = false;
+		view_->ensurePolished();
+		const std::string previous = nameColors_.Background();
+		nameColors_.SetBackground(view_->palette().color(QPalette::Base).name().toStdString());
+		if (nameColors_.Background() != previous)
+			obs_log(LOG_INFO, "name colors: chat background is %s", nameColors_.Background().c_str());
+	}
 	for (const auto &line : lines)
-		AppendHtml(QString::fromStdString(FormatMessageHtml(line.message, iconSize_, line.platforms)));
+		AppendHtml(QString::fromStdString(
+			FormatMessageHtml(line.message, iconSize_, line.platforms, &nameColors_)));
 	if (!merger_.HasPending())
 		echoTimer_->stop();
+}
+
+void ChatDock::changeEvent(QEvent *event)
+{
+	if (event->type() == QEvent::StyleChange || event->type() == QEvent::PaletteChange)
+		backgroundStale_ = true;
+	QWidget::changeEvent(event);
 }
 
 void ChatDock::AppendNotice(const QString &text)

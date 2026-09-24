@@ -20,6 +20,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include "core/chat-config.hpp"
 #include "core/echo-merger.hpp"
+#include "core/name-color.hpp"
 #include "net/twitch-connection.hpp"
 #include "net/youtube-connection.hpp"
 
@@ -45,6 +46,9 @@ public:
 
 	void Start();
 	void Shutdown();
+
+protected:
+	void changeEvent(QEvent *event) override;
 
 private:
 	void LoadConfig();
@@ -73,6 +77,8 @@ private:
 	int iconSize_ = 16;
 	EchoMerger merger_;
 	QTimer *echoTimer_;
+	NameColorResolver nameColors_;
+	bool backgroundStale_ = true; // the theme's stylesheet sets the view's real background at polish time
 
 	QToolButton *twitchStatus_;
 	QToolButton *youtubeStatus_;

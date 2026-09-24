@@ -82,6 +82,7 @@ src\
 │   ├── oauth-device.*    RFC 8628 device flow for Twitch and Google
 │   ├── chat-router.*     Twitch / YouTube / Both routing and length rules
 │   ├── chat-format.*     chat line -> escaped Qt rich text
+│   ├── name-color.*      readable name colors (WCAG contrast vs. the chat background), cached per color
 │   └── chat-config.*     config.json (de)serialization
 ├── net\           worker threads on the libcurl that ships with OBS
 │   ├── twitch-connection.*   TLS IRC to irc.chat.twitch.tv:6697 via CURLOPT_CONNECT_ONLY
@@ -97,6 +98,7 @@ src\
 
 ### Design notes
 
+- **Smallest possible CPU and memory footprint. This rule decides between implementations.** The plugin runs while OBS encodes one or more streams (obs-multi-rtmp) and a game is running, so every cycle it spends is taken from them. Do nothing per message that can be done once; cache derived values; avoid polling, busy waits and redundant UI work; prefer the cheaper approach whenever the user can't see the difference.
 - **Networking uses libcurl, not Qt Network.** The Qt that ships with OBS has no TLS backend plugin, so `QSslSocket` and HTTPS through `QNetworkAccessManager` fail at runtime. OBS itself (rtmp-services, the updater) uses its bundled `libcurl.dll` with Schannel, and so does this plugin.
 - **Threads never touch widgets.** Each connection runs on its own `std::thread`, and callbacks marshal to the UI with `QMetaObject::invokeMethod(dock, ..., Qt::QueuedConnection)`. Shutdown happens on `OBS_FRONTEND_EVENT_EXIT`: every blocking wait is interruptible, and curl transfers abort through a progress callback, so OBS closes promptly.
 - **All chat text is HTML-escaped** before it reaches the `QTextBrowser`, and Twitch colors must match `#rrggbb`. Outgoing text has CR/LF stripped so a message can't inject extra IRC commands.

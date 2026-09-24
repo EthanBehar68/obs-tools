@@ -27,6 +27,8 @@ target_sources(
     src/core/echo-merger.cpp
     src/core/echo-merger.hpp
     src/core/http-client.hpp
+    src/core/name-color.cpp
+    src/core/name-color.hpp
     src/core/oauth-device.cpp
     src/core/oauth-device.hpp
     src/core/text-util.cpp
@@ -115,6 +117,7 @@ if(ENABLE_TESTS)
     PRIVATE
       tests/test-echo-merger.cpp
       tests/test-main.cpp
+      tests/test-name-color.cpp
       tests/test-oauth.cpp
       tests/test-router-format-config.cpp
       tests/test-text-util.cpp
