@@ -48,7 +48,7 @@ private:
 };
 
 const char *kBroadcastLive = R"({"items":[{"id":"vid","snippet":{"liveChatId":"CHAT1"}}]})";
-const char *kChannel = R"({"items":[{"snippet":{"title":"My Channel"}}]})";
+const char *kChannel = R"({"items":[{"id":"UCme","snippet":{"title":"My Channel"}}]})";
 
 std::string Page(const std::string &items, const std::string &token = "p2", int interval = 2000)
 {
@@ -56,10 +56,11 @@ std::string Page(const std::string &items, const std::string &token = "p2", int 
 	       R"(,"items":[)" + items + "]}";
 }
 
-std::string Item(const std::string &id, const std::string &name, const std::string &text)
+std::string Item(const std::string &id, const std::string &name, const std::string &text,
+		 const std::string &channelId = "UCviewer")
 {
 	return R"({"id":")" + id + R"(","snippet":{"type":"textMessageEvent","displayMessage":")" + text +
-	       R"("},"authorDetails":{"displayName":")" + name + R"("}})";
+	       R"("},"authorDetails":{"displayName":")" + name + R"(","channelId":")" + channelId + R"("}})";
 }
 
 oauth::Token FreshToken()
@@ -101,6 +102,32 @@ TEST_CASE("ParseMessagesPage detects the end of chat")
 	CHECK(event->messages.empty());
 	CHECK_FALSE(ParseMessagesPage("[]"));
 	CHECK_FALSE(ParseMessagesPage("garbage"));
+}
+
+TEST_CASE("ParseMessagesPage marks messages from your own channel")
+{
+	auto page = ParseMessagesPage(Page(Item("1", "Me", "from my phone", "UCme") + "," + Item("2", "Ann", "hi") +
+					   "," + Item("3", "NoId", "x", "")),
+				      "UCme");
+	REQUIRE(page);
+	REQUIRE(page->messages.size() == 3);
+	CHECK(page->messages[0].isSelf);
+	CHECK_FALSE(page->messages[1].isSelf);
+	CHECK_FALSE(page->messages[2].isSelf);
+
+	auto unknown = ParseMessagesPage(Page(Item("4", "NoId", "x", "")));
+	REQUIRE(unknown);
+	CHECK_FALSE(unknown->messages[0].isSelf); // an unknown own ID never matches a missing author ID
+}
+
+TEST_CASE("ParseOwnChannel reads the signed-in channel")
+{
+	auto own = ParseOwnChannel(kChannel);
+	REQUIRE(own);
+	CHECK(own->id == "UCme");
+	CHECK(own->title == "My Channel");
+	CHECK_FALSE(ParseOwnChannel(R"({"items":[]})"));
+	CHECK_FALSE(ParseOwnChannel("garbage"));
 }
 
 TEST_CASE("Live chat ID parsing")
@@ -165,10 +192,14 @@ TEST_CASE("ChatSession finds the active broadcast then polls with page tokens")
 	CHECK(http.requests[0].url.find("broadcastStatus=active") != std::string::npos);
 	CHECK(http.requests[0].headers.at(0) == "Authorization: Bearer access");
 
-	http.Queue(200, Page(Item("m1", "Ann", "hi") + "," + Item("m2", "Bob", "yo"), "p2", 2000));
+	http.Queue(200, Page(Item("m1", "Ann", "hi") + "," + Item("m2", "Bob", "yo") + "," +
+				     Item("m0", "My Channel", "typed in Studio", "UCme"),
+			     "p2", 2000));
 	auto poll = session.Step(1);
-	REQUIRE(poll.messages.size() == 2);
+	REQUIRE(poll.messages.size() == 3);
 	CHECK(poll.messages[0].author == "Ann");
+	CHECK_FALSE(poll.messages[0].isSelf);
+	CHECK(poll.messages[2].isSelf);
 	CHECK(poll.nextDelayMs == 5000); // minimum poll interval beats the server's 2000ms
 
 	// Next page repeats m2; only m3 is new.

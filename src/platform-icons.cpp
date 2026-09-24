@@ -21,6 +21,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPixmap>
+#include <QtMath>
 
 namespace unified_chat {
 
@@ -73,6 +74,37 @@ QImage PlatformImage(Platform platform, int size, qreal devicePixelRatio)
 		PaintTwitch(p, pixels);
 	else
 		PaintYouTube(p, pixels);
+	p.end();
+
+	image.setDevicePixelRatio(devicePixelRatio);
+	return image;
+}
+
+QImage SelfBadgeImage(int size, qreal devicePixelRatio)
+{
+	const int pixels = qMax(1, qRound(size * devicePixelRatio));
+	QImage image(pixels, pixels, QImage::Format_ARGB32_Premultiplied);
+	image.fill(Qt::transparent);
+
+	// Gold five-point star, point up.
+	const qreal center = pixels / 2.0;
+	const qreal outer = pixels * 0.48;
+	const qreal inner = outer * 0.42;
+	QPainterPath star;
+	for (int i = 0; i < 10; ++i) {
+		const qreal radius = i % 2 ? inner : outer;
+		const qreal angle = qDegreesToRadians(-90.0 + i * 36.0);
+		const QPointF point(center + radius * qCos(angle), center + radius * qSin(angle));
+		if (i == 0)
+			star.moveTo(point);
+		else
+			star.lineTo(point);
+	}
+	star.closeSubpath();
+
+	QPainter p(&image);
+	p.setRenderHint(QPainter::Antialiasing);
+	p.fillPath(star, QColor(0xff, 0xd6, 0x00));
 	p.end();
 
 	image.setDevicePixelRatio(devicePixelRatio);

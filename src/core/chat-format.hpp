@@ -29,6 +29,7 @@ namespace unified_chat {
 // Image resource names registered on the chat view's QTextDocument.
 constexpr const char *kTwitchIconResource = "unified-chat://icon/twitch";
 constexpr const char *kYouTubeIconResource = "unified-chat://icon/youtube";
+constexpr const char *kSelfBadgeResource = "unified-chat://icon/self";
 
 std::string_view DefaultNameColor(Platform platform);
 std::string_view IconResource(Platform platform);

@@ -54,7 +54,7 @@ static bool BoolAt(const json &obj, const char *section, const char *key)
 	return value != it->end() && value->is_boolean() && value->get<bool>();
 }
 
-static std::optional<ChatMessage> MessageFromItem(const json &item)
+static std::optional<ChatMessage> MessageFromItem(const json &item, std::string_view ownChannelId)
 {
 	if (!item.is_object())
 		return std::nullopt;
@@ -75,10 +75,11 @@ static std::optional<ChatMessage> MessageFromItem(const json &item)
 		chat.color = "#5e84f1";
 	else if (BoolAt(item, "authorDetails", "isChatSponsor"))
 		chat.color = "#2ba640";
+	chat.isSelf = !ownChannelId.empty() && StringAt(item, {"authorDetails", "channelId"}) == ownChannelId;
 	return chat;
 }
 
-std::optional<MessagesPage> ParseMessagesPage(const std::string &body)
+std::optional<MessagesPage> ParseMessagesPage(const std::string &body, std::string_view ownChannelId)
 {
 	json obj = json::parse(body, nullptr, false);
 	if (!obj.is_object())
@@ -98,7 +99,7 @@ std::optional<MessagesPage> ParseMessagesPage(const std::string &body)
 				page.chatEnded = true;
 				continue;
 			}
-			if (auto chat = MessageFromItem(item))
+			if (auto chat = MessageFromItem(item, ownChannelId))
 				page.messages.push_back(std::move(*chat));
 		}
 	}
@@ -108,7 +109,7 @@ std::optional<MessagesPage> ParseMessagesPage(const std::string &body)
 std::optional<ChatMessage> ParseChatMessage(const std::string &body)
 {
 	json obj = json::parse(body, nullptr, false);
-	return MessageFromItem(obj);
+	return MessageFromItem(obj, {});
 }
 
 static std::optional<std::string> FirstItemString(const std::string &body, std::initializer_list<const char *> path)
@@ -137,9 +138,16 @@ std::optional<std::string> ParseVideoLiveChatId(const std::string &body)
 	return FirstItemString(body, {"liveStreamingDetails", "activeLiveChatId"});
 }
 
-static std::optional<std::string> ParseChannelTitle(const std::string &body)
+std::optional<OwnChannel> ParseOwnChannel(const std::string &body)
 {
-	return FirstItemString(body, {"snippet", "title"});
+	json obj = json::parse(body, nullptr, false);
+	if (!obj.is_object())
+		return std::nullopt;
+	auto items = obj.find("items");
+	if (items == obj.end() || !items->is_array() || items->empty())
+		return std::nullopt;
+	const json &item = items->front();
+	return OwnChannel{StringAt(item, {"id"}), StringAt(item, {"snippet", "title"})};
 }
 
 std::string ParseErrorReason(const std::string &body)
@@ -339,11 +347,13 @@ void ChatSession::FindLiveChat(int64_t now, StepResult &out)
 	announcedWaiting_ = false;
 	out.notices.push_back("YouTube: connected to live chat");
 
-	if (ownName_.empty()) {
+	if (ownChannelId_.empty()) {
 		HttpResponse channel =
 			Authorized(false, std::string(kApiBase) + "/channels?part=snippet&mine=true", {}, now);
-		if (channel.Ok())
-			ownName_ = ParseChannelTitle(channel.body).value_or(std::string());
+		if (auto own = channel.Ok() ? ParseOwnChannel(channel.body) : std::nullopt) {
+			ownChannelId_ = std::move(own->id);
+			ownName_ = std::move(own->title);
+		}
 	}
 	out.nextDelayMs = 0;
 }
@@ -361,7 +371,7 @@ void ChatSession::Poll(int64_t now, StepResult &out)
 		return;
 	}
 
-	auto page = ParseMessagesPage(res.body);
+	auto page = ParseMessagesPage(res.body, ownChannelId_);
 	if (!page) {
 		out.notices.push_back("YouTube: unexpected response from the live chat API");
 		out.nextDelayMs = kErrorRetryMs;

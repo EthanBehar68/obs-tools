@@ -43,8 +43,16 @@ struct MessagesPage {
 	bool chatEnded = false;
 };
 
-std::optional<MessagesPage> ParseMessagesPage(const std::string &json);
+struct OwnChannel {
+	std::string id;
+	std::string title;
+};
+
+// Messages whose author channel ID equals ownChannelId are marked isSelf.
+std::optional<MessagesPage> ParseMessagesPage(const std::string &json, std::string_view ownChannelId = {});
 std::optional<ChatMessage> ParseChatMessage(const std::string &json);
+// The signed-in channel, from channels.list?mine=true.
+std::optional<OwnChannel> ParseOwnChannel(const std::string &json);
 std::optional<std::string> ParseBroadcastLiveChatId(const std::string &json);
 std::optional<std::string> ParseVideoLiveChatId(const std::string &json);
 std::string ParseErrorReason(const std::string &json);
@@ -115,6 +123,7 @@ private:
 	State state_ = State::SignedOut;
 	std::string liveChatId_;
 	std::string pageToken_;
+	std::string ownChannelId_;
 	std::string ownName_;
 	RecentIds seen_;
 	bool announcedWaiting_ = false;

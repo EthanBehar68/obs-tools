@@ -26,6 +26,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 namespace unified_chat {
 
 QImage PlatformImage(Platform platform, int size, qreal devicePixelRatio);
+// Marks the streamer's own chat lines.
+QImage SelfBadgeImage(int size, qreal devicePixelRatio);
 QIcon PlatformIcon(Platform platform, int size = 16);
 QIcon BothPlatformsIcon(int height = 16);
 

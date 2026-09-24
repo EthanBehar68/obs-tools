@@ -108,6 +108,24 @@ TEST_CASE("FormatMessageHtml renders /me actions without a colon")
 	CHECK(html.find("font-style: italic;\">waves") != std::string::npos);
 }
 
+TEST_CASE("FormatMessageHtml puts a star after the platform icons on your own lines")
+{
+	ChatMessage mine{Platform::Twitch, "1", "me", "hi all"};
+	mine.isSelf = true;
+	auto html = FormatMessageHtml(mine, 16, {Platform::Twitch, Platform::YouTube});
+	auto twitch = html.find(kTwitchIconResource);
+	auto youtube = html.find(kYouTubeIconResource);
+	auto star = html.find(kSelfBadgeResource);
+	auto name = html.find(">me</span>");
+	REQUIRE(star != std::string::npos);
+	CHECK(twitch < youtube);
+	CHECK(youtube < star);
+	CHECK(star < name);
+
+	ChatMessage theirs{Platform::Twitch, "2", "viewer", "hi"};
+	CHECK(FormatMessageHtml(theirs, 16).find(kSelfBadgeResource) == std::string::npos);
+}
+
 TEST_CASE("FormatNoticeHtml escapes")
 {
 	CHECK(FormatNoticeHtml("<x>").find("&lt;x&gt;") != std::string::npos);

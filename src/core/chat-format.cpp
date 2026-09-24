@@ -46,11 +46,13 @@ std::string FormatMessageHtml(const ChatMessage &message, int iconSize, const st
 	if (colors)
 		color = colors->Resolve(color);
 
-	std::string size = std::to_string(iconSize);
+	const std::string imageSize = "\" width=\"" + std::to_string(iconSize) + "\" height=\"" +
+				      std::to_string(iconSize) + "\" style=\"vertical-align: middle;\"> ";
 	std::string html;
 	for (Platform platform : platforms)
-		html += "<img src=\"" + std::string(IconResource(platform)) + "\" width=\"" + size + "\" height=\"" +
-			size + "\" style=\"vertical-align: middle;\"> ";
+		html += "<img src=\"" + std::string(IconResource(platform)) + imageSize;
+	if (message.isSelf)
+		html += "<img src=\"" + std::string(kSelfBadgeResource) + imageSize;
 	html += "<span style=\"color: " + color + "; font-weight: bold;\">" + HtmlEscape(message.author) + "</span>";
 
 	if (message.isAction)

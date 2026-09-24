@@ -149,6 +149,8 @@ void ChatDock::RegisterIcons()
 			 PlatformImage(Platform::Twitch, iconSize_, dpr));
 	doc->addResource(QTextDocument::ImageResource, QUrl(QString::fromUtf8(kYouTubeIconResource)),
 			 PlatformImage(Platform::YouTube, iconSize_, dpr));
+	doc->addResource(QTextDocument::ImageResource, QUrl(QString::fromUtf8(kSelfBadgeResource)),
+			 SelfBadgeImage(iconSize_, dpr));
 }
 
 void ChatDock::Start()
