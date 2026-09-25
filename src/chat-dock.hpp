@@ -19,6 +19,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #pragma once
 
 #include "core/chat-config.hpp"
+#include "core/bot-merger.hpp"
 #include "core/echo-merger.hpp"
 #include "core/name-color.hpp"
 #include "net/twitch-connection.hpp"
@@ -64,7 +65,9 @@ private:
 	void ScheduleEchoTimer();
 	void AppendNotice(const QString &text);
 	// Inserts all lines in one edit block, so the view lays out and scrolls once per batch.
-	void AppendHtml(const QStringList &lines);
+	// lineIds[i], when given and not -1, tags line i so ReplaceLine can find it later.
+	void AppendHtml(const QStringList &lines, const std::vector<int> &lineIds = {});
+	bool ReplaceLine(int lineId, const QString &html);
 	void SetLinkState(Platform platform, LinkState state);
 	void UpdatePlaceholder();
 	void RegisterIcons();
@@ -81,6 +84,8 @@ private:
 	EchoMerger merger_;
 	QTimer *echoTimer_;
 	NameColorResolver nameColors_;
+	BotMerger botMerger_;
+	int nextLineId_ = 1;
 	bool backgroundStale_ = true; // the theme's stylesheet sets the view's real background at polish time
 
 	QToolButton *twitchStatus_;

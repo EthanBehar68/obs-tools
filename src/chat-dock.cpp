@@ -42,6 +42,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include <algorithm>
 #include <iterator>
+#include <limits>
 
 namespace unified_chat {
 
@@ -184,6 +185,7 @@ void ChatDock::LoadConfig()
 
 	target_->SetTarget(config_.sendTarget);
 	view_->document()->setMaximumBlockCount(config_.maxMessages);
+	botMerger_.SetBots(config_.mergeBots);
 	UpdatePlaceholder();
 }
 
@@ -277,6 +279,7 @@ void ChatDock::OpenSettings()
 		result.youtubeToken = config_.youtubeToken;
 	config_ = result;
 	view_->document()->setMaximumBlockCount(config_.maxMessages);
+	botMerger_.SetBots(config_.mergeBots);
 	SaveConfig();
 	if (started_)
 		Connect();
@@ -319,7 +322,7 @@ void ChatDock::SendCurrent()
 	input_->clear();
 }
 
-void ChatDock::AppendHtml(const QStringList &lines)
+void ChatDock::AppendHtml(const QStringList &lines, const std::vector<int> &lineIds)
 {
 	if (lines.isEmpty())
 		return;
@@ -331,16 +334,32 @@ void ChatDock::AppendHtml(const QStringList &lines)
 	QTextCursor cursor(view_->document());
 	cursor.movePosition(QTextCursor::End);
 	cursor.beginEditBlock();
-	for (const QString &html : lines) {
+	for (qsizetype i = 0; i < lines.size(); ++i) {
 		if (!empty_)
 			cursor.insertBlock();
-		cursor.insertHtml(html);
+		cursor.insertHtml(lines[i]);
+		if ((size_t)i < lineIds.size())
+			cursor.block().setUserState(lineIds[(size_t)i]);
 		empty_ = false;
 	}
 	cursor.endEditBlock();
 
 	if (atBottom)
 		bar->setValue(bar->maximum());
+}
+
+bool ChatDock::ReplaceLine(int lineId, const QString &html)
+{
+	// Only runs when a bot's twin arrives; the line is normally among the last few.
+	for (QTextBlock block = view_->document()->lastBlock(); block.isValid(); block = block.previous()) {
+		if (block.userState() != lineId)
+			continue;
+		QTextCursor cursor(block);
+		cursor.movePosition(QTextCursor::EndOfBlock, QTextCursor::KeepAnchor);
+		cursor.insertHtml(html);
+		return true;
+	}
+	return false; // already trimmed by the message limit
 }
 
 void ChatDock::AppendMessages(const std::vector<ChatMessage> &messages)
@@ -379,12 +398,35 @@ void ChatDock::AppendLines(const std::vector<DisplayLine> &lines)
 		if (nameColors_.Background() != previous)
 			obs_log(LOG_INFO, "name colors: chat background is %s", nameColors_.Background().c_str());
 	}
+	auto format = [this](const DisplayLine &line) {
+		return QString::fromStdString(FormatMessageHtml(line.message, iconSize_, line.platforms, &nameColors_));
+	};
+
+	const int64_t now = QDateTime::currentMSecsSinceEpoch();
 	QStringList html;
+	std::vector<int> lineIds;
 	html.reserve((qsizetype)lines.size());
-	for (const auto &line : lines)
-		html.append(QString::fromStdString(
-			FormatMessageHtml(line.message, iconSize_, line.platforms, &nameColors_)));
-	AppendHtml(html);
+	lineIds.reserve(lines.size());
+	for (const auto &line : lines) {
+		int lineId = -1;
+		if (line.platforms.size() == 1 && botMerger_.IsBot(line.message.author)) {
+			// A bot's copy of a line already shown for the other platform: add the icon to that line.
+			if (auto merged = botMerger_.Match(line.message, now)) {
+				QString mergedHtml = format(merged->line);
+				if (ReplaceLine(merged->lineId, mergedHtml))
+					continue;
+				html.append(mergedHtml);
+				lineIds.push_back(-1);
+				continue;
+			}
+			lineId = nextLineId_;
+			nextLineId_ = nextLineId_ == (std::numeric_limits<int>::max)() ? 1 : nextLineId_ + 1;
+			botMerger_.Remember(line.message, lineId, now);
+		}
+		html.append(format(line));
+		lineIds.push_back(lineId);
+	}
+	AppendHtml(html, lineIds);
 	ScheduleEchoTimer();
 }
 

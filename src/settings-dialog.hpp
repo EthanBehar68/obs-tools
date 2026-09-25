@@ -66,6 +66,7 @@ private:
 	QPushButton *youtubeSignOut_;
 
 	QSpinBox *maxMessages_;
+	QLineEdit *mergeBots_;
 };
 
 } // namespace unified_chat

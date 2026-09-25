@@ -130,6 +130,10 @@ SettingsDialog::SettingsDialog(const ChatConfig &config, QWidget *parent) : QDia
 	maxMessages_->setSingleStep(50);
 	maxMessages_->setValue(config.maxMessages);
 	generalForm->addRow(Text("Settings.MaxMessages"), maxMessages_);
+	mergeBots_ = new QLineEdit(FromStd(JoinNameList(config.mergeBots)), generalBox);
+	mergeBots_->setPlaceholderText(Text("Settings.MergeBotsHint"));
+	mergeBots_->setToolTip(Text("Settings.MergeBotsTip"));
+	generalForm->addRow(Text("Settings.MergeBots"), mergeBots_);
 	layout->addWidget(generalBox);
 
 	auto buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
@@ -168,6 +172,7 @@ ChatConfig SettingsDialog::Result() const
 	result.youtubeVideo = ToStd(youtubeVideo_->text());
 	result.youtubePollSeconds = youtubePoll_->value();
 	result.maxMessages = maxMessages_->value();
+	result.mergeBots = SplitNameList(mergeBots_->text().toStdString());
 	return result;
 }
 

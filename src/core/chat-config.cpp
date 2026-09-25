@@ -17,6 +17,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
 #include "chat-config.hpp"
+#include "text-util.hpp"
 
 #include <algorithm>
 #include <type_traits>
@@ -57,6 +58,30 @@ static oauth::Token TokenFromJson(const json &obj, const char *key)
 	return token;
 }
 
+std::vector<std::string> SplitNameList(std::string_view text)
+{
+	std::vector<std::string> names;
+	while (!text.empty()) {
+		auto comma = text.find(',');
+		std::string name = Trim(text.substr(0, comma));
+		if (!name.empty())
+			names.push_back(std::move(name));
+		text = comma == std::string_view::npos ? std::string_view() : text.substr(comma + 1);
+	}
+	return names;
+}
+
+std::string JoinNameList(const std::vector<std::string> &names)
+{
+	std::string text;
+	for (const auto &name : names) {
+		if (!text.empty())
+			text += ", ";
+		text += name;
+	}
+	return text;
+}
+
 std::string SerializeConfig(const ChatConfig &config)
 {
 	json obj = {
@@ -73,6 +98,7 @@ std::string SerializeConfig(const ChatConfig &config)
 		  {"token", TokenToJson(config.youtubeToken)}}},
 		{"send_target", std::string(SendTargetToString(config.sendTarget))},
 		{"max_messages", config.maxMessages},
+		{"merge_bots", config.mergeBots},
 	};
 	return obj.dump(4);
 }
@@ -103,6 +129,16 @@ ChatConfig ParseConfig(const std::string &text)
 
 	config.sendTarget = SendTargetFromString(Get<std::string>(obj, "send_target", "both"));
 	config.maxMessages = std::clamp(Get<int>(obj, "max_messages", 500), 50, 10000);
+
+	// Missing: keep the default. Present: use it as saved, even when the user emptied it.
+	auto bots = obj.find("merge_bots");
+	if (bots != obj.end() && bots->is_array()) {
+		config.mergeBots.clear();
+		for (const auto &bot : *bots) {
+			if (bot.is_string() && !bot.get<std::string>().empty())
+				config.mergeBots.push_back(bot.get<std::string>());
+		}
+	}
 	return config;
 }
 

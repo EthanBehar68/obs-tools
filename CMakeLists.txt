@@ -17,6 +17,8 @@ add_library(unified-chat-core STATIC)
 target_sources(
   unified-chat-core
   PRIVATE
+    src/core/bot-merger.cpp
+    src/core/bot-merger.hpp
     src/core/chat-config.cpp
     src/core/chat-config.hpp
     src/core/chat-format.cpp
@@ -115,6 +117,7 @@ if(ENABLE_TESTS)
   target_sources(
     unified-chat-tests
     PRIVATE
+      tests/test-bot-merger.cpp
       tests/test-echo-merger.cpp
       tests/test-main.cpp
       tests/test-name-color.cpp

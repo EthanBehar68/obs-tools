@@ -22,6 +22,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "oauth-device.hpp"
 
 #include <string>
+#include <string_view>
+#include <vector>
 
 namespace unified_chat {
 
@@ -39,7 +41,13 @@ struct ChatConfig {
 
 	SendTarget sendTarget = SendTarget::Both;
 	int maxMessages = 500;
+	// Accounts whose identical Twitch and YouTube messages are shown as one line.
+	std::vector<std::string> mergeBots{"Nightbot"};
 };
+
+// "Nightbot, StreamElements" <-> {"Nightbot", "StreamElements"}; empty entries are dropped.
+std::vector<std::string> SplitNameList(std::string_view text);
+std::string JoinNameList(const std::vector<std::string> &names);
 
 std::string SerializeConfig(const ChatConfig &config);
 // Missing or malformed fields fall back to defaults, so a damaged file never blocks OBS startup.
