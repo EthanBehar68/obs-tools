@@ -86,6 +86,22 @@ TEST_CASE("Timeout releases whatever arrived, and late echoes pass through")
 	CHECK(late[0].platforms == std::vector<Platform>{Platform::YouTube});
 }
 
+TEST_CASE("NextDeadline reports the earliest pending timeout")
+{
+	EchoMerger merger(5000);
+	CHECK_FALSE(merger.NextDeadline());
+	uint64_t first = merger.Begin(kBoth, 1000);
+	merger.Begin(kBoth, 3000);
+	CHECK(merger.NextDeadline().value_or(-1) == 6000);
+
+	merger.Fail(first, Platform::Twitch);
+	merger.Fail(first, Platform::YouTube);
+	CHECK(merger.NextDeadline().value_or(-1) == 8000);
+
+	merger.Expire(8000);
+	CHECK_FALSE(merger.NextDeadline());
+}
+
 TEST_CASE("Viewer messages and single-platform sends pass straight through")
 {
 	EchoMerger merger;

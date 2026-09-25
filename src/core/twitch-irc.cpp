@@ -26,16 +26,16 @@ namespace unified_chat::twitch {
 static constexpr std::string_view kActionPrefix = "\x01"
 						  "ACTION ";
 
-std::string IrcMessage::Nick() const
+std::string_view IrcMessage::Nick() const
 {
-	auto bang = prefix.find('!');
-	return bang == std::string::npos ? prefix : prefix.substr(0, bang);
+	return std::string_view(prefix).substr(0, prefix.find('!'));
 }
 
-std::string IrcMessage::Tag(const std::string &key) const
+const std::string &IrcMessage::Tag(std::string_view key) const
 {
+	static const std::string empty;
 	auto it = tags.find(key);
-	return it == tags.end() ? std::string() : it->second;
+	return it == tags.end() ? empty : it->second;
 }
 
 std::string UnescapeTagValue(std::string_view value)
@@ -222,7 +222,7 @@ void IrcSession::HandleLine(std::string_view line, SessionOutput &out)
 		chat.id = msg.Tag("id");
 		chat.author = msg.Tag("display-name");
 		if (chat.author.empty())
-			chat.author = msg.Nick();
+			chat.author = std::string(msg.Nick());
 		chat.color = SanitizeColor(msg.Tag("color"));
 		chat.text = msg.params[1];
 		if (chat.text.rfind(kActionPrefix, 0) == 0) {
@@ -248,8 +248,8 @@ void IrcSession::HandleLine(std::string_view line, SessionOutput &out)
 		if (!text.empty())
 			out.notices.push_back(std::move(text));
 	} else if (msg.command == "GLOBALSTATE" || msg.command == "USERSTATE") {
-		if (!msg.Tag("display-name").empty())
-			displayName_ = msg.Tag("display-name");
+		if (const auto &name = msg.Tag("display-name"); !name.empty())
+			displayName_ = name;
 		color_ = SanitizeColor(msg.Tag("color"));
 		if (msg.command == "USERSTATE")
 			joined_ = true;

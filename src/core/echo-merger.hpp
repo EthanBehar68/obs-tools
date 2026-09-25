@@ -47,6 +47,8 @@ public:
 	std::vector<DisplayLine> Expire(int64_t nowMs);
 
 	bool HasPending() const { return !pending_.empty(); }
+	// When the next pending line times out, so a caller can wake once instead of polling Expire.
+	std::optional<int64_t> NextDeadline() const;
 
 private:
 	struct Pending {

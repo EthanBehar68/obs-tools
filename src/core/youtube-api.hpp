@@ -61,19 +61,20 @@ std::string BuildInsertBody(const std::string &liveChatId, std::string_view text
 // Accepts a bare 11 character video ID or a watch, youtu.be, /live/, /shorts/ or Studio URL.
 std::string ExtractVideoId(std::string_view input);
 
-// Remembers the most recent message IDs so repeated pages never show a message twice.
+// Remembers the most recent message IDs so repeated pages never show a message twice. Stores 64-bit
+// hashes rather than the ~70 character IDs; 1000 entries cover five full pages.
 class RecentIds {
 public:
-	explicit RecentIds(size_t capacity = 2000) : capacity_(capacity) {}
+	explicit RecentIds(size_t capacity = 1000) : capacity_(capacity) {}
 
 	// Returns false when the ID was already seen.
-	bool Insert(const std::string &id);
+	bool Insert(std::string_view id);
 	size_t Size() const { return order_.size(); }
 
 private:
 	size_t capacity_;
-	std::deque<std::string> order_;
-	std::unordered_set<std::string> ids_;
+	std::deque<uint64_t> order_;
+	std::unordered_set<uint64_t> ids_;
 };
 
 enum class State { SignedOut, WaitingForBroadcast, Polling, Error };

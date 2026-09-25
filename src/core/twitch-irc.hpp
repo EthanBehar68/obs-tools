@@ -33,13 +33,14 @@ constexpr size_t kMaxMessageLength = 500;
 constexpr const char *kValidateUrl = "https://id.twitch.tv/oauth2/validate";
 
 struct IrcMessage {
-	std::map<std::string, std::string> tags;
+	std::map<std::string, std::string, std::less<>> tags;
 	std::string prefix;
 	std::string command;
 	std::vector<std::string> params;
 
-	std::string Nick() const;
-	std::string Tag(const std::string &key) const;
+	// Both refer into this message; no copies.
+	std::string_view Nick() const;
+	const std::string &Tag(std::string_view key) const; // empty when absent
 };
 
 std::string UnescapeTagValue(std::string_view value);

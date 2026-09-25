@@ -89,6 +89,16 @@ std::vector<DisplayLine> EchoMerger::Fail(uint64_t sendId, Platform platform)
 	return ReleaseIfDone(sendId);
 }
 
+std::optional<int64_t> EchoMerger::NextDeadline() const
+{
+	std::optional<int64_t> next;
+	for (const auto &[id, pending] : pending_) {
+		if (!next || pending.deadline < *next)
+			next = pending.deadline;
+	}
+	return next;
+}
+
 std::vector<DisplayLine> EchoMerger::Expire(int64_t nowMs)
 {
 	std::vector<DisplayLine> lines;

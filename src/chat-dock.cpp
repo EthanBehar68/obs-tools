@@ -40,6 +40,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QVBoxLayout>
 #include <QWindow>
 
+#include <algorithm>
 #include <iterator>
 
 namespace unified_chat {
@@ -113,7 +114,7 @@ ChatDock::ChatDock(QWidget *parent) : QWidget(parent)
 	iconSize_ = qMax(14, fontMetrics().height());
 
 	echoTimer_ = new QTimer(this);
-	echoTimer_->setInterval(500);
+	echoTimer_->setSingleShot(true); // armed for the next merge deadline only, see ScheduleEchoTimer
 	connect(echoTimer_, &QTimer::timeout, this,
 		[this]() { AppendLines(merger_.Expire(QDateTime::currentMSecsSinceEpoch())); });
 	RegisterIcons();
@@ -306,7 +307,7 @@ void ChatDock::SendCurrent()
 
 	// Your own message comes back from each platform; the merger turns those echoes into one line.
 	uint64_t sendId = merger_.Begin(plan.targets, QDateTime::currentMSecsSinceEpoch());
-	echoTimer_->start();
+	ScheduleEchoTimer();
 	for (Platform platform : plan.targets) {
 		if (platform == Platform::Twitch && twitch_)
 			twitch_->Send(plan.text, sendId);
@@ -353,11 +354,21 @@ void ChatDock::AppendMessages(const std::vector<ChatMessage> &messages)
 	AppendLines(lines);
 }
 
+void ChatDock::ScheduleEchoTimer()
+{
+	auto deadline = merger_.NextDeadline();
+	if (!deadline) {
+		echoTimer_->stop();
+		return;
+	}
+	const int64_t waitMs = *deadline - QDateTime::currentMSecsSinceEpoch();
+	echoTimer_->start((int)std::clamp<int64_t>(waitMs, 0, 60000));
+}
+
 void ChatDock::AppendLines(const std::vector<DisplayLine> &lines)
 {
 	if (lines.empty()) {
-		if (!merger_.HasPending())
-			echoTimer_->stop();
+		ScheduleEchoTimer();
 		return;
 	}
 	if (backgroundStale_) {
@@ -374,8 +385,7 @@ void ChatDock::AppendLines(const std::vector<DisplayLine> &lines)
 		html.append(QString::fromStdString(
 			FormatMessageHtml(line.message, iconSize_, line.platforms, &nameColors_)));
 	AppendHtml(html);
-	if (!merger_.HasPending())
-		echoTimer_->stop();
+	ScheduleEchoTimer();
 }
 
 void ChatDock::changeEvent(QEvent *event)

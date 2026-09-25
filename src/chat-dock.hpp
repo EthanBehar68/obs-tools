@@ -61,6 +61,7 @@ private:
 
 	void AppendMessages(const std::vector<ChatMessage> &messages);
 	void AppendLines(const std::vector<DisplayLine> &lines);
+	void ScheduleEchoTimer();
 	void AppendNotice(const QString &text);
 	// Inserts all lines in one edit block, so the view lays out and scrolls once per batch.
 	void AppendHtml(const QStringList &lines);

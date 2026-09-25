@@ -225,13 +225,14 @@ std::string ExtractVideoId(std::string_view input)
 	return IsVideoId(candidate) ? candidate : std::string();
 }
 
-bool RecentIds::Insert(const std::string &id)
+bool RecentIds::Insert(std::string_view id)
 {
 	if (id.empty())
 		return true;
-	if (!ids_.insert(id).second)
+	const uint64_t hash = std::hash<std::string_view>{}(id);
+	if (!ids_.insert(hash).second)
 		return false;
-	order_.push_back(id);
+	order_.push_back(hash);
 	if (order_.size() > capacity_) {
 		ids_.erase(order_.front());
 		order_.pop_front();

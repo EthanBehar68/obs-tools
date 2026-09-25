@@ -11,7 +11,7 @@ TEST_CASE("ParseIrcLine handles tags, prefix, params and trailing")
 				":coolguy!coolguy@coolguy.tmi.twitch.tv PRIVMSG #streamer :hello there :)\r\n");
 	REQUIRE(msg);
 	CHECK(msg->command == "PRIVMSG");
-	CHECK(msg->Nick() == "coolguy");
+	CHECK(std::string(msg->Nick()) == "coolguy");
 	CHECK(msg->Tag("display-name") == "Cool Guy");
 	CHECK(msg->Tag("badge-info") == "");
 	CHECK(msg->Tag("missing") == "");
