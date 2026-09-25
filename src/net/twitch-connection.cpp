@@ -40,6 +40,7 @@ using Clock = std::chrono::steady_clock;
 static constexpr auto kStaleConnection = std::chrono::minutes(6);
 static constexpr auto kValidateInterval = std::chrono::hours(1);
 static constexpr int kMaxBackoffMs = 60000;
+static constexpr int kMaxReadsPerDrain = 32; // 16 KB each; a flood can't hold up outgoing messages
 
 static int64_t UnixNow()
 {
@@ -62,6 +63,58 @@ static bool WaitSocket(curl_socket_t sock, bool forRead, int timeoutMs)
 	timeval tv{timeoutMs / 1000, (timeoutMs % 1000) * 1000};
 	int rc = select((int)sock + 1, forRead ? &set : nullptr, forRead ? nullptr : &set, &errors, &tv);
 	return rc > 0;
+}
+
+#ifdef _WIN32
+// Signals when the socket has data or is closed. The association is cancelled when the session ends.
+class SocketEvent {
+public:
+	explicit SocketEvent(curl_socket_t sock) : sock_(sock), event_(WSACreateEvent())
+	{
+		ok_ = event_ != WSA_INVALID_EVENT && WSAEventSelect(sock_, event_, FD_READ | FD_CLOSE) == 0;
+	}
+	~SocketEvent()
+	{
+		if (event_ == WSA_INVALID_EVENT)
+			return;
+		WSAEventSelect(sock_, event_, 0);
+		WSACloseEvent(event_);
+	}
+	SocketEvent(const SocketEvent &) = delete;
+	SocketEvent &operator=(const SocketEvent &) = delete;
+
+	bool Ok() const { return ok_; }
+	WSAEVENT Handle() const { return event_; }
+
+private:
+	curl_socket_t sock_;
+	WSAEVENT event_;
+	bool ok_ = false;
+};
+#else
+class SocketEvent {
+public:
+	explicit SocketEvent(curl_socket_t) {}
+	bool Ok() const { return true; }
+};
+#endif
+
+// Blocks until the socket has data, wakeEvent is set, or timeoutMs passes.
+static void WaitForActivity(const SocketEvent &socketEvent, void *wakeEvent, curl_socket_t sock, int timeoutMs)
+{
+#ifdef _WIN32
+	(void)sock;
+	HANDLE handles[] = {socketEvent.Handle(), wakeEvent};
+	if (wakeEvent)
+		WaitForMultipleObjects(2, handles, FALSE, (DWORD)timeoutMs);
+	else // no wake event: fall back to noticing sends and shutdown by timeout
+		WaitForSingleObject(handles[0], (DWORD)(std::min)(timeoutMs, 250));
+	WSAResetEvent(socketEvent.Handle());
+#else
+	(void)socketEvent;
+	(void)wakeEvent;
+	WaitSocket(sock, true, (std::min)(timeoutMs, 250));
+#endif
 }
 
 static bool SendLine(CURL *curl, curl_socket_t sock, const std::string &line)
@@ -90,15 +143,31 @@ TwitchConnection::TwitchConnection(std::string channel, std::string clientId, st
 	  token_(std::move(token)),
 	  callbacks_(std::move(callbacks))
 {
+#ifdef _WIN32
+	wakeEvent_ = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+#endif
 	thread_ = std::thread(&TwitchConnection::Run, this);
 }
 
 TwitchConnection::~TwitchConnection()
 {
 	stop_ = true;
-	cv_.notify_all();
+	Wake();
 	if (thread_.joinable())
 		thread_.join();
+#ifdef _WIN32
+	if (wakeEvent_)
+		CloseHandle(wakeEvent_);
+#endif
+}
+
+void TwitchConnection::Wake()
+{
+	cv_.notify_all();
+#ifdef _WIN32
+	if (wakeEvent_)
+		SetEvent(wakeEvent_);
+#endif
 }
 
 void TwitchConnection::Send(std::string text, uint64_t sendId)
@@ -107,7 +176,7 @@ void TwitchConnection::Send(std::string text, uint64_t sendId)
 		std::lock_guard lock(mutex_);
 		outgoing_.push_back({std::move(text), sendId});
 	}
-	cv_.notify_all();
+	Wake();
 }
 
 void TwitchConnection::Notice(const std::string &text)
@@ -184,6 +253,11 @@ void TwitchConnection::RunSession(void *handle)
 	curl_easy_getinfo(curl, CURLINFO_ACTIVESOCKET, &sock);
 	if (sock == CURL_SOCKET_BAD)
 		return;
+	SocketEvent socketEvent(sock);
+	if (!socketEvent.Ok()) {
+		Notice("could not watch the connection for incoming data");
+		return;
+	}
 
 	std::random_device random;
 	twitch::IrcSession session(channel_, login_, token_.accessToken, 10000 + random() % 90000);
@@ -232,23 +306,30 @@ void TwitchConnection::RunSession(void *handle)
 			}
 		}
 
-		char data[16384];
-		size_t received = 0;
-		CURLcode rc = curl_easy_recv(curl, data, sizeof(data), &received);
-		if (rc == CURLE_AGAIN) {
-			WaitSocket(sock, true, 250);
-		} else if (rc != CURLE_OK || received == 0) {
-			Notice("disconnected");
-			return;
-		} else {
+		// Read until curl reports nothing left. That includes data Schannel has already decrypted and
+		// buffered, which the socket event can't see; blocking before draining it could stall chat.
+		// Everything read here reaches the dock as one batch; a notice flushes first to keep order.
+		std::vector<ChatMessage> batch;
+		auto flush = [&]() {
+			if (!batch.empty() && callbacks_.onMessages)
+				callbacks_.onMessages(std::move(batch));
+			batch.clear();
+		};
+		bool drained = false;
+		for (int reads = 0; reads < kMaxReadsPerDrain; ++reads) {
+			char data[16384];
+			size_t received = 0;
+			CURLcode rc = curl_easy_recv(curl, data, sizeof(data), &received);
+			if (rc == CURLE_AGAIN) {
+				drained = true;
+				break;
+			}
+			if (rc != CURLE_OK || received == 0) {
+				flush();
+				Notice("disconnected");
+				return;
+			}
 			lastReceive = Clock::now();
-			// Everything from one read reaches the dock as one batch; a notice flushes first to keep order.
-			std::vector<ChatMessage> batch;
-			auto flush = [&]() {
-				if (!batch.empty() && callbacks_.onMessages)
-					callbacks_.onMessages(std::move(batch));
-				batch.clear();
-			};
 			for (const auto &line : buffer.Append(std::string_view(data, received))) {
 				twitch::SessionOutput out;
 				session.HandleLine(line, out);
@@ -274,23 +355,36 @@ void TwitchConnection::RunSession(void *handle)
 					return;
 				}
 			}
-			flush();
-			if (session.IsJoined() && !wasJoined) {
-				wasJoined = true;
-				SetState(session.CanSend() ? LinkState::Connected : LinkState::ReadOnly);
-				Notice("joined #" + session.Channel() + (session.CanSend() ? "" : " (read-only)"));
-			}
+		}
+		flush();
+		if (session.IsJoined() && !wasJoined) {
+			wasJoined = true;
+			SetState(session.CanSend() ? LinkState::Connected : LinkState::ReadOnly);
+			Notice("joined #" + session.Channel() + (session.CanSend() ? "" : " (read-only)"));
 		}
 
-		if (Clock::now() - lastReceive > kStaleConnection) {
+		auto now = Clock::now();
+		if (now - lastReceive > kStaleConnection) {
 			Notice("connection timed out");
 			return;
 		}
-		if (token_.IsValid() && Clock::now() - lastValidate > kValidateInterval) {
-			lastValidate = Clock::now();
+		if (token_.IsValid() && now - lastValidate > kValidateInterval) {
+			lastValidate = now;
 			if (!ValidateToken(true))
 				return;
 		}
+
+		// Still more to read (a flood): loop straight back so queued sends go out, without blocking.
+		if (!drained)
+			continue;
+
+		// Sleep until data arrives, Send() or shutdown wakes us, or the next housekeeping check is due.
+		// Twitch PINGs every few minutes, so an idle connection wakes only a handful of times an hour.
+		auto due = lastReceive + kStaleConnection;
+		if (token_.IsValid())
+			due = (std::min)(due, lastValidate + kValidateInterval);
+		auto waitMs = std::chrono::duration_cast<std::chrono::milliseconds>(due - Clock::now()).count() + 1;
+		WaitForActivity(socketEvent, wakeEvent_, sock, (int)std::clamp<long long>(waitMs, 0, 60 * 60 * 1000));
 	}
 }
 

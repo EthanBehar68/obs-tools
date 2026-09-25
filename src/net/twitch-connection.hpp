@@ -69,6 +69,7 @@ private:
 	bool RefreshToken();
 	void RunSession(void *curl);
 	void WaitFor(int ms);
+	void Wake();
 	void Notice(const std::string &text);
 	void SetState(LinkState state);
 
@@ -82,6 +83,7 @@ private:
 	std::mutex mutex_;
 	std::condition_variable cv_;
 	std::deque<OutgoingMessage> outgoing_;
+	void *wakeEvent_ = nullptr; // Windows auto-reset event, set by Send() and on shutdown
 	std::thread thread_;
 };
 
