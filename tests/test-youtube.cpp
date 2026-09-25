@@ -206,6 +206,16 @@ TEST_CASE("ChatSession finds the active broadcast then polls with page tokens")
 	http.Queue(200, Page(Item("m2", "Bob", "yo") + "," + Item("m3", "Cid", "new"), "p3", 9000));
 	auto again = session.Step(2);
 	CHECK(http.requests.back().url.find("pageToken=p2") != std::string::npos);
+	// Partial responses: every call asks only for what the parsers read.
+	CHECK(http.requests[0].url.find("&fields=items/snippet/liveChatId") != std::string::npos);
+	CHECK(http.requests[1].url.find("&fields=items(id,snippet/title)") != std::string::npos);
+	const std::string &pollUrl = http.requests.back().url;
+	for (const char *field :
+	     {"nextPageToken", "pollingIntervalMillis", "offlineAt", "displayMessage", "messageText", "displayName",
+	      "channelId", "isChatOwner", "isChatModerator", "isChatSponsor"}) {
+		CAPTURE(field);
+		CHECK(pollUrl.find(field) != std::string::npos);
+	}
 	CHECK(http.requests.back().url.find("liveChatId=CHAT1") != std::string::npos);
 	REQUIRE(again.messages.size() == 1);
 	CHECK(again.messages[0].id == "m3");

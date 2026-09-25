@@ -31,6 +31,16 @@ static constexpr int kNetworkRetryMs = 10000;
 static constexpr int kErrorRetryMs = 60000;
 static constexpr int kQuotaRetryMs = 15 * 60 * 1000;
 
+// Partial responses: only the properties the parsers below read, to cut download and JSON parsing.
+// Keep these in step with MessageFromItem, ParseMessagesPage and the First*/ParseOwnChannel readers.
+static constexpr const char *kMessagesFields =
+	"&fields=nextPageToken,pollingIntervalMillis,offlineAt,"
+	"items(id,snippet(type,displayMessage,textMessageDetails/messageText),"
+	"authorDetails(displayName,channelId,isChatOwner,isChatModerator,isChatSponsor))";
+static constexpr const char *kBroadcastFields = "&fields=items/snippet/liveChatId";
+static constexpr const char *kVideoFields = "&fields=items/liveStreamingDetails/activeLiveChatId";
+static constexpr const char *kChannelFields = "&fields=items(id,snippet/title)";
+
 static std::string StringAt(const json &obj, std::initializer_list<const char *> path)
 {
 	const json *node = &obj;
@@ -318,10 +328,12 @@ void ChatSession::FindLiveChat(int64_t now, StepResult &out)
 {
 	std::string url;
 	if (!videoId_.empty()) {
-		url = std::string(kApiBase) + "/videos?part=liveStreamingDetails&id=" + UrlEncode(videoId_);
+		url = std::string(kApiBase) + "/videos?part=liveStreamingDetails&id=" + UrlEncode(videoId_) +
+		      kVideoFields;
 	} else {
 		url = std::string(kApiBase) +
-		      "/liveBroadcasts?part=snippet&broadcastStatus=active&broadcastType=all&maxResults=5";
+		      "/liveBroadcasts?part=snippet&broadcastStatus=active&broadcastType=all&maxResults=5" +
+		      kBroadcastFields;
 	}
 
 	HttpResponse res = Authorized(false, url, {}, now);
@@ -348,8 +360,8 @@ void ChatSession::FindLiveChat(int64_t now, StepResult &out)
 	out.notices.push_back("YouTube: connected to live chat");
 
 	if (ownChannelId_.empty()) {
-		HttpResponse channel =
-			Authorized(false, std::string(kApiBase) + "/channels?part=snippet&mine=true", {}, now);
+		HttpResponse channel = Authorized(
+			false, std::string(kApiBase) + "/channels?part=snippet&mine=true" + kChannelFields, {}, now);
 		if (auto own = channel.Ok() ? ParseOwnChannel(channel.body) : std::nullopt) {
 			ownChannelId_ = std::move(own->id);
 			ownName_ = std::move(own->title);
@@ -361,7 +373,7 @@ void ChatSession::FindLiveChat(int64_t now, StepResult &out)
 void ChatSession::Poll(int64_t now, StepResult &out)
 {
 	std::string url = std::string(kApiBase) + "/liveChat/messages?part=snippet,authorDetails&maxResults=200" +
-			  "&liveChatId=" + UrlEncode(liveChatId_);
+			  "&liveChatId=" + UrlEncode(liveChatId_) + kMessagesFields;
 	if (!pageToken_.empty())
 		url += "&pageToken=" + UrlEncode(pageToken_);
 
