@@ -24,6 +24,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "net/twitch-connection.hpp"
 #include "net/youtube-connection.hpp"
 
+#include <QStringList>
 #include <QWidget>
 
 #include <memory>
@@ -58,10 +59,11 @@ private:
 	void OpenSettings();
 	void SendCurrent();
 
-	void AppendMessage(const ChatMessage &message);
+	void AppendMessages(const std::vector<ChatMessage> &messages);
 	void AppendLines(const std::vector<DisplayLine> &lines);
 	void AppendNotice(const QString &text);
-	void AppendHtml(const QString &html);
+	// Inserts all lines in one edit block, so the view lays out and scrolls once per batch.
+	void AppendHtml(const QStringList &lines);
 	void SetLinkState(Platform platform, LinkState state);
 	void UpdatePlaceholder();
 	void RegisterIcons();

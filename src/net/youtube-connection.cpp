@@ -106,8 +106,8 @@ void YouTubeConnection::Run()
 			auto result = session.Send(outgoing.text, (int64_t)std::time(nullptr));
 			if (result.echo) {
 				result.echo->sendId = outgoing.sendId;
-				if (callbacks_.onMessage)
-					callbacks_.onMessage(*result.echo);
+				if (callbacks_.onMessages)
+					callbacks_.onMessages({std::move(*result.echo)});
 				continue;
 			}
 			if (!result.ok)
@@ -119,10 +119,8 @@ void YouTubeConnection::Run()
 
 		if (Clock::now() >= nextStep) {
 			auto step = session.Step((int64_t)std::time(nullptr));
-			for (const auto &message : step.messages) {
-				if (callbacks_.onMessage)
-					callbacks_.onMessage(message);
-			}
+			if (!step.messages.empty() && callbacks_.onMessages)
+				callbacks_.onMessages(std::move(step.messages));
 			for (const auto &text : step.notices)
 				notice(text);
 			nextStep = Clock::now() + std::chrono::milliseconds(step.nextDelayMs);

@@ -225,10 +225,10 @@ void TwitchConnection::RunSession(void *handle)
 				failed();
 				return;
 			}
-			if (callbacks_.onMessage) {
+			if (callbacks_.onMessages) {
 				ChatMessage echo = session.LocalEcho(outgoing.text);
 				echo.sendId = outgoing.sendId;
-				callbacks_.onMessage(echo);
+				callbacks_.onMessages({std::move(echo)});
 			}
 		}
 
@@ -242,15 +242,22 @@ void TwitchConnection::RunSession(void *handle)
 			return;
 		} else {
 			lastReceive = Clock::now();
+			// Everything from one read reaches the dock as one batch; a notice flushes first to keep order.
+			std::vector<ChatMessage> batch;
+			auto flush = [&]() {
+				if (!batch.empty() && callbacks_.onMessages)
+					callbacks_.onMessages(std::move(batch));
+				batch.clear();
+			};
 			for (const auto &line : buffer.Append(std::string_view(data, received))) {
 				twitch::SessionOutput out;
 				session.HandleLine(line, out);
 				for (const auto &reply : out.outgoing)
 					SendLine(curl, sock, reply);
-				for (const auto &message : out.messages) {
-					if (callbacks_.onMessage)
-						callbacks_.onMessage(message);
-				}
+				for (auto &message : out.messages)
+					batch.push_back(std::move(message));
+				if (!out.notices.empty() || out.authFailed || out.reconnect)
+					flush();
 				for (const auto &notice : out.notices)
 					Notice(notice);
 				if (out.authFailed) {
@@ -267,6 +274,7 @@ void TwitchConnection::RunSession(void *handle)
 					return;
 				}
 			}
+			flush();
 			if (session.IsJoined() && !wasJoined) {
 				wasJoined = true;
 				SetState(session.CanSend() ? LinkState::Connected : LinkState::ReadOnly);

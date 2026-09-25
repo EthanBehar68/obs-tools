@@ -40,6 +40,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QVBoxLayout>
 #include <QWindow>
 
+#include <iterator>
+
 namespace unified_chat {
 
 static QString Text(const char *key)
@@ -201,8 +203,10 @@ void ChatDock::SaveConfig()
 ConnectionCallbacks ChatDock::MakeCallbacks(Platform platform)
 {
 	ConnectionCallbacks callbacks;
-	callbacks.onMessage = [this](const ChatMessage &message) {
-		QMetaObject::invokeMethod(this, [this, message]() { AppendMessage(message); }, Qt::QueuedConnection);
+	callbacks.onMessages = [this](std::vector<ChatMessage> messages) {
+		QMetaObject::invokeMethod(
+			this, [this, messages = std::move(messages)]() { AppendMessages(messages); },
+			Qt::QueuedConnection);
 	};
 	callbacks.onNotice = [this](const std::string &text) {
 		obs_log(LOG_INFO, "%s", text.c_str());
@@ -314,30 +318,49 @@ void ChatDock::SendCurrent()
 	input_->clear();
 }
 
-void ChatDock::AppendHtml(const QString &html)
+void ChatDock::AppendHtml(const QStringList &lines)
 {
+	if (lines.isEmpty())
+		return;
+
 	QScrollBar *bar = view_->verticalScrollBar();
 	const bool atBottom = bar->value() >= bar->maximum() - 4;
 
+	// The document relayouts the changed range and trims to the maximum block count once, at endEditBlock.
 	QTextCursor cursor(view_->document());
 	cursor.movePosition(QTextCursor::End);
-	if (!empty_)
-		cursor.insertBlock();
-	cursor.insertHtml(html);
-	empty_ = false;
+	cursor.beginEditBlock();
+	for (const QString &html : lines) {
+		if (!empty_)
+			cursor.insertBlock();
+		cursor.insertHtml(html);
+		empty_ = false;
+	}
+	cursor.endEditBlock();
 
 	if (atBottom)
 		bar->setValue(bar->maximum());
 }
 
-void ChatDock::AppendMessage(const ChatMessage &message)
+void ChatDock::AppendMessages(const std::vector<ChatMessage> &messages)
 {
-	AppendLines(merger_.Offer(message));
+	std::vector<DisplayLine> lines;
+	lines.reserve(messages.size());
+	for (const auto &message : messages) {
+		auto released = merger_.Offer(message);
+		std::move(released.begin(), released.end(), std::back_inserter(lines));
+	}
+	AppendLines(lines);
 }
 
 void ChatDock::AppendLines(const std::vector<DisplayLine> &lines)
 {
-	if (backgroundStale_ && !lines.empty()) {
+	if (lines.empty()) {
+		if (!merger_.HasPending())
+			echoTimer_->stop();
+		return;
+	}
+	if (backgroundStale_) {
 		backgroundStale_ = false;
 		view_->ensurePolished();
 		const std::string previous = nameColors_.Background();
@@ -345,9 +368,12 @@ void ChatDock::AppendLines(const std::vector<DisplayLine> &lines)
 		if (nameColors_.Background() != previous)
 			obs_log(LOG_INFO, "name colors: chat background is %s", nameColors_.Background().c_str());
 	}
+	QStringList html;
+	html.reserve((qsizetype)lines.size());
 	for (const auto &line : lines)
-		AppendHtml(QString::fromStdString(
+		html.append(QString::fromStdString(
 			FormatMessageHtml(line.message, iconSize_, line.platforms, &nameColors_)));
+	AppendHtml(html);
 	if (!merger_.HasPending())
 		echoTimer_->stop();
 }
@@ -361,7 +387,7 @@ void ChatDock::changeEvent(QEvent *event)
 
 void ChatDock::AppendNotice(const QString &text)
 {
-	AppendHtml(QString::fromStdString(FormatNoticeHtml(text.toStdString())));
+	AppendHtml({QString::fromStdString(FormatNoticeHtml(text.toStdString()))});
 }
 
 void ChatDock::SetLinkState(Platform platform, LinkState state)

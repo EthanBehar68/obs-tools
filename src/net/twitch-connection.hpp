@@ -28,13 +28,15 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <mutex>
 #include <string>
 #include <thread>
+#include <vector>
 
 namespace unified_chat {
 
 enum class LinkState { Disconnected, Connecting, ReadOnly, Connected };
 
 struct ConnectionCallbacks {
-	std::function<void(const ChatMessage &)> onMessage;
+	// Messages that arrived together (one socket read or one poll), in order.
+	std::function<void(std::vector<ChatMessage>)> onMessages;
 	std::function<void(const std::string &)> onNotice;
 	std::function<void(LinkState)> onState;
 	std::function<void(const oauth::Token &, const std::string &login)> onTokenChanged;
