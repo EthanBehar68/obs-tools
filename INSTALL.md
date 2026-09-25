@@ -56,15 +56,16 @@ YouTube requires a Google Cloud project with the YouTube Data API enabled, for b
 
 ### YouTube API quota
 
-Google gives each project a free daily quota (10,000 units by default). Every chat poll uses part of it, so the **Minimum poll interval** setting trades message latency against how long your quota lasts:
+Google gives each project a free daily quota (10,000 units by default). Per [Google's quota table](https://developers.google.com/youtube/v3/determine_quota_cost), each chat poll costs **1 unit** and each message you send to YouTube costs **50 units**, including messages sent with the switch on Both. Finding your broadcast and your channel name costs 1 unit each, once per connection.
 
-| Interval | Rough streaming hours per day |
-|----------|-------------------------------|
-| 5 s      | ~3 h                          |
-| 8 s (default) | ~4.5 h                   |
-| 15 s     | ~8 h                          |
+| Minimum poll interval | Polling per hour | Hours per day, polling only | Hours per day, also sending 10 YouTube messages an hour |
+|---|---|---|---|
+| 3 s | 1,200 units | ~8 h | ~5.9 h |
+| 5 s | 720 units | ~14 h | ~8.2 h |
+| 8 s (default) | 450 units | ~22 h | ~10.5 h |
+| 15 s | 240 units | ~41 h (all day) | ~13.5 h |
 
-These are estimates. Your actual usage is under **APIs & Services → YouTube Data API v3 → Quotas** in the Cloud Console. When the quota runs out, the dock says so and pauses YouTube for 15 minutes. Quota resets at midnight Pacific time. Sending a message costs more than a poll but is rare by comparison.
+So a lower poll interval is affordable, while sending many messages to YouTube is what uses up the quota fastest. YouTube may also ask for a longer interval than yours, and the plugin always waits at least as long as YouTube asks. Your actual usage is under **APIs & Services → YouTube Data API v3 → Quotas** in the Cloud Console. When the quota runs out, the dock says so and pauses YouTube for 15 minutes. Quota resets at midnight Pacific time.
 
 ## 4. Using the dock
 
@@ -97,5 +98,5 @@ Every plugin log line starts with `[obs-unified-chat]`. Check **Help → Log Fil
 | YouTube sign-in fails with `invalid_client` or `unauthorized_client` | The Google client type must be **TVs and Limited Input devices**, and the secret must belong to that client. |
 | YouTube sign-in blocked with "access denied" | Add your account under **Test users**, or publish the app (step 3). |
 | `YouTube: waiting for a live broadcast` while you're live | YouTube can take up to a minute to mark the broadcast live. If it never connects, paste the stream URL into **Video**. |
-| `YouTube: API quota exceeded` | Raise the poll interval, or wait for the daily reset. |
+| `YouTube: API quota exceeded` | Send fewer messages to YouTube (each costs 50 polls' worth), raise the poll interval, or wait for the daily reset. |
 | `YouTube: request failed (HTTP 403, forbidden)` | The signed-in account doesn't own or moderate that live chat. |
