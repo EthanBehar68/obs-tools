@@ -34,6 +34,12 @@ static int Progress(void *userdata, curl_off_t, curl_off_t, curl_off_t, curl_off
 	return cancel && cancel->load() ? 1 : 0;
 }
 
+CurlHttpClient::~CurlHttpClient()
+{
+	if (curl_)
+		curl_easy_cleanup(static_cast<CURL *>(curl_));
+}
+
 HttpResponse CurlHttpClient::Get(const std::string &url, const std::vector<std::string> &headers)
 {
 	return Perform(url, headers, nullptr, {});
@@ -49,7 +55,9 @@ HttpResponse CurlHttpClient::Perform(const std::string &url, const std::vector<s
 				     const std::string *body, const std::string &contentType)
 {
 	HttpResponse response;
-	CURL *curl = curl_easy_init();
+	if (!curl_)
+		curl_ = curl_easy_init();
+	CURL *curl = static_cast<CURL *>(curl_);
 	if (!curl) {
 		response.error = "curl_easy_init failed";
 		return response;
@@ -92,8 +100,10 @@ HttpResponse CurlHttpClient::Perform(const std::string &url, const std::vector<s
 		response.error = errorBuffer[0] ? errorBuffer : curl_easy_strerror(code);
 	}
 
+	// Drops this request's options (they point at locals) but keeps the open connection, TLS session and
+	// DNS cache for the next request.
+	curl_easy_reset(curl);
 	curl_slist_free_all(list);
-	curl_easy_cleanup(curl);
 	return response;
 }
 
