@@ -21,6 +21,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "chat-router.hpp"
 #include "oauth-device.hpp"
 
+#include <functional>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -53,8 +55,21 @@ struct ChatConfig {
 std::vector<std::string> SplitNameList(std::string_view text);
 std::string JoinNameList(const std::vector<std::string> &names);
 
-std::string SerializeConfig(const ChatConfig &config);
+// Encrypts secrets at rest (on Windows: DPAPI, bound to the user's account). Both functions work on raw bytes;
+// unprotect returns nullopt when the data can't be decrypted, e.g. a config copied from another account.
+struct SecretCodec {
+	std::function<std::optional<std::string>(const std::string &)> protect;
+	std::function<std::optional<std::string>(const std::string &)> unprotect;
+};
+
+// Tokens and the Google client secret are written as "enc:v1:<base64>" when a codec is given.
+std::string SerializeConfig(const ChatConfig &config, const SecretCodec *codec = nullptr);
+
+struct ParseReport {
+	bool plaintextSecrets = false;  // at least one secret was stored unencrypted (an older config)
+	bool unreadableSecrets = false; // at least one encrypted secret couldn't be decrypted (it's left empty)
+};
 // Missing or malformed fields fall back to defaults, so a damaged file never blocks OBS startup.
-ChatConfig ParseConfig(const std::string &json);
+ChatConfig ParseConfig(const std::string &json, const SecretCodec *codec = nullptr, ParseReport *report = nullptr);
 
 } // namespace unified_chat

@@ -89,6 +89,8 @@ target_sources(
     src/platform-icons.cpp
     src/platform-icons.hpp
     src/plugin-main.cpp
+    src/secret-store.cpp
+    src/secret-store.hpp
     src/settings-dialog.cpp
     src/settings-dialog.hpp
     src/target-switch.cpp
@@ -96,7 +98,7 @@ target_sources(
 )
 
 if(WIN32)
-  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE ws2_32)
+  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE ws2_32 crypt32)
 endif()
 
 # link.exe cannot overwrite its previous output on FAT32/exFAT drives (LNK1105, error 1224), so remove it first

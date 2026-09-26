@@ -184,6 +184,67 @@ int64_t ParseRfc3339(std::string_view text)
 	       offset;
 }
 
+static constexpr char kBase64Alphabet[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+std::string Base64Encode(std::string_view bytes)
+{
+	std::string out;
+	out.reserve((bytes.size() + 2) / 3 * 4);
+	for (size_t i = 0; i < bytes.size(); i += 3) {
+		uint32_t chunk = (uint32_t)(unsigned char)bytes[i] << 16;
+		if (i + 1 < bytes.size())
+			chunk |= (uint32_t)(unsigned char)bytes[i + 1] << 8;
+		if (i + 2 < bytes.size())
+			chunk |= (uint32_t)(unsigned char)bytes[i + 2];
+		out.push_back(kBase64Alphabet[(chunk >> 18) & 63]);
+		out.push_back(kBase64Alphabet[(chunk >> 12) & 63]);
+		out.push_back(i + 1 < bytes.size() ? kBase64Alphabet[(chunk >> 6) & 63] : '=');
+		out.push_back(i + 2 < bytes.size() ? kBase64Alphabet[chunk & 63] : '=');
+	}
+	return out;
+}
+
+std::optional<std::string> Base64Decode(std::string_view text)
+{
+	if (text.size() % 4 != 0)
+		return std::nullopt;
+	auto value = [](char c) -> int {
+		if (c >= 'A' && c <= 'Z')
+			return c - 'A';
+		if (c >= 'a' && c <= 'z')
+			return c - 'a' + 26;
+		if (c >= '0' && c <= '9')
+			return c - '0' + 52;
+		if (c == '+')
+			return 62;
+		if (c == '/')
+			return 63;
+		return -1;
+	};
+	std::string out;
+	out.reserve(text.size() / 4 * 3);
+	for (size_t i = 0; i < text.size(); i += 4) {
+		const bool pad2 = text[i + 2] == '=';
+		const bool pad3 = text[i + 3] == '=';
+		// Padding may only appear at the very end, and "x=y" (a value after padding) is invalid.
+		if ((pad2 || pad3) && i + 4 != text.size())
+			return std::nullopt;
+		if (pad2 && !pad3)
+			return std::nullopt;
+		const int a = value(text[i]), b = value(text[i + 1]);
+		const int c = pad2 ? 0 : value(text[i + 2]), d = pad3 ? 0 : value(text[i + 3]);
+		if (a < 0 || b < 0 || c < 0 || d < 0)
+			return std::nullopt;
+		const uint32_t chunk = (uint32_t)a << 18 | (uint32_t)b << 12 | (uint32_t)c << 6 | (uint32_t)d;
+		out.push_back((char)((chunk >> 16) & 0xFF));
+		if (!pad2)
+			out.push_back((char)((chunk >> 8) & 0xFF));
+		if (!pad3)
+			out.push_back((char)(chunk & 0xFF));
+	}
+	return out;
+}
+
 std::string UrlEncode(std::string_view text)
 {
 	static const char hex[] = "0123456789ABCDEF";

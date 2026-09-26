@@ -263,6 +263,98 @@ TEST_CASE("Config round trips through JSON")
 	CHECK(loaded.maxMessages == 800);
 }
 
+namespace {
+
+// Stands in for DPAPI: "sealed:" + reversed text; refuses anything it didn't seal.
+SecretCodec FakeCodec()
+{
+	return {[](const std::string &plain) -> std::optional<std::string> {
+			return "sealed:" + std::string(plain.rbegin(), plain.rend());
+		},
+		[](const std::string &sealed) -> std::optional<std::string> {
+			if (sealed.rfind("sealed:", 0) != 0)
+				return std::nullopt;
+			std::string body = sealed.substr(7);
+			return std::string(body.rbegin(), body.rend());
+		}};
+}
+
+ChatConfig SignedIn()
+{
+	ChatConfig config;
+	config.twitchClientId = "public-twitch-id";
+	config.twitchToken = {"twitch-access", "twitch-refresh", 123};
+	config.youtubeClientId = "public-google-id";
+	config.youtubeClientSecret = "google-secret";
+	config.youtubeToken = {"yt-access", "yt-refresh", 456};
+	return config;
+}
+
+} // namespace
+
+TEST_CASE("Secrets are stored encrypted and read back")
+{
+	const SecretCodec codec = FakeCodec();
+	const std::string text = SerializeConfig(SignedIn(), &codec);
+	for (const char *secret : {"twitch-access", "twitch-refresh", "google-secret", "yt-access", "yt-refresh"}) {
+		CAPTURE(secret);
+		CHECK(text.find(secret) == std::string::npos);
+	}
+	CHECK(text.find("enc:v1:") != std::string::npos);
+	CHECK(text.find("public-twitch-id") != std::string::npos); // client IDs aren't secret
+
+	ParseReport report;
+	ChatConfig loaded = ParseConfig(text, &codec, &report);
+	CHECK(loaded.twitchToken.accessToken == "twitch-access");
+	CHECK(loaded.twitchToken.refreshToken == "twitch-refresh");
+	CHECK(loaded.youtubeClientSecret == "google-secret");
+	CHECK(loaded.youtubeToken.refreshToken == "yt-refresh");
+	CHECK(loaded.youtubeToken.expiresAt == 456);
+	CHECK_FALSE(report.plaintextSecrets);
+	CHECK_FALSE(report.unreadableSecrets);
+}
+
+TEST_CASE("An older plain-text config still loads and is reported for re-saving")
+{
+	const SecretCodec codec = FakeCodec();
+	ParseReport report;
+	ChatConfig loaded = ParseConfig(SerializeConfig(SignedIn()), &codec, &report);
+	CHECK(loaded.twitchToken.accessToken == "twitch-access");
+	CHECK(report.plaintextSecrets);
+	CHECK_FALSE(report.unreadableSecrets);
+}
+
+TEST_CASE("Secrets that can't be decrypted come back empty instead of failing")
+{
+	const SecretCodec codec = FakeCodec();
+	std::string text = SerializeConfig(SignedIn(), &codec);
+
+	ParseReport noCodec;
+	ChatConfig withoutCodec = ParseConfig(text, nullptr, &noCodec);
+	CHECK(withoutCodec.twitchToken.accessToken.empty());
+	CHECK(withoutCodec.youtubeClientSecret.empty());
+	CHECK(withoutCodec.twitchClientId == "public-twitch-id"); // everything else still loads
+	CHECK(noCodec.unreadableSecrets);
+
+	SecretCodec otherAccount = codec;
+	otherAccount.unprotect = [](const std::string &) -> std::optional<std::string> {
+		return std::nullopt;
+	};
+	ParseReport report;
+	CHECK_FALSE(ParseConfig(text, &otherAccount, &report).twitchToken.IsValid());
+	CHECK(report.unreadableSecrets);
+}
+
+TEST_CASE("If encryption fails, secrets are kept rather than lost")
+{
+	SecretCodec broken = FakeCodec();
+	broken.protect = [](const std::string &) -> std::optional<std::string> {
+		return std::nullopt;
+	};
+	ChatConfig loaded = ParseConfig(SerializeConfig(SignedIn(), &broken), &broken);
+	CHECK(loaded.twitchToken.accessToken == "twitch-access");
+}
+
 TEST_CASE("Config falls back to defaults for damaged input")
 {
 	ChatConfig empty = ParseConfig("{not json");

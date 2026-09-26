@@ -18,6 +18,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include "chat-dock.hpp"
 #include "platform-icons.hpp"
+#include "secret-store.hpp"
 #include "settings-dialog.hpp"
 #include "target-switch.hpp"
 #include "core/chat-format.hpp"
@@ -248,7 +249,8 @@ void ChatDock::LoadConfig()
 {
 	char *path = obs_module_config_path("config.json");
 	char *text = path ? os_quick_read_utf8_file(path) : nullptr;
-	config_ = ParseConfig(text ? text : "");
+	ParseReport report;
+	config_ = ParseConfig(text ? text : "", PlatformSecretCodec(), &report);
 	bfree(text);
 	bfree(path);
 
@@ -257,6 +259,17 @@ void ChatDock::LoadConfig()
 	botMerger_.SetBots(config_.mergeBots);
 	UpdateMentionNames();
 	UpdatePlaceholder();
+
+	if (report.unreadableSecrets) {
+		obs_log(LOG_WARNING,
+			"saved sign-ins could not be decrypted (config from another Windows account or PC?)");
+		AppendNotice(Text("Notice.SecretsUnreadable"));
+	}
+	// An older config kept tokens in plain text: re-save encrypted now, and drop the plain-text backup.
+	if (report.plaintextSecrets && PlatformSecretCodec()) {
+		plaintextBackup_ = true;
+		SaveConfig();
+	}
 }
 
 void ChatDock::SaveConfig()
@@ -265,9 +278,16 @@ void ChatDock::SaveConfig()
 	char *path = obs_module_config_path("config.json");
 	if (dir && path) {
 		os_mkdirs(dir);
-		std::string text = SerializeConfig(config_);
-		if (!os_quick_write_utf8_file_safe(path, text.c_str(), text.size(), false, "tmp", "bak"))
+		std::string text = SerializeConfig(config_, PlatformSecretCodec());
+		if (!os_quick_write_utf8_file_safe(path, text.c_str(), text.size(), false, "tmp", "bak")) {
 			obs_log(LOG_WARNING, "failed to save %s", path);
+		} else if (plaintextBackup_) {
+			// The safe write keeps the previous file as config.json.bak: the old plain-text one this once.
+			std::string backup = std::string(path) + ".bak";
+			os_unlink(backup.c_str());
+			plaintextBackup_ = false;
+			obs_log(LOG_INFO, "saved sign-ins are now encrypted for this Windows account");
+		}
 	}
 	bfree(path);
 	bfree(dir);

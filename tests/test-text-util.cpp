@@ -68,6 +68,26 @@ TEST_CASE("FormatDuration reads naturally for timeout notices")
 	CHECK(FormatDuration(-5) == "0 seconds");
 }
 
+TEST_CASE("Base64 round trips any bytes and rejects malformed input")
+{
+	CHECK(Base64Encode("") == "");
+	CHECK(Base64Encode("f") == "Zg==");
+	CHECK(Base64Encode("fo") == "Zm8=");
+	CHECK(Base64Encode("foo") == "Zm9v");
+	CHECK(Base64Encode("foobar") == "Zm9vYmFy");
+
+	std::string bytes;
+	for (int i = 0; i < 256; ++i)
+		bytes.push_back((char)i);
+	CHECK(Base64Decode(Base64Encode(bytes)).value_or("") == bytes);
+
+	CHECK(Base64Decode("Zm8=").value_or("") == "fo");
+	CHECK_FALSE(Base64Decode("Zm8"));      // wrong length
+	CHECK_FALSE(Base64Decode("Zm=v"));     // padding in the middle
+	CHECK_FALSE(Base64Decode("Zg==Zm9v")); // data after padding
+	CHECK_FALSE(Base64Decode("Z!9v"));     // not base64
+}
+
 TEST_CASE("UrlEncode and FormEncode")
 {
 	CHECK(UrlEncode("a b&c=d/é") == "a%20b%26c%3Dd%2F%C3%A9");

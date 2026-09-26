@@ -137,6 +137,7 @@ private:
 	LinkState twitchState_ = LinkState::Disconnected;
 	LinkState youtubeState_ = LinkState::Disconnected;
 	bool started_ = false;
+	bool plaintextBackup_ = false; // config.json.bak still holds unencrypted secrets until the next save
 	bool obsStreaming_ = false;
 	int64_t historyCutoff_ = 0; // YouTube messages posted before this (unix seconds) aren't shown
 	bool empty_ = true;
