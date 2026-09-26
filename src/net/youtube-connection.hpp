@@ -29,12 +29,12 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 namespace unified_chat {
 
-// Owns a worker thread that polls one YouTube live chat and posts outgoing messages.
+// Owns a worker thread that streams (or polls) one YouTube live chat and posts outgoing messages.
 // Callbacks run on the worker thread.
 class YouTubeConnection {
 public:
 	YouTubeConnection(std::string clientId, std::string clientSecret, oauth::Token token, std::string video,
-			  int pollSeconds, ConnectionCallbacks callbacks);
+			  int pollSeconds, bool stream, ConnectionCallbacks callbacks);
 	~YouTubeConnection();
 
 	YouTubeConnection(const YouTubeConnection &) = delete;
@@ -51,9 +51,11 @@ private:
 	oauth::Token token_;
 	std::string video_;
 	int pollSeconds_;
+	bool stream_;
 	ConnectionCallbacks callbacks_;
 
 	std::atomic<bool> stop_ = false;
+	std::atomic<bool> sendPending_ = false;
 	std::mutex mutex_;
 	std::condition_variable cv_;
 	std::deque<OutgoingMessage> outgoing_;

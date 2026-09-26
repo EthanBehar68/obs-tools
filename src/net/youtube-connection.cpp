@@ -40,12 +40,13 @@ static LinkState ToLinkState(youtube::State state)
 }
 
 YouTubeConnection::YouTubeConnection(std::string clientId, std::string clientSecret, oauth::Token token,
-				     std::string video, int pollSeconds, ConnectionCallbacks callbacks)
+				     std::string video, int pollSeconds, bool stream, ConnectionCallbacks callbacks)
 	: clientId_(std::move(clientId)),
 	  clientSecret_(std::move(clientSecret)),
 	  token_(std::move(token)),
 	  video_(std::move(video)),
 	  pollSeconds_(pollSeconds),
+	  stream_(stream),
 	  callbacks_(std::move(callbacks))
 {
 	thread_ = std::thread(&YouTubeConnection::Run, this);
@@ -64,6 +65,7 @@ void YouTubeConnection::Send(std::string text, uint64_t sendId)
 	{
 		std::lock_guard lock(mutex_);
 		outgoing_.push_back({std::move(text), sendId});
+		sendPending_ = true; // ends an open chat stream so the message goes out within about a second
 	}
 	cv_.notify_all();
 }
@@ -89,6 +91,13 @@ void YouTubeConnection::Run()
 						     callbacks_.onTokenChanged(token, {});
 				     });
 
+	session.SetStreaming(stream_);
+	session.SetLiveSink([this](std::vector<ChatMessage> messages) {
+		if (callbacks_.onMessages)
+			callbacks_.onMessages(std::move(messages));
+	});
+	session.SetInterrupt([this] { return sendPending_.load(); });
+
 	LinkState reported = LinkState::Disconnected;
 	auto nextStep = Clock::now();
 
@@ -98,6 +107,7 @@ void YouTubeConnection::Run()
 			std::unique_lock lock(mutex_);
 			cv_.wait_until(lock, nextStep, [this] { return stop_.load() || !outgoing_.empty(); });
 			pending.swap(outgoing_);
+			sendPending_ = false;
 		}
 		if (stop_)
 			break;

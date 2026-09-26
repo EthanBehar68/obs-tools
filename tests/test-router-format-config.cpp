@@ -143,6 +143,7 @@ TEST_CASE("Config round trips through JSON")
 	config.youtubeVideo = "dQw4w9WgXcQ";
 	config.youtubeToken = {"ya", "yr", 456};
 	config.youtubePollSeconds = 12;
+	config.youtubeStream = false;
 	config.sendTarget = SendTarget::YouTube;
 	config.maxMessages = 800;
 
@@ -158,6 +159,8 @@ TEST_CASE("Config round trips through JSON")
 	CHECK(loaded.youtubeVideo == "dQw4w9WgXcQ");
 	CHECK(loaded.youtubeToken.expiresAt == 456);
 	CHECK(loaded.youtubePollSeconds == 12);
+	CHECK_FALSE(loaded.youtubeStream);
+	CHECK(ParseConfig("{}").youtubeStream); // streaming is the default
 	CHECK(loaded.sendTarget == SendTarget::YouTube);
 	CHECK(loaded.maxMessages == 800);
 }

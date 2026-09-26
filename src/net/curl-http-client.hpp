@@ -39,10 +39,14 @@ public:
 	HttpResponse Get(const std::string &url, const std::vector<std::string> &headers) override;
 	HttpResponse Post(const std::string &url, const std::vector<std::string> &headers, const std::string &body,
 			  const std::string &contentType) override;
+	HttpResponse GetStream(const std::string &url, const std::vector<std::string> &headers,
+			       const std::function<bool(std::string_view)> &onData,
+			       const std::function<bool()> &interrupt) override;
 
 private:
 	HttpResponse Perform(const std::string &url, const std::vector<std::string> &headers, const std::string *body,
-			     const std::string &contentType);
+			     const std::string &contentType, const std::function<bool(std::string_view)> *onData,
+			     const std::function<bool()> *interrupt);
 
 	const std::atomic<bool> *cancel_;
 	void *curl_ = nullptr; // CURL *

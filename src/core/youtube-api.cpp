@@ -17,9 +17,11 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
 #include "youtube-api.hpp"
+#include "json-array-reader.hpp"
 #include "text-util.hpp"
 
 #include <algorithm>
+#include <iterator>
 #include <json.hpp>
 
 using json = nlohmann::json;
@@ -304,7 +306,7 @@ int ChatSession::HandleError(const HttpResponse &res, StepResult &out)
 	}
 
 	std::string reason = ParseErrorReason(res.body);
-	if (reason == "quotaExceeded" || reason == "rateLimitExceeded") {
+	if (reason == "quotaExceeded" || reason == "rateLimitExceeded" || res.status == 429) {
 		state_ = State::Error;
 		out.notices.push_back("YouTube: API quota exceeded, pausing for 15 minutes");
 		return kQuotaRetryMs;
@@ -358,7 +360,9 @@ void ChatSession::FindLiveChat(int64_t now, StepResult &out)
 	pageToken_.clear();
 	state_ = State::Polling;
 	announcedWaiting_ = false;
-	out.notices.push_back("YouTube: connected to live chat");
+	streamFailed_ = false; // a new chat gets a fresh try at streaming
+	out.notices.push_back(streaming_ ? "YouTube: connected to live chat (streaming)"
+					 : "YouTube: connected to live chat");
 
 	if (ownChannelId_.empty()) {
 		HttpResponse channel = Authorized(
@@ -398,17 +402,127 @@ void ChatSession::Poll(int64_t now, StepResult &out)
 	}
 
 	if (page->chatEnded) {
-		liveChatId_.clear();
-		pageToken_.clear();
-		state_ = State::WaitingForBroadcast;
-		out.notices.push_back("YouTube: live chat ended");
-		out.nextDelayMs = kWaitForBroadcastMs;
+		EndChat(out);
 		return;
 	}
 
 	if (!page->nextPageToken.empty())
 		pageToken_ = page->nextPageToken;
 	out.nextDelayMs = std::max(page->pollingIntervalMs, minPollMs_);
+}
+
+void ChatSession::EndChat(StepResult &out)
+{
+	liveChatId_.clear();
+	pageToken_.clear();
+	state_ = State::WaitingForBroadcast;
+	out.notices.push_back("YouTube: live chat ended");
+	out.nextDelayMs = kWaitForBroadcastMs;
+}
+
+void ChatSession::Deliver(std::vector<ChatMessage> &messages, StepResult &out)
+{
+	std::vector<ChatMessage> fresh;
+	for (auto &chat : messages) {
+		if (seen_.Insert(chat.id))
+			fresh.push_back(std::move(chat));
+	}
+	if (fresh.empty())
+		return;
+	if (liveSink_)
+		liveSink_(std::move(fresh));
+	else
+		std::move(fresh.begin(), fresh.end(), std::back_inserter(out.messages));
+}
+
+void ChatSession::FallBackToPolling(const std::string &reason, StepResult &out)
+{
+	streamFailed_ = true;
+	pageToken_.clear(); // stream and list page tokens aren't documented as interchangeable; dedup covers the replay
+	out.notices.push_back("YouTube: chat streaming unavailable (" + reason + "), polling instead");
+	out.nextDelayMs = 0;
+}
+
+void ChatSession::Stream(int64_t now, StepResult &out)
+{
+	if (token_.NeedsRefresh(now))
+		Refresh(now);
+	if (!token_.IsValid()) {
+		out.nextDelayMs = HandleError({401, {}, "signed out"}, out);
+		return;
+	}
+
+	std::string url = std::string(kApiBase) +
+			  "/liveChat/messages/stream?part=snippet,authorDetails&maxResults=200&liveChatId=" +
+			  UrlEncode(liveChatId_) + kMessagesFields;
+	if (!pageToken_.empty())
+		url += "&pageToken=" + UrlEncode(pageToken_);
+
+	// The body is a JSON array of list responses, each sent as soon as it's ready; the last one carries the
+	// token to resume with.
+	JsonArrayReader reader;
+	int responses = 0;
+	bool ended = false;
+	bool malformed = false;
+	auto onData = [&](std::string_view chunk) {
+		for (const auto &object : reader.Feed(chunk)) {
+			auto page = ParseMessagesPage(object, ownChannelId_);
+			if (!page) {
+				malformed = true;
+				return false;
+			}
+			++responses;
+			if (!page->nextPageToken.empty())
+				pageToken_ = page->nextPageToken;
+			Deliver(page->messages, out);
+			if (page->chatEnded) {
+				ended = true;
+				return false;
+			}
+		}
+		if (reader.Failed()) {
+			malformed = true;
+			return false;
+		}
+		return true;
+	};
+
+	HttpResponse res = http_.GetStream(url, {"Authorization: Bearer " + token_.accessToken}, onData, interrupt_);
+	if (ended) {
+		EndChat(out);
+		return;
+	}
+	if (malformed) {
+		FallBackToPolling("unexpected data", out);
+		return;
+	}
+	if (res.interrupted) {
+		out.nextDelayMs = 0; // resume from pageToken_ after the caller's work
+		return;
+	}
+	if (res.status == 401 && Refresh(now)) {
+		out.nextDelayMs = 0;
+		return;
+	}
+	if (!res.Ok()) {
+		// Known conditions keep their usual handling; anything else suggests streaming itself doesn't work here.
+		std::string reason = ParseErrorReason(res.body);
+		bool known = res.status == 0 || res.status == 401 || res.status == 404 || res.status == 429 ||
+			     reason == "quotaExceeded" || reason == "rateLimitExceeded" || reason == "liveChatEnded" ||
+			     reason == "liveChatNotFound" || reason == "liveChatDisabled";
+		if (known)
+			out.nextDelayMs = HandleError(res, out);
+		else
+			FallBackToPolling("HTTP " + std::to_string(res.status) + (reason.empty() ? "" : ", " + reason),
+					  out);
+		return;
+	}
+	if (responses == 0 || !reader.Finished()) {
+		FallBackToPolling("empty stream", out);
+		return;
+	}
+	state_ = State::Polling;
+	out.nextDelayMs = 0; // the server ended this stream normally; open the next one right away
 }
 
 StepResult ChatSession::Step(int64_t now)
@@ -421,6 +535,8 @@ StepResult ChatSession::Step(int64_t now)
 	}
 	if (liveChatId_.empty())
 		FindLiveChat(now, out);
+	else if (IsStreaming())
+		Stream(now, out);
 	else
 		Poll(now, out);
 	return out;

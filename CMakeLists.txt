@@ -29,6 +29,8 @@ target_sources(
     src/core/echo-merger.cpp
     src/core/echo-merger.hpp
     src/core/http-client.hpp
+    src/core/json-array-reader.cpp
+    src/core/json-array-reader.hpp
     src/core/name-color.cpp
     src/core/name-color.hpp
     src/core/oauth-device.cpp
@@ -119,6 +121,7 @@ if(ENABLE_TESTS)
     PRIVATE
       tests/test-bot-merger.cpp
       tests/test-echo-merger.cpp
+      tests/test-json-array-reader.cpp
       tests/test-main.cpp
       tests/test-name-color.cpp
       tests/test-oauth.cpp

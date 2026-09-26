@@ -33,7 +33,43 @@ public:
 		return Next({true, url, headers, body});
 	}
 
+	// Streamed responses: a 2xx body is delivered chunk by chunk; other statuses return the chunks as the body.
+	struct Streamed {
+		long status;
+		std::vector<std::string> chunks;
+		bool interrupt = false; // simulate interrupt() firing after the chunks
+	};
+	void QueueStream(long status, std::vector<std::string> chunks, bool interrupt = false)
+	{
+		streams.push_back({status, std::move(chunks), interrupt});
+	}
+
+	HttpResponse GetStream(const std::string &url, const std::vector<std::string> &headers,
+			       const std::function<bool(std::string_view)> &onData,
+			       const std::function<bool()> &) override
+	{
+		requests.push_back({false, url, headers, {}});
+		REQUIRE_MESSAGE(!streams.empty(), "unexpected stream request: " << url);
+		Streamed next = streams.front();
+		streams.pop_front();
+		HttpResponse res{next.status, {}, {}};
+		if (!res.Ok()) {
+			for (const auto &chunk : next.chunks)
+				res.body += chunk;
+			return res;
+		}
+		for (const auto &chunk : next.chunks) {
+			if (!onData(chunk)) {
+				res.interrupted = true;
+				return res;
+			}
+		}
+		res.interrupted = next.interrupt;
+		return res;
+	}
+
 	std::deque<HttpResponse> responses;
+	std::deque<Streamed> streams;
 	std::vector<Request> requests;
 
 private:
@@ -367,6 +403,171 @@ TEST_CASE("ChatSession Send reports API errors")
 	auto sent = session.Send("hi", 1);
 	CHECK_FALSE(sent.ok);
 	CHECK(sent.error == "HTTP 403 (forbidden)");
+}
+
+namespace {
+
+std::string StreamObject(const std::string &items, const std::string &token)
+{
+	return R"({"kind":"youtube#liveChatMessageListResponse","nextPageToken":")" + token + R"(","items":[)" + items +
+	       "]}";
+}
+
+// A streaming session already connected to CHAT1, collecting live messages in *live.
+void ConnectStreaming(FakeHttp &http, ChatSession &session, std::vector<ChatMessage> *live)
+{
+	session.SetStreaming(true);
+	if (live)
+		session.SetLiveSink([live](std::vector<ChatMessage> messages) {
+			live->insert(live->end(), messages.begin(), messages.end());
+		});
+	http.Queue(200, kBroadcastLive);
+	http.Queue(200, kChannel);
+	auto connected = session.Step(0);
+	REQUIRE(session.GetState() == State::Polling);
+	REQUIRE(connected.notices.at(0) == "YouTube: connected to live chat (streaming)");
+}
+
+} // namespace
+
+TEST_CASE("Streaming delivers pushed messages live and resumes from the last page token")
+{
+	FakeHttp http;
+	ChatSession session(http, oauth::GoogleProvider("id", "sec"), FreshToken(), "", 5000, nullptr);
+	std::vector<ChatMessage> live;
+	ConnectStreaming(http, session, &live);
+
+	// The backlog object, a pushed message split across chunks, then the closing object with the next token.
+	http.QueueStream(200, {"[" + StreamObject(Item("m1", "Ann", "hi") + "," + Item("m0", "Me", "yo", "UCme"), "t1"),
+			       "\r\n," + StreamObject(Item("m2", "Bob", "new"), "t2").substr(0, 20),
+			       StreamObject(Item("m2", "Bob", "new"), "t2").substr(20),
+			       "\r\n," + StreamObject("", "t3") + "\r\n]"});
+	auto first = session.Step(1);
+	CHECK(first.nextDelayMs == 0);
+	CHECK(first.messages.empty()); // went to the live sink instead
+	REQUIRE(live.size() == 3);
+	CHECK(live[0].id == "m1");
+	CHECK(live[1].isSelf);
+	CHECK(live[2].id == "m2");
+
+	const std::string &url = http.requests.back().url;
+	CHECK(url.find("/liveChat/messages/stream?part=snippet,authorDetails&maxResults=200") != std::string::npos);
+	CHECK(url.find("liveChatId=CHAT1") != std::string::npos);
+	CHECK(url.find("&fields=") != std::string::npos);
+	CHECK(url.find("&pageToken=") == std::string::npos);
+	CHECK(http.requests.back().headers.at(0) == "Authorization: Bearer access");
+
+	// Next stream resumes with t3; a repeated message is dropped.
+	http.QueueStream(200,
+			 {"[" + StreamObject(Item("m2", "Bob", "new") + "," + Item("m3", "Cid", "later"), "t4") + "]"});
+	session.Step(2);
+	CHECK(http.requests.back().url.find("pageToken=t3") != std::string::npos);
+	REQUIRE(live.size() == 4);
+	CHECK(live[3].id == "m3");
+	CHECK(session.IsStreaming());
+}
+
+TEST_CASE("Streaming without a live sink returns messages in the step result")
+{
+	FakeHttp http;
+	ChatSession session(http, oauth::GoogleProvider("id", "sec"), FreshToken(), "", 5000, nullptr);
+	ConnectStreaming(http, session, nullptr);
+	http.QueueStream(200, {"[" + StreamObject(Item("m1", "Ann", "hi"), "t1") + "]"});
+	auto step = session.Step(1);
+	REQUIRE(step.messages.size() == 1);
+	CHECK(step.messages[0].id == "m1");
+}
+
+TEST_CASE("An interrupted stream returns at once and resumes where it stopped")
+{
+	FakeHttp http;
+	ChatSession session(http, oauth::GoogleProvider("id", "sec"), FreshToken(), "", 5000, nullptr);
+	std::vector<ChatMessage> live;
+	ConnectStreaming(http, session, &live);
+
+	http.QueueStream(200, {"[" + StreamObject(Item("m1", "Ann", "hi"), "t1")}, true);
+	auto step = session.Step(1);
+	CHECK(step.nextDelayMs == 0);
+	CHECK(step.notices.empty());
+	CHECK(live.size() == 1);
+
+	http.QueueStream(200, {"[" + StreamObject("", "t2") + "]"});
+	session.Step(2);
+	CHECK(http.requests.back().url.find("pageToken=t1") != std::string::npos);
+	CHECK(session.IsStreaming());
+}
+
+TEST_CASE("Unexpected stream failures fall back to polling until the next chat")
+{
+	FakeHttp http;
+	ChatSession session(http, oauth::GoogleProvider("id", "sec"), FreshToken(), "", 5000, nullptr);
+	std::vector<ChatMessage> live;
+	ConnectStreaming(http, session, &live);
+
+	http.QueueStream(500, {R"({"error":{"code":500,"message":"backend"}})"});
+	auto failed = session.Step(1);
+	CHECK_FALSE(session.IsStreaming());
+	CHECK(failed.nextDelayMs == 0);
+	REQUIRE(failed.notices.size() == 1);
+	CHECK(failed.notices[0].find("polling instead") != std::string::npos);
+
+	// Polls from now on, without a stream page token.
+	http.Queue(200, R"({"offlineAt":"2026-09-26T00:00:00Z","items":[]})");
+	session.Step(2);
+	CHECK(http.requests.back().url.find("/liveChat/messages?") != std::string::npos);
+	CHECK(http.requests.back().url.find("&pageToken=") == std::string::npos);
+	CHECK(session.GetState() == State::WaitingForBroadcast);
+
+	// The chat ended; the next chat tries streaming again.
+	http.Queue(200, kBroadcastLive);
+	session.Step(3);
+	CHECK(session.IsStreaming());
+}
+
+TEST_CASE("A stream that isn't a JSON array falls back to polling")
+{
+	FakeHttp http;
+	ChatSession session(http, oauth::GoogleProvider("id", "sec"), FreshToken(), "", 5000, nullptr);
+	ConnectStreaming(http, session, nullptr);
+	http.QueueStream(200, {R"({"unexpected":true})"});
+	auto step = session.Step(1);
+	CHECK_FALSE(session.IsStreaming());
+	CHECK(step.notices.at(0).find("unexpected data") != std::string::npos);
+
+	ChatSession empty(http, oauth::GoogleProvider("id", "sec"), FreshToken(), "", 5000, nullptr);
+	ConnectStreaming(http, empty, nullptr);
+	http.QueueStream(200, {""});
+	empty.Step(1);
+	CHECK_FALSE(empty.IsStreaming());
+}
+
+TEST_CASE("Known stream errors keep their usual handling and don't disable streaming")
+{
+	FakeHttp http;
+	ChatSession session(http, oauth::GoogleProvider("id", "sec"), FreshToken(), "", 5000, nullptr);
+	ConnectStreaming(http, session, nullptr);
+
+	http.QueueStream(403, {R"({"error":{"code":403,"errors":[{"reason":"quotaExceeded"}]}})"});
+	auto quota = session.Step(1);
+	CHECK(quota.nextDelayMs == 15 * 60 * 1000);
+	CHECK(session.IsStreaming());
+
+	http.QueueStream(429, {R"({"error":{"code":429,"message":"Resource has been exhausted"}})"});
+	auto limited = session.Step(2);
+	CHECK(limited.nextDelayMs == 15 * 60 * 1000);
+	CHECK(session.IsStreaming());
+}
+
+TEST_CASE("A stream that reports the chat ended goes back to waiting for a broadcast")
+{
+	FakeHttp http;
+	ChatSession session(http, oauth::GoogleProvider("id", "sec"), FreshToken(), "", 5000, nullptr);
+	ConnectStreaming(http, session, nullptr);
+	http.QueueStream(200, {R"([{"offlineAt":"2026-09-26T00:00:00Z","items":[]})"});
+	auto ended = session.Step(1);
+	CHECK(session.GetState() == State::WaitingForBroadcast);
+	CHECK(session.LiveChatId().empty());
+	CHECK(ended.nextDelayMs == 30000);
 }
 
 TEST_CASE("ChatSession without a token stays signed out and makes no requests")

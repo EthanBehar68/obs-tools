@@ -58,14 +58,20 @@ YouTube requires a Google Cloud project with the YouTube Data API enabled, for b
 
 Google gives each project a free daily quota (10,000 units by default). Per [Google's quota table](https://developers.google.com/youtube/v3/determine_quota_cost), each chat poll costs **1 unit** and each message you send to YouTube costs **50 units**, including messages sent with the switch on Both. Finding your broadcast and your channel name costs 1 unit each, once per connection.
 
-| Minimum poll interval | Polling per hour | Hours per day, polling only | Hours per day, also sending 10 YouTube messages an hour |
-|---|---|---|---|
-| 3 s | 1,200 units | ~8 h | ~5.9 h |
-| 5 s | 720 units | ~14 h | ~8.2 h |
-| 8 s (default) | 450 units | ~22 h | ~10.5 h |
-| 15 s | 240 units | ~41 h (all day) | ~13.5 h |
+**Chat delivery** (Settings → YouTube) chooses how messages arrive:
 
-So a lower poll interval is affordable, while sending many messages to YouTube is what uses up the quota fastest. YouTube may also ask for a longer interval than yours, and the plugin always waits at least as long as YouTube asks. Your actual usage is under **APIs & Services → YouTube Data API v3 → Quotas** in the Cloud Console. When the quota runs out, the dock says so and pauses YouTube for 15 minutes. Quota resets at midnight Pacific time.
+- **Streaming (the default).** YouTube pushes each message about 2 seconds after it's posted. The server ends each stream after about 10 seconds and the plugin reopens it at once. Each stream costs **5 units** (measured; streams aren't listed in Google's table), so about **1,700 units an hour** while you're live. Sending a message briefly interrupts the stream so the message goes out immediately, which adds one extra stream (5 units) per message. If streaming stops working, the plugin switches to polling for the rest of that broadcast and says so in the dock.
+- **Polling.** The plugin asks for new messages every **Minimum poll interval**. It's cheaper, but messages appear up to one interval late.
+
+| Delivery | Delay after a message is posted | Units per hour | Hours per day, reading only | Hours per day, also sending 10 YouTube messages an hour |
+|---|---|---|---|---|
+| Streaming (default) | ~2 s | ~1,700 | ~5.9 h | ~4.4 h |
+| Polling every 3 s | ~2 s + up to 3 s | 1,200 | ~8 h | ~5.9 h |
+| Polling every 5 s | ~2 s + up to 5 s | 720 | ~14 h | ~8.2 h |
+| Polling every 8 s | ~2 s + up to 8 s | 450 | ~22 h | ~10.5 h |
+| Polling every 15 s | ~2 s + up to 15 s | 240 | all day | ~13.5 h |
+
+If your streams are longer than streaming's budget allows, switch to polling, or ask Google for a higher quota (free, through the Cloud Console quota page). When polling, YouTube may ask for a longer interval than yours, and the plugin always waits at least as long as YouTube asks. Your actual usage is under **APIs & Services → YouTube Data API v3 → Quotas** in the Cloud Console. When the quota runs out, the dock says so and pauses YouTube for 15 minutes. Quota resets at midnight Pacific time.
 
 ## 4. Using the dock
 

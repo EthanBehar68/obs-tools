@@ -78,7 +78,9 @@ Run them with `ctest --preset windows-x64`, or run `build_x64\RelWithDebInfo\uni
 src\
 ├── core\          platform logic: no libobs, no Qt, no I/O  -> static library unified-chat-core
 │   ├── twitch-irc.*      IRC parser + IrcSession state machine
-│   ├── youtube-api.*     Data API v3 parsing + ChatSession (drives an injected HttpClient)
+│   ├── youtube-api.*     Data API v3 parsing + ChatSession (drives an injected HttpClient); streams chat
+│   │                     via liveChat/messages/stream by default, falls back to polling
+│   ├── json-array-reader.*  splits the chunked JSON array of a chat stream into complete objects
 │   ├── oauth-device.*    RFC 8628 device flow for Twitch and Google
 │   ├── chat-router.*     Twitch / YouTube / Both routing and length rules
 │   ├── chat-format.*     chat line -> escaped Qt rich text

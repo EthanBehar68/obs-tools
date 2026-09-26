@@ -250,7 +250,8 @@ void ChatDock::Connect()
 						     config_.twitchToken, MakeCallbacks(Platform::Twitch));
 	youtube_ = std::make_unique<YouTubeConnection>(config_.youtubeClientId, config_.youtubeClientSecret,
 						       config_.youtubeToken, config_.youtubeVideo,
-						       config_.youtubePollSeconds, MakeCallbacks(Platform::YouTube));
+						       config_.youtubePollSeconds, config_.youtubeStream,
+						       MakeCallbacks(Platform::YouTube));
 }
 
 void ChatDock::Disconnect()

@@ -96,9 +96,20 @@ struct SendResult {
 class ChatSession {
 public:
 	using TokenChanged = std::function<void(const oauth::Token &)>;
+	using MessageSink = std::function<void(std::vector<ChatMessage>)>;
 
 	ChatSession(HttpClient &http, oauth::Provider provider, oauth::Token token, std::string videoId, int minPollMs,
 		    TokenChanged onTokenChanged);
+
+	// Streaming (liveChatMessages.streamList): each Step holds one server-pushed stream open (the server ends
+	// it after about 10 s) and hands messages to the live sink as they arrive. Unexpected failures fall back to
+	// polling until the next chat. Off by default.
+	void SetStreaming(bool enabled) { streaming_ = enabled; }
+	// Receives streamed messages while a Step is still running. Without a sink they go into StepResult.
+	void SetLiveSink(MessageSink sink) { liveSink_ = std::move(sink); }
+	// Checked while a stream is open; returning true ends the Step early (e.g. to send a message).
+	void SetInterrupt(std::function<bool()> interrupt) { interrupt_ = std::move(interrupt); }
+	bool IsStreaming() const { return streaming_ && !streamFailed_; }
 
 	StepResult Step(int64_t now);
 	SendResult Send(std::string_view text, int64_t now);
@@ -112,6 +123,10 @@ private:
 	bool Refresh(int64_t now);
 	void FindLiveChat(int64_t now, StepResult &out);
 	void Poll(int64_t now, StepResult &out);
+	void Stream(int64_t now, StepResult &out);
+	void FallBackToPolling(const std::string &reason, StepResult &out);
+	void EndChat(StepResult &out);
+	void Deliver(std::vector<ChatMessage> &messages, StepResult &out);
 	int HandleError(const HttpResponse &res, StepResult &out);
 
 	HttpClient &http_;
@@ -128,6 +143,11 @@ private:
 	std::string ownName_;
 	RecentIds seen_;
 	bool announcedWaiting_ = false;
+
+	bool streaming_ = false;
+	bool streamFailed_ = false;
+	MessageSink liveSink_;
+	std::function<bool()> interrupt_;
 };
 
 } // namespace unified_chat::youtube

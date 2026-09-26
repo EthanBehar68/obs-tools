@@ -25,6 +25,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include <QApplication>
 #include <QClipboard>
+#include <QComboBox>
 #include <QDesktopServices>
 #include <QDialogButtonBox>
 #include <QFormLayout>
@@ -99,6 +100,11 @@ SettingsDialog::SettingsDialog(const ChatConfig &config, QWidget *parent) : QDia
 	youtubeClientSecret_->setEchoMode(QLineEdit::Password);
 	youtubeVideo_ = new QLineEdit(FromStd(config.youtubeVideo), youtubeBox);
 	youtubeVideo_->setPlaceholderText(Text("Settings.YouTube.VideoHint"));
+	youtubeMethod_ = new QComboBox(youtubeBox);
+	youtubeMethod_->addItem(Text("Settings.YouTube.Method.Stream"), true);
+	youtubeMethod_->addItem(Text("Settings.YouTube.Method.Poll"), false);
+	youtubeMethod_->setCurrentIndex(config.youtubeStream ? 0 : 1);
+	youtubeMethod_->setToolTip(Text("Settings.YouTube.MethodHint"));
 	youtubePoll_ = new QSpinBox(youtubeBox);
 	youtubePoll_->setRange(1, 120);
 	youtubePoll_->setSuffix(" s");
@@ -117,6 +123,7 @@ SettingsDialog::SettingsDialog(const ChatConfig &config, QWidget *parent) : QDia
 	youtubeForm->addRow(Text("Settings.ClientId"), youtubeClientId_);
 	youtubeForm->addRow(Text("Settings.ClientSecret"), youtubeClientSecret_);
 	youtubeForm->addRow(Text("Settings.YouTube.Video"), youtubeVideo_);
+	youtubeForm->addRow(Text("Settings.YouTube.Method"), youtubeMethod_);
 	youtubeForm->addRow(Text("Settings.YouTube.Poll"), youtubePoll_);
 	youtubeForm->addRow(Text("Settings.Account"), youtubeAccount_);
 	youtubeForm->addRow(QString(), youtubeButtons);
@@ -171,6 +178,7 @@ ChatConfig SettingsDialog::Result() const
 	result.youtubeClientSecret = ToStd(youtubeClientSecret_->text());
 	result.youtubeVideo = ToStd(youtubeVideo_->text());
 	result.youtubePollSeconds = youtubePoll_->value();
+	result.youtubeStream = youtubeMethod_->currentData().toBool();
 	result.maxMessages = maxMessages_->value();
 	result.mergeBots = SplitNameList(mergeBots_->text().toStdString());
 	return result;

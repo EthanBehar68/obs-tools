@@ -25,6 +25,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include <memory>
 
+class QComboBox;
 class QLabel;
 class QLineEdit;
 class QPushButton;
@@ -60,6 +61,7 @@ private:
 	QLineEdit *youtubeClientId_;
 	QLineEdit *youtubeClientSecret_;
 	QLineEdit *youtubeVideo_;
+	QComboBox *youtubeMethod_;
 	QSpinBox *youtubePoll_;
 	QLabel *youtubeAccount_;
 	QPushButton *youtubeSignIn_;

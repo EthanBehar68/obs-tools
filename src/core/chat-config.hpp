@@ -37,7 +37,8 @@ struct ChatConfig {
 	std::string youtubeClientSecret;
 	std::string youtubeVideo;
 	oauth::Token youtubeToken;
-	int youtubePollSeconds = 8;
+	int youtubePollSeconds = 8; // polling interval, also used when streaming falls back
+	bool youtubeStream = true;  // server-pushed chat (streamList) instead of polling
 
 	SendTarget sendTarget = SendTarget::Both;
 	int maxMessages = 500;

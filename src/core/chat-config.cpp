@@ -95,6 +95,7 @@ std::string SerializeConfig(const ChatConfig &config)
 		  {"client_secret", config.youtubeClientSecret},
 		  {"video", config.youtubeVideo},
 		  {"poll_seconds", config.youtubePollSeconds},
+		  {"chat_method", config.youtubeStream ? "stream" : "poll"},
 		  {"token", TokenToJson(config.youtubeToken)}}},
 		{"send_target", std::string(SendTargetToString(config.sendTarget))},
 		{"max_messages", config.maxMessages},
@@ -124,6 +125,7 @@ ChatConfig ParseConfig(const std::string &text)
 		config.youtubeClientSecret = Get<std::string>(*youtube, "client_secret", {});
 		config.youtubeVideo = Get<std::string>(*youtube, "video", {});
 		config.youtubePollSeconds = std::clamp(Get<int>(*youtube, "poll_seconds", 8), 1, 120);
+		config.youtubeStream = Get<std::string>(*youtube, "chat_method", "stream") != "poll";
 		config.youtubeToken = TokenFromJson(*youtube, "token");
 	}
 
