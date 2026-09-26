@@ -21,10 +21,24 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <cstdint>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace unified_chat {
 
 enum class Platform { Twitch, YouTube };
+
+// A Twitch emote in a message: emote id and its inclusive range, in Unicode characters (code points).
+struct EmoteRange {
+	std::string id;
+	int start = 0;
+	int end = 0;
+};
+
+// A Twitch chat badge, e.g. {"moderator", "1"} or {"subscriber", "12"}.
+struct Badge {
+	std::string set;
+	std::string version;
+};
 
 struct ChatMessage {
 	Platform platform = Platform::Twitch;
@@ -37,9 +51,11 @@ struct ChatMessage {
 	uint64_t sendId = 0;  // set on local echoes of a message sent from the dock
 	int64_t postedAt = 0; // unix seconds when the platform says it was posted; 0 = unknown
 	// New fields go at the end so positional initialization elsewhere keeps its meaning.
-	std::string mention;  // what to type after '@' to mention the author: Twitch login, YouTube handle
-	std::string replyTo;  // for a reply, the display name of the message it answers
-	std::string authorId; // Twitch user-id, YouTube channel ID; lets a ban find the author's lines
+	std::string mention;            // what to type after '@' to mention the author: Twitch login, YouTube handle
+	std::string replyTo;            // for a reply, the display name of the message it answers
+	std::string authorId;           // Twitch user-id, YouTube channel ID; lets a ban find the author's lines
+	std::vector<EmoteRange> emotes; // Twitch emotes from the IRC tag
+	std::vector<Badge> badges;      // role badges to show, in display order
 };
 
 // A moderator removed something from chat. The view strikes the affected lines through and, except for a

@@ -97,6 +97,11 @@ If YouTube goes live some other way (another app, or a multistream output with a
   - With just `@` typed (no letter), **Tab** cycles through recent chatters instead.
   - Twitch replies from others show who they answer: `Viewer → @Dezad: welcome back`.
   - **Messages that mention you** (your Twitch login or YouTube name) get a tinted background.
+- **Emotes and badges (Twitch):**
+  - Emotes show as pictures: Twitch's own emotes, plus your channel's and the global **BTTV, FFZ and 7TV** emotes. Animated emotes show their first frame, which keeps the dock light during streams.
+  - Role badges (broadcaster, moderator, VIP, subscriber/founder) appear before the name. They need a Twitch sign-in; read-only chat shows none.
+  - Images download once per session in the background. A line appears at once with the right spacing and the picture fills in a moment later.
+  - Emotes in your own sent messages: BTTV/FFZ/7TV ones show as pictures, but Twitch's own emotes stay as words, because Twitch doesn't send your message back with emote positions.
 - **Moderation stays visible.** Nothing a moderator removes disappears from the dock. The message text is struck through and dimmed, but you can still read it, and a coloured tag says why:
   - *(deleted)*, grey: a single message was deleted (Twitch only; YouTube no longer reports single deletions).
   - *(timed out 10 minutes)*, amber: the author was timed out, and all their lines get the tag.

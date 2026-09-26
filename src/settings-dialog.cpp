@@ -102,6 +102,8 @@ static QGroupBox *MakeLegend(QWidget *parent)
 	addRow(image(PlatformImage(Platform::Twitch, size, dpr)), "Legend.Twitch");
 	addRow(image(PlatformImage(Platform::YouTube, size, dpr)), "Legend.YouTube");
 	addRow(image(SelfBadgeImage(size, dpr)), "Legend.Self");
+	addRow(html(grey(QStringLiteral("badges"))), "Legend.Badges");
+	addRow(html(grey(QStringLiteral("emotes"))), "Legend.Emotes");
 	addRow(html(QStringLiteral("<b>name</b>")), "Legend.Name");
 	addRow(html(grey(QStringLiteral("→ @name"))), "Legend.Reply");
 

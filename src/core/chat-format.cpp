@@ -17,9 +17,12 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
 #include "chat-format.hpp"
+#include "emotes.hpp"
 #include "mentions.hpp"
 #include "name-color.hpp"
 #include "text-util.hpp"
+
+#include <algorithm>
 
 namespace unified_chat {
 
@@ -39,7 +42,8 @@ std::string FormatMessageHtml(const ChatMessage &message, int iconSize)
 }
 
 std::string FormatMessageHtml(const ChatMessage &message, int iconSize, const std::vector<Platform> &platforms,
-			      NameColorResolver *colors)
+			      NameColorResolver *colors, const EmoteIndex *emotes, int emoteHeight,
+			      int *renderedTextLength)
 {
 	std::string color = SanitizeColor(message.color);
 	if (color.empty())
@@ -54,6 +58,9 @@ std::string FormatMessageHtml(const ChatMessage &message, int iconSize, const st
 		html += "<img src=\"" + std::string(IconResource(platform)) + imageSize;
 	if (message.isSelf)
 		html += "<img src=\"" + std::string(kSelfBadgeResource) + imageSize;
+	for (const auto &badge : message.badges)
+		html += "<img src=\"" + HtmlEscape(BadgeImageKey(badge)) + "\" title=\"" + HtmlEscape(badge.set) +
+			imageSize;
 	const std::string name =
 		"<span style=\"color: " + color + "; font-weight: bold;\">" + HtmlEscape(message.author) + "</span>";
 	// Other people's names are links: clicking one starts a mention (and on Twitch, a reply). The inner span
@@ -68,12 +75,33 @@ std::string FormatMessageHtml(const ChatMessage &message, int iconSize, const st
 		html += " <span style=\"color: #9a9a9a;\">\xE2\x86\x92 @" + HtmlEscape(message.replyTo) + "</span>";
 
 	// The message text always comes last and keeps its spaces (pre-wrap), so the view can find it by length to
-	// strike it through when a moderator removes it.
+	// strike it through when a moderator removes it. Emotes are images of a known shape, so the line is laid out
+	// at its final size before the image arrives.
+	const int height = emoteHeight > 0 ? emoteHeight : iconSize;
+	const bool twitch = message.platform == Platform::Twitch;
+	int length = 0;
+	std::string text;
+	for (const auto &segment : SplitMessage(message.text, message.emotes, twitch ? emotes : nullptr)) {
+		if (!segment.emote) {
+			text += HtmlEscape(segment.text);
+			length += (int)Utf16Length(segment.text);
+			continue;
+		}
+		const Emote &emote = *segment.emote;
+		const int width = std::max(1, (int)(height * emote.aspect + 0.5));
+		text += "<img src=\"" + HtmlEscape(EmoteImageKey(emote)) + "\" title=\"" + HtmlEscape(emote.name) +
+			"\" width=\"" + std::to_string(width) + "\" height=\"" + std::to_string(height) +
+			"\" style=\"vertical-align: middle;\">";
+		length += 1; // an image is one character in the document
+	}
+	if (renderedTextLength)
+		*renderedTextLength = length;
+
 	if (message.isAction)
-		html += " <span style=\"color: " + color + "; font-style: italic; white-space: pre-wrap;\">" +
-			HtmlEscape(message.text) + "</span>";
+		html += " <span style=\"color: " + color + "; font-style: italic; white-space: pre-wrap;\">" + text +
+			"</span>";
 	else
-		html += ": <span style=\"white-space: pre-wrap;\">" + HtmlEscape(message.text) + "</span>";
+		html += ": <span style=\"white-space: pre-wrap;\">" + text + "</span>";
 	return html;
 }
 

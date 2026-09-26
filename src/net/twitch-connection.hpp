@@ -40,6 +40,8 @@ struct ConnectionCallbacks {
 	std::function<void(std::vector<ChatMessage>)> onMessages;
 	// A deletion, timeout, ban or chat clear; always after the messages that arrived before it.
 	std::function<void(ModerationEvent)> onModeration;
+	// Twitch: the channel's numeric id became known (for emote services and badges).
+	std::function<void(std::string channelId)> onChannelId;
 	std::function<void(const std::string &)> onNotice;
 	std::function<void(LinkState)> onState;
 	std::function<void(const oauth::Token &, const std::string &login)> onTokenChanged;

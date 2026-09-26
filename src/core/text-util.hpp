@@ -32,6 +32,8 @@ std::string ToLower(std::string_view text);
 
 // Number of Unicode code points in a UTF-8 string (invalid bytes count as one each).
 size_t Utf8Length(std::string_view text);
+// Length in UTF-16 code units (what Qt counts): characters beyond U+FFFF, such as most emoji, count twice.
+size_t Utf16Length(std::string_view text);
 
 // Removes CR, LF and NUL so user input can never inject extra protocol lines.
 std::string StripLineBreaks(std::string_view text);

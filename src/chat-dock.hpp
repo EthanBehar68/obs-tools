@@ -21,17 +21,22 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "core/chat-config.hpp"
 #include "core/bot-merger.hpp"
 #include "core/echo-merger.hpp"
+#include "core/emotes.hpp"
 #include "core/mentions.hpp"
 #include "core/name-color.hpp"
+#include "net/asset-loader.hpp"
 #include "net/twitch-connection.hpp"
 #include "net/youtube-connection.hpp"
 
 #include <QColor>
+#include <QImage>
 #include <QString>
 #include <QWidget>
 
 #include <memory>
 #include <optional>
+#include <unordered_map>
+#include <unordered_set>
 
 class QLabel;
 class QLineEdit;
@@ -106,8 +111,17 @@ private:
 	void AppendNotice(const QString &text);
 	// Inserts all lines in one edit block, so the view lays out and scrolls once per batch.
 	void AppendHtml(const std::vector<HtmlLine> &lines);
-	bool ReplaceLine(int lineId, const QString &html, const DisplayLine &line);
-	static LineInfo MakeLineInfo(const DisplayLine &line);
+	bool ReplaceLine(int lineId, const QString &html, const DisplayLine &line, int textLength);
+	static LineInfo MakeLineInfo(const DisplayLine &line, int textLength);
+
+	// Emotes and badges
+	void LoadChannelAssets(const std::string &channelId);
+	void AddEmoteSet(std::vector<Emote> emotes, EmoteProvider provider, bool channel);
+	void EnsureLineImages(const ChatMessage &message); // placeholders now, real images when downloaded
+	void RequestImage(const std::string &key, const std::string &url);
+	void RegisterLoadedImages(); // again after Clear, which drops document resources
+	std::vector<std::string> HelixHeaders() const;
+	const std::string *BadgeUrl(const std::string &badgeKey) const; // "set/version" -> image URL, or null
 	// Strikes the matching lines through, tags them and, for timeouts, bans and clears, adds a notice.
 	void ApplyModeration(const ModerationEvent &event);
 	static void StrikeLine(const QTextBlock &block, LineInfo &info, const ModerationTag &tag);
@@ -149,6 +163,26 @@ private:
 	int nextLineId_ = 1;
 	bool backgroundStale_ = true; // the theme's stylesheet sets the view's real background at polish time
 	QColor highlightColor_;
+
+	// Twitch emote services and badges. Everything is fetched once per session (lists per channel) and images are
+	// kept in memory; lines are laid out with the images' final size, so arrivals don't move the chat.
+	std::unique_ptr<AssetLoader> assets_;
+	struct EmoteSet {
+		std::vector<Emote> emotes;
+		int priority;
+		bool channel;
+	};
+	std::vector<EmoteSet> emoteSets_;
+	EmoteIndex emotes_;
+	std::unordered_map<std::string, std::string> globalBadges_;  // "set/version" -> image URL
+	std::unordered_map<std::string, std::string> channelBadges_; // overrides globalBadges_
+	std::unordered_map<std::string, QImage> images_;             // loaded images by resource name
+	std::unordered_set<std::string> imageKeys_;                  // resource names given a placeholder or image
+	std::unordered_set<std::string> requested_;                  // resource names whose download was started
+	std::string assetChannelId_;
+	bool globalAssetsRequested_ = false;
+	int emoteHeight_ = 24;
+	bool hiDpi_ = false;
 
 	MentionMatcher mentions_;
 	std::vector<std::string> ownYouTubeNames_; // learned from your own YouTube messages

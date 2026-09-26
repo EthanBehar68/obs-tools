@@ -56,6 +56,16 @@ size_t Utf8Length(std::string_view text)
 	return count;
 }
 
+size_t Utf16Length(std::string_view text)
+{
+	size_t count = 0;
+	for (unsigned char c : text) {
+		if ((c & 0xC0) != 0x80)
+			count += (c >= 0xF0) ? 2 : 1; // a 4-byte sequence needs a surrogate pair
+	}
+	return count;
+}
+
 std::string StripLineBreaks(std::string_view text)
 {
 	std::string out;

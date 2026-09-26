@@ -67,6 +67,7 @@ struct SessionOutput {
 	std::vector<ChatMessage> messages;
 	std::vector<ModerationEvent> moderation;
 	std::vector<std::string> notices;
+	std::string channelId; // set once the channel's numeric id is known (ROOMSTATE)
 	bool reconnect = false;
 	bool authFailed = false;
 };
@@ -95,6 +96,8 @@ private:
 	std::string nick_;
 	std::string displayName_;
 	std::string color_;
+	std::string channelId_;
+	std::vector<Badge> badges_;
 	bool joined_ = false;
 };
 

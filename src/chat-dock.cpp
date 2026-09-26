@@ -149,6 +149,9 @@ ChatDock::ChatDock(QWidget *parent) : QWidget(parent)
 	layout->addLayout(footer);
 
 	iconSize_ = qMax(14, fontMetrics().height());
+	emoteHeight_ = qRound(iconSize_ * 1.5); // a little larger than text, as chosen
+	hiDpi_ = devicePixelRatioF() > 1.25;
+	assets_ = std::make_unique<AssetLoader>();
 
 	// A child of the dock rather than a popup window: it never takes keyboard focus, so the input's own key
 	// handling (eventFilter) decides what Enter, Tab and the arrows do while it's open.
@@ -201,6 +204,7 @@ ChatDock::ChatDock(QWidget *parent) : QWidget(parent)
 		view_->clear();
 		empty_ = true;
 		RegisterIcons();
+		RegisterLoadedImages();
 	});
 
 	SetLinkState(Platform::Twitch, LinkState::Disconnected);
@@ -210,6 +214,7 @@ ChatDock::ChatDock(QWidget *parent) : QWidget(parent)
 
 ChatDock::~ChatDock()
 {
+	assets_.reset(); // stop downloads before the members their callbacks refer to go away
 	Disconnect();
 }
 
@@ -301,6 +306,11 @@ ConnectionCallbacks ChatDock::MakeCallbacks(Platform platform)
 			this, [this, messages = std::move(messages)]() { AppendMessages(messages); },
 			Qt::QueuedConnection);
 	};
+	callbacks.onChannelId = [this](std::string channelId) {
+		QMetaObject::invokeMethod(
+			this, [this, channelId = std::move(channelId)]() { LoadChannelAssets(channelId); },
+			Qt::QueuedConnection);
+	};
 	// Queued like messages, so it runs after the lines it refers to have been added.
 	callbacks.onModeration = [this](ModerationEvent event) {
 		QMetaObject::invokeMethod(
@@ -343,6 +353,9 @@ ConnectionCallbacks ChatDock::MakeCallbacks(Platform platform)
 void ChatDock::Connect()
 {
 	Disconnect();
+	// Reload channel emotes and badges when the connection comes back (a sign-in may enable badges; the channel
+	// may have changed). Global emote lists stay loaded.
+	assetChannelId_.clear();
 	twitch_ = std::make_unique<TwitchConnection>(config_.twitchChannel, config_.twitchClientId, config_.twitchLogin,
 						     config_.twitchToken, MakeCallbacks(Platform::Twitch));
 	ConnectYouTube();
@@ -490,7 +503,7 @@ void ChatDock::AppendHtml(const std::vector<HtmlLine> &lines)
 		bar->setValue(bar->maximum());
 }
 
-bool ChatDock::ReplaceLine(int lineId, const QString &html, const DisplayLine &line)
+bool ChatDock::ReplaceLine(int lineId, const QString &html, const DisplayLine &line, int textLength)
 {
 	// Only runs when a bot's twin arrives; the line is normally among the last few.
 	for (QTextBlock block = view_->document()->lastBlock(); block.isValid(); block = block.previous()) {
@@ -499,13 +512,13 @@ bool ChatDock::ReplaceLine(int lineId, const QString &html, const DisplayLine &l
 		QTextCursor cursor(block);
 		cursor.movePosition(QTextCursor::EndOfBlock, QTextCursor::KeepAnchor);
 		cursor.insertHtml(html);
-		block.setUserData(new LineData(MakeLineInfo(line))); // now on both platforms
+		block.setUserData(new LineData(MakeLineInfo(line, textLength))); // now on both platforms
 		return true;
 	}
 	return false; // already trimmed by the message limit
 }
 
-ChatDock::LineInfo ChatDock::MakeLineInfo(const DisplayLine &line)
+ChatDock::LineInfo ChatDock::MakeLineInfo(const DisplayLine &line, int textLength)
 {
 	LineInfo info;
 	for (Platform platform : line.platforms)
@@ -515,7 +528,7 @@ ChatDock::LineInfo ChatDock::MakeLineInfo(const DisplayLine &line)
 	info.login = ToLower(message.mention);
 	info.authorId = message.authorId;
 	info.author = message.author;
-	info.textLength = (int)QString::fromStdString(message.text).size();
+	info.textLength = textLength; // as rendered: an emote image is one character
 	return info;
 }
 
@@ -549,6 +562,181 @@ void ChatDock::StrikeLine(const QTextBlock &block, LineInfo &info, const Moderat
 	cursor.insertText(label, tagFormat);
 	info.tagLength = (int)label.size();
 	info.severity = tag.severity;
+}
+
+// A transparent stand-in for an image that hasn't arrived yet; the <img> size, not the image, sets the layout.
+static const QImage &PlaceholderImage()
+{
+	static const QImage image = [] {
+		QImage transparent(1, 1, QImage::Format_ARGB32_Premultiplied);
+		transparent.fill(Qt::transparent);
+		return transparent;
+	}();
+	return image;
+}
+
+std::vector<std::string> ChatDock::HelixHeaders() const
+{
+	if (!config_.twitchToken.IsValid() || config_.twitchClientId.empty())
+		return {};
+	return {"Authorization: Bearer " + config_.twitchToken.accessToken, "Client-Id: " + config_.twitchClientId};
+}
+
+void ChatDock::LoadChannelAssets(const std::string &channelId)
+{
+	if (channelId.empty() || channelId == assetChannelId_)
+		return;
+	assetChannelId_ = channelId;
+
+	// Another channel: its emotes and badges replace the previous channel's; globals stay.
+	emoteSets_.erase(std::remove_if(emoteSets_.begin(), emoteSets_.end(),
+					[](const EmoteSet &set) { return set.channel; }),
+			 emoteSets_.end());
+	emotes_.Clear();
+	for (const auto &set : emoteSets_)
+		emotes_.Add(set.emotes, set.priority);
+	channelBadges_.clear();
+
+	using Parser = std::vector<Emote> (*)(const std::string &);
+	auto fetchEmotes = [this, channelId](const std::string &url, EmoteProvider provider, bool channel,
+					     Parser parse) {
+		assets_->Get(url, {}, [this, channelId, provider, channel, parse](const HttpResponse &res) {
+			if (!res.Ok())
+				return;              // e.g. 404: the channel doesn't use this service
+			auto list = parse(res.body); // parsed here, off the UI thread
+			if (list.empty())
+				return;
+			QMetaObject::invokeMethod(
+				this,
+				[this, channelId, provider, channel, list = std::move(list)]() mutable {
+					if (channel && channelId != assetChannelId_)
+						return; // arrived after switching channels
+					AddEmoteSet(std::move(list), provider, channel);
+				},
+				Qt::QueuedConnection);
+		});
+	};
+	auto fetchBadges = [this, channelId](const std::string &url, bool channel) {
+		auto headers = HelixHeaders();
+		if (headers.empty())
+			return; // the badge API needs a sign-in; read-only chat shows no badges
+		assets_->Get(url, std::move(headers),
+			     [this, channelId, channel, hiDpi = hiDpi_](const HttpResponse &res) {
+				     if (!res.Ok())
+					     return;
+				     auto images = ParseBadgeImages(res.body, hiDpi);
+				     QMetaObject::invokeMethod(
+					     this,
+					     [this, channelId, channel, images = std::move(images)]() mutable {
+						     if (channel && channelId != assetChannelId_)
+							     return;
+						     (channel ? channelBadges_ : globalBadges_).merge(images);
+						     // Lines already shown with a badge placeholder can load their image now.
+						     static const std::string prefix = "unified-chat://badge/";
+						     for (const auto &key : imageKeys_) {
+							     if (key.rfind(prefix, 0) != 0)
+								     continue;
+							     if (const std::string *url =
+									 BadgeUrl(key.substr(prefix.size())))
+								     RequestImage(key, *url);
+						     }
+					     },
+					     Qt::QueuedConnection);
+			     });
+	};
+
+	if (!globalAssetsRequested_) {
+		globalAssetsRequested_ = true;
+		fetchEmotes("https://api.betterttv.net/3/cached/emotes/global", EmoteProvider::BTTV, false,
+			    ParseBttvEmotes);
+		fetchEmotes("https://api.frankerfacez.com/v1/set/global", EmoteProvider::FFZ, false, ParseFfzEmotes);
+		fetchEmotes("https://7tv.io/v3/emote-sets/global", EmoteProvider::SevenTV, false, ParseSevenTvEmotes);
+	}
+	if (globalBadges_.empty())
+		fetchBadges("https://api.twitch.tv/helix/chat/badges/global", false);
+	fetchEmotes("https://api.betterttv.net/3/cached/users/twitch/" + channelId, EmoteProvider::BTTV, true,
+		    ParseBttvEmotes);
+	fetchEmotes("https://api.frankerfacez.com/v1/room/id/" + channelId, EmoteProvider::FFZ, true, ParseFfzEmotes);
+	fetchEmotes("https://7tv.io/v3/users/twitch/" + channelId, EmoteProvider::SevenTV, true, ParseSevenTvEmotes);
+	fetchBadges("https://api.twitch.tv/helix/chat/badges?broadcaster_id=" + channelId, true);
+}
+
+const std::string *ChatDock::BadgeUrl(const std::string &badgeKey) const
+{
+	// The channel's own badges (e.g. custom subscriber badges) take precedence over the global ones.
+	if (auto channel = channelBadges_.find(badgeKey); channel != channelBadges_.end())
+		return &channel->second;
+	if (auto global = globalBadges_.find(badgeKey); global != globalBadges_.end())
+		return &global->second;
+	return nullptr;
+}
+
+void ChatDock::AddEmoteSet(std::vector<Emote> emotes, EmoteProvider provider, bool channel)
+{
+	const int priority = EmotePriority(provider, channel);
+	emoteSets_.push_back({std::move(emotes), priority, channel});
+	emotes_.Add(emoteSets_.back().emotes, priority); // priorities make arrival order irrelevant
+	obs_log(LOG_INFO, "emotes: %zu %s emotes loaded", emoteSets_.back().emotes.size(),
+		provider == EmoteProvider::SevenTV ? "7TV"
+		: provider == EmoteProvider::BTTV  ? "BTTV"
+						   : "FFZ");
+}
+
+void ChatDock::EnsureLineImages(const ChatMessage &message)
+{
+	auto ensure = [this](const std::string &key) {
+		if (imageKeys_.insert(key).second)
+			view_->document()->addResource(QTextDocument::ImageResource, QUrl(QString::fromStdString(key)),
+						       PlaceholderImage());
+	};
+
+	for (const auto &badge : message.badges) {
+		const std::string key = BadgeImageKey(badge);
+		ensure(key);
+		if (const std::string *url = BadgeUrl(BadgeKey(badge)))
+			RequestImage(key, *url); // otherwise requested once the badge list arrives
+	}
+
+	if (message.platform != Platform::Twitch || (message.emotes.empty() && emotes_.Size() == 0))
+		return;
+	for (const auto &segment : SplitMessage(message.text, message.emotes, &emotes_)) {
+		if (!segment.emote)
+			continue;
+		const std::string key = EmoteImageKey(*segment.emote);
+		ensure(key);
+		RequestImage(key, EmoteImageUrl(*segment.emote, hiDpi_));
+	}
+}
+
+void ChatDock::RequestImage(const std::string &key, const std::string &url)
+{
+	if (!requested_.insert(key).second)
+		return; // once per session
+	assets_->Get(url, {}, [this, key](const HttpResponse &res) {
+		if (!res.Ok())
+			return;
+		QImage image; // decoded here, off the UI thread (PNG, GIF first frame, WebP)
+		if (!image.loadFromData(reinterpret_cast<const uchar *>(res.body.data()), (int)res.body.size()))
+			return;
+		QMetaObject::invokeMethod(
+			this,
+			[this, key, image = std::move(image)]() {
+				images_[key] = image;
+				view_->document()->addResource(QTextDocument::ImageResource,
+							       QUrl(QString::fromStdString(key)), image);
+				view_->viewport()->update(); // same size as the placeholder: a repaint, no relayout
+			},
+			Qt::QueuedConnection);
+	});
+}
+
+void ChatDock::RegisterLoadedImages()
+{
+	for (const auto &key : imageKeys_) {
+		auto image = images_.find(key);
+		view_->document()->addResource(QTextDocument::ImageResource, QUrl(QString::fromStdString(key)),
+					       image != images_.end() ? image->second : PlaceholderImage());
+	}
 }
 
 void ChatDock::ApplyModeration(const ModerationEvent &event)
@@ -638,8 +826,10 @@ void ChatDock::AppendLines(const std::vector<DisplayLine> &lines)
 		// A step lighter on dark themes, darker on light ones: visible, but names stay readable.
 		highlightColor_ = base.lightness() < 128 ? base.lighter(140) : base.darker(112);
 	}
-	auto format = [this](const DisplayLine &line) {
-		return QString::fromStdString(FormatMessageHtml(line.message, iconSize_, line.platforms, &nameColors_));
+	auto format = [this](const DisplayLine &line, int &textLength) {
+		EnsureLineImages(line.message); // placeholders first, so nothing shows as a broken image
+		return QString::fromStdString(FormatMessageHtml(line.message, iconSize_, line.platforms, &nameColors_,
+								&emotes_, emoteHeight_, &textLength));
 	};
 
 	const int64_t now = QDateTime::currentMSecsSinceEpoch();
@@ -657,16 +847,20 @@ void ChatDock::AppendLines(const std::vector<DisplayLine> &lines)
 		if (line.platforms.size() == 1 && botMerger_.IsBot(message.author)) {
 			// A bot's copy of a line already shown for the other platform: add the icon to that line.
 			if (auto merged = botMerger_.Match(message, now)) {
-				QString mergedHtml = format(merged->line);
-				if (!ReplaceLine(merged->lineId, mergedHtml, merged->line))
-					html.push_back({mergedHtml, -1, highlight, MakeLineInfo(merged->line)});
+				int mergedLength = 0;
+				QString mergedHtml = format(merged->line, mergedLength);
+				if (!ReplaceLine(merged->lineId, mergedHtml, merged->line, mergedLength))
+					html.push_back(
+						{mergedHtml, -1, highlight, MakeLineInfo(merged->line, mergedLength)});
 				continue;
 			}
 			lineId = nextLineId_;
 			nextLineId_ = nextLineId_ == (std::numeric_limits<int>::max)() ? 1 : nextLineId_ + 1;
 			botMerger_.Remember(message, lineId, now);
 		}
-		html.push_back({format(line), lineId, highlight, MakeLineInfo(line)});
+		int textLength = 0;
+		QString lineHtml = format(line, textLength);
+		html.push_back({std::move(lineHtml), lineId, highlight, MakeLineInfo(line, textLength)});
 	}
 	AppendHtml(html);
 	ScheduleEchoTimer();

@@ -35,14 +35,18 @@ std::string_view DefaultNameColor(Platform platform);
 std::string_view IconResource(Platform platform);
 
 class NameColorResolver;
+class EmoteIndex;
 
-// Renders one chat line as Qt rich text: platform icon, display name, message.
+// Renders one chat line as Qt rich text: platform icon, badges, display name, message.
 // All user-controlled text is escaped.
 std::string FormatMessageHtml(const ChatMessage &message, int iconSize);
 // Same, with one icon per platform, for a message you sent to several platforms at once.
-// With colors, the name color is made readable on the chat background.
+// With colors, the name color is made readable on the chat background. Twitch emotes (from the message) and
+// words found in emotes become images emoteHeight tall. renderedTextLength receives the message text's length in
+// the document (UTF-16 units, one per emote image).
 std::string FormatMessageHtml(const ChatMessage &message, int iconSize, const std::vector<Platform> &platforms,
-			      NameColorResolver *colors = nullptr);
+			      NameColorResolver *colors = nullptr, const EmoteIndex *emotes = nullptr,
+			      int emoteHeight = 0, int *renderedTextLength = nullptr);
 std::string FormatNoticeHtml(std::string_view text);
 
 // How a line removed by a moderator is marked. A line keeps its most severe tag: banned > timed out >

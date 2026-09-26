@@ -88,9 +88,11 @@ src\
 │   ├── echo-merger.*     your own Both message shown as one line
 │   ├── bot-merger.*      a bot's identical Twitch + YouTube lines folded into one (line shown first, icon added later)
 │   ├── mentions.*        clickable-name links, "mentions you" matching, recent chatters for @ + Tab completion
+│   ├── emotes.*          Twitch emote/badge tags, BTTV/FFZ/7TV lists, emote index, message splitting, image URLs
 │   └── chat-config.*     config.json (de)serialization
 ├── net\           worker threads on the libcurl that ships with OBS
 │   ├── twitch-connection.*   TLS IRC to irc.chat.twitch.tv:6697 via CURLOPT_CONNECT_ONLY
+│   ├── asset-loader.*        one background thread downloading emote/badge lists and images
 │   ├── youtube-connection.*  YouTube poll/send loop
 │   ├── device-login.*        sign-in flow
 │   └── curl-http-client.*

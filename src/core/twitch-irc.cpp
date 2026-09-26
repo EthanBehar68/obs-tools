@@ -17,6 +17,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
 #include "twitch-irc.hpp"
+#include "emotes.hpp"
 #include "text-util.hpp"
 
 #include <algorithm>
@@ -241,6 +242,8 @@ void IrcSession::HandleLine(std::string_view line, SessionOutput &out)
 			chat.author = std::string(msg.Nick());
 		chat.mention = std::string(msg.Nick());
 		chat.authorId = msg.Tag("user-id");
+		chat.emotes = ParseTwitchEmotes(msg.Tag("emotes"));
+		chat.badges = ParseRoleBadges(msg.Tag("badges"));
 		chat.color = SanitizeColor(msg.Tag("color"));
 		chat.text = msg.params[1];
 		if (chat.text.rfind(kActionPrefix, 0) == 0) {
@@ -292,10 +295,18 @@ void IrcSession::HandleLine(std::string_view line, SessionOutput &out)
 		}
 		if (!text.empty())
 			out.notices.push_back(std::move(text));
+	} else if (msg.command == "ROOMSTATE") {
+		// The channel's numeric id, which third-party emote services and the badge API are keyed by.
+		if (const auto &roomId = msg.Tag("room-id"); !roomId.empty() && roomId != channelId_) {
+			channelId_ = roomId;
+			out.channelId = roomId;
+		}
 	} else if (msg.command == "GLOBALSTATE" || msg.command == "USERSTATE") {
 		if (const auto &name = msg.Tag("display-name"); !name.empty())
 			displayName_ = name;
 		color_ = SanitizeColor(msg.Tag("color"));
+		if (msg.command == "USERSTATE")
+			badges_ = ParseRoleBadges(msg.Tag("badges")); // your own badges, for your sent lines
 		if (msg.command == "USERSTATE")
 			joined_ = true;
 	} else if (msg.command == "JOIN") {
@@ -334,6 +345,7 @@ ChatMessage IrcSession::LocalEcho(std::string_view text, std::string_view replyT
 	chat.author = displayName_.empty() ? login_ : displayName_;
 	chat.mention = login_;
 	chat.color = color_;
+	chat.badges = badges_;
 	chat.isSelf = true;
 	chat.text = Trim(StripLineBreaks(text));
 	if (chat.text.rfind("/me ", 0) == 0) {

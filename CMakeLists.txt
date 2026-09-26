@@ -28,6 +28,8 @@ target_sources(
     src/core/chat-router.hpp
     src/core/echo-merger.cpp
     src/core/echo-merger.hpp
+    src/core/emotes.cpp
+    src/core/emotes.hpp
     src/core/http-client.hpp
     src/core/json-array-reader.cpp
     src/core/json-array-reader.hpp
@@ -78,6 +80,8 @@ target_sources(
   PRIVATE
     src/chat-dock.cpp
     src/chat-dock.hpp
+    src/net/asset-loader.cpp
+    src/net/asset-loader.hpp
     src/net/curl-http-client.cpp
     src/net/curl-http-client.hpp
     src/net/device-login.cpp
@@ -125,6 +129,7 @@ if(ENABLE_TESTS)
     PRIVATE
       tests/test-bot-merger.cpp
       tests/test-echo-merger.cpp
+      tests/test-emotes.cpp
       tests/test-json-array-reader.cpp
       tests/test-main.cpp
       tests/test-mentions.cpp

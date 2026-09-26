@@ -343,6 +343,8 @@ void TwitchConnection::RunSession(void *handle)
 					if (callbacks_.onModeration)
 						callbacks_.onModeration(std::move(event));
 				}
+				if (!out.channelId.empty() && callbacks_.onChannelId)
+					callbacks_.onChannelId(out.channelId);
 				for (const auto &notice : out.notices)
 					Notice(notice);
 				if (out.authFailed) {
