@@ -32,7 +32,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 namespace unified_chat {
 
-enum class LinkState { Disconnected, Connecting, ReadOnly, Connected };
+// Standby: deliberately not connected yet (YouTube waits for OBS to start streaming).
+enum class LinkState { Disconnected, Standby, Connecting, ReadOnly, Connected };
 
 struct ConnectionCallbacks {
 	// Messages that arrived together (one socket read or one poll), in order.

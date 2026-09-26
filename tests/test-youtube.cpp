@@ -570,6 +570,25 @@ TEST_CASE("A stream that reports the chat ended goes back to waiting for a broad
 	CHECK(ended.nextDelayMs == 30000);
 }
 
+TEST_CASE("Broadcast search is fast right after the stream starts, then slows down")
+{
+	FakeHttp http;
+	ChatSession session(http, oauth::GoogleProvider("id", "sec"), FreshToken(), "", 5000, nullptr);
+	session.SetBroadcastSearch(30000, 10000, 1060);
+
+	http.Queue(200, R"({"items":[]})");
+	CHECK(session.Step(1000).nextDelayMs == 10000);
+	http.Queue(200, R"({"items":[]})");
+	CHECK(session.Step(1059).nextDelayMs == 10000);
+	http.Queue(200, R"({"items":[]})");
+	CHECK(session.Step(1060).nextDelayMs == 30000);
+
+	ChatSession idle(http, oauth::GoogleProvider("id", "sec"), FreshToken(), "", 5000, nullptr);
+	idle.SetBroadcastSearch(120000);
+	http.Queue(200, R"({"items":[]})");
+	CHECK(idle.Step(0).nextDelayMs == 120000);
+}
+
 TEST_CASE("ChatSession without a token stays signed out and makes no requests")
 {
 	FakeHttp http;

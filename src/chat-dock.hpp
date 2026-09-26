@@ -48,6 +48,8 @@ public:
 
 	void Start();
 	void Shutdown();
+	// OBS's main output started or stopped streaming (the Start Streaming button).
+	void OnStreamingChanged(bool streaming);
 
 protected:
 	void changeEvent(QEvent *event) override;
@@ -56,6 +58,7 @@ private:
 	void LoadConfig();
 	void SaveConfig();
 	void Connect();
+	void ConnectYouTube();
 	void Disconnect();
 	void OpenSettings();
 	void SendCurrent();
@@ -79,6 +82,7 @@ private:
 	LinkState twitchState_ = LinkState::Disconnected;
 	LinkState youtubeState_ = LinkState::Disconnected;
 	bool started_ = false;
+	bool obsStreaming_ = false;
 	bool empty_ = true;
 	int iconSize_ = 16;
 	EchoMerger merger_;

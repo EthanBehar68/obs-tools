@@ -61,6 +61,7 @@ private:
 	QLineEdit *youtubeClientId_;
 	QLineEdit *youtubeClientSecret_;
 	QLineEdit *youtubeVideo_;
+	QComboBox *youtubeConnect_;
 	QComboBox *youtubeMethod_;
 	QSpinBox *youtubePoll_;
 	QLabel *youtubeAccount_;

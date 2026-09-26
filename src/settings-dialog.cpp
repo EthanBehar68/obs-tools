@@ -105,6 +105,11 @@ SettingsDialog::SettingsDialog(const ChatConfig &config, QWidget *parent) : QDia
 	youtubeMethod_->addItem(Text("Settings.YouTube.Method.Poll"), false);
 	youtubeMethod_->setCurrentIndex(config.youtubeStream ? 0 : 1);
 	youtubeMethod_->setToolTip(Text("Settings.YouTube.MethodHint"));
+	youtubeConnect_ = new QComboBox(youtubeBox);
+	youtubeConnect_->addItem(Text("Settings.YouTube.Connect.OnStream"), true);
+	youtubeConnect_->addItem(Text("Settings.YouTube.Connect.Always"), false);
+	youtubeConnect_->setCurrentIndex(config.youtubeConnectOnStream ? 0 : 1);
+	youtubeConnect_->setToolTip(Text("Settings.YouTube.ConnectHint"));
 	youtubePoll_ = new QSpinBox(youtubeBox);
 	youtubePoll_->setRange(1, 120);
 	youtubePoll_->setSuffix(" s");
@@ -123,6 +128,7 @@ SettingsDialog::SettingsDialog(const ChatConfig &config, QWidget *parent) : QDia
 	youtubeForm->addRow(Text("Settings.ClientId"), youtubeClientId_);
 	youtubeForm->addRow(Text("Settings.ClientSecret"), youtubeClientSecret_);
 	youtubeForm->addRow(Text("Settings.YouTube.Video"), youtubeVideo_);
+	youtubeForm->addRow(Text("Settings.YouTube.Connect"), youtubeConnect_);
 	youtubeForm->addRow(Text("Settings.YouTube.Method"), youtubeMethod_);
 	youtubeForm->addRow(Text("Settings.YouTube.Poll"), youtubePoll_);
 	youtubeForm->addRow(Text("Settings.Account"), youtubeAccount_);
@@ -179,6 +185,7 @@ ChatConfig SettingsDialog::Result() const
 	result.youtubeVideo = ToStd(youtubeVideo_->text());
 	result.youtubePollSeconds = youtubePoll_->value();
 	result.youtubeStream = youtubeMethod_->currentData().toBool();
+	result.youtubeConnectOnStream = youtubeConnect_->currentData().toBool();
 	result.maxMessages = maxMessages_->value();
 	result.mergeBots = SplitNameList(mergeBots_->text().toStdString());
 	return result;

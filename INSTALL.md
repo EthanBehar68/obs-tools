@@ -73,6 +73,14 @@ Google gives each project a free daily quota (10,000 units by default). Per [Goo
 
 If your streams are longer than streaming's budget allows, switch to polling, or ask Google for a higher quota (free, through the Cloud Console quota page). When polling, YouTube may ask for a longer interval than yours, and the plugin always waits at least as long as YouTube asks. Your actual usage is under **APIs & Services → YouTube Data API v3 → Quotas** in the Cloud Console. When the quota runs out, the dock says so and pauses YouTube for 15 minutes. Quota resets at midnight Pacific time.
 
+### When YouTube chat connects
+
+By default (**Settings → YouTube → Connect chat: When OBS starts streaming**) YouTube chat connects when you press OBS's **Start Streaming** and disconnects when you stop. While you're offline it uses no quota, and the YouTube status reads **Waiting for stream**. Right after you start, it checks for your broadcast every 10 seconds for a minute, since YouTube needs a few seconds to bring it live, then every 30 seconds. Twitch chat stays connected all the time.
+
+This needs YouTube to go live from OBS's own **Start Streaming** button, which is also what makes OBS's YouTube integration create and start the broadcast. To start Twitch (or other destinations) from the same button with obs-multi-rtmp, click **Modify** on that target and tick **Sync start with OBS** and **Sync stop with OBS**.
+
+If YouTube goes live some other way (another app, or a multistream output with an auto-start stream key), choose **Always**. The plugin then checks for a live broadcast every 2 minutes while you're offline (about 30 units an hour).
+
 ## 4. Using the dock
 
 - **Status buttons** (top left) show each platform's state: *Connected*, *Read-only* (Twitch without sign-in), *Connecting…*, or *Offline*. Click one to open Settings.

@@ -22,6 +22,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "target-switch.hpp"
 #include "core/chat-format.hpp"
 
+#include <obs-frontend-api.h>
 #include <obs-module.h>
 #include <plugin-support.h>
 #include <util/platform.h>
@@ -60,6 +61,8 @@ static const char *StateKey(LinkState state)
 		return "Status.ReadOnly";
 	case LinkState::Connecting:
 		return "Status.Connecting";
+	case LinkState::Standby:
+		return "Status.Standby";
 	default:
 		return "Status.Offline";
 	}
@@ -162,6 +165,7 @@ void ChatDock::Start()
 	if (started_)
 		return;
 	started_ = true;
+	obsStreaming_ = obs_frontend_streaming_active(); // the plugin may load while already live
 	LoadConfig();
 	Connect();
 }
@@ -248,10 +252,35 @@ void ChatDock::Connect()
 	Disconnect();
 	twitch_ = std::make_unique<TwitchConnection>(config_.twitchChannel, config_.twitchClientId, config_.twitchLogin,
 						     config_.twitchToken, MakeCallbacks(Platform::Twitch));
+	ConnectYouTube();
+}
+
+void ChatDock::ConnectYouTube()
+{
+	youtube_.reset();
+	// Waiting for OBS's Start Streaming uses no quota. Signed out, the connection is still created so it can
+	// say so; it makes no requests.
+	if (config_.youtubeConnectOnStream && !obsStreaming_ && config_.youtubeToken.IsValid()) {
+		AppendNotice(Text("Notice.YouTubeStandby"));
+		// Queued, so it lands after any state the old connection had already posted.
+		QMetaObject::invokeMethod(
+			this, [this]() { SetLinkState(Platform::YouTube, LinkState::Standby); }, Qt::QueuedConnection);
+		return;
+	}
 	youtube_ = std::make_unique<YouTubeConnection>(config_.youtubeClientId, config_.youtubeClientSecret,
 						       config_.youtubeToken, config_.youtubeVideo,
 						       config_.youtubePollSeconds, config_.youtubeStream,
+						       config_.youtubeConnectOnStream,
 						       MakeCallbacks(Platform::YouTube));
+}
+
+void ChatDock::OnStreamingChanged(bool streaming)
+{
+	if (obsStreaming_ == streaming)
+		return;
+	obsStreaming_ = streaming;
+	if (started_ && config_.youtubeConnectOnStream)
+		ConnectYouTube();
 }
 
 void ChatDock::Disconnect()

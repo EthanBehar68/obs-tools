@@ -39,6 +39,9 @@ struct ChatConfig {
 	oauth::Token youtubeToken;
 	int youtubePollSeconds = 8; // polling interval, also used when streaming falls back
 	bool youtubeStream = true;  // server-pushed chat (streamList) instead of polling
+	// Connect YouTube chat only while OBS's main output is streaming (no quota used while offline), rather than
+	// always looking for a live broadcast.
+	bool youtubeConnectOnStream = true;
 
 	SendTarget sendTarget = SendTarget::Both;
 	int maxMessages = 500;

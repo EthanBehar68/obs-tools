@@ -144,6 +144,7 @@ TEST_CASE("Config round trips through JSON")
 	config.youtubeToken = {"ya", "yr", 456};
 	config.youtubePollSeconds = 12;
 	config.youtubeStream = false;
+	config.youtubeConnectOnStream = false;
 	config.sendTarget = SendTarget::YouTube;
 	config.maxMessages = 800;
 
@@ -161,6 +162,8 @@ TEST_CASE("Config round trips through JSON")
 	CHECK(loaded.youtubePollSeconds == 12);
 	CHECK_FALSE(loaded.youtubeStream);
 	CHECK(ParseConfig("{}").youtubeStream); // streaming is the default
+	CHECK_FALSE(loaded.youtubeConnectOnStream);
+	CHECK(ParseConfig("{}").youtubeConnectOnStream); // waiting for Start Streaming is the default
 	CHECK(loaded.sendTarget == SendTarget::YouTube);
 	CHECK(loaded.maxMessages == 800);
 }

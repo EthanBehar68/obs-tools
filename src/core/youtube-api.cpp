@@ -28,7 +28,6 @@ using json = nlohmann::json;
 
 namespace unified_chat::youtube {
 
-static constexpr int kWaitForBroadcastMs = 30000;
 static constexpr int kNetworkRetryMs = 10000;
 static constexpr int kErrorRetryMs = 60000;
 static constexpr int kQuotaRetryMs = 15 * 60 * 1000;
@@ -318,7 +317,7 @@ int ChatSession::HandleError(const HttpResponse &res, StepResult &out)
 		state_ = State::WaitingForBroadcast;
 		announcedWaiting_ = false;
 		out.notices.push_back("YouTube: live chat is no longer available");
-		return kWaitForBroadcastMs;
+		return searchMs_;
 	}
 
 	state_ = State::Error;
@@ -352,7 +351,7 @@ void ChatSession::FindLiveChat(int64_t now, StepResult &out)
 			out.notices.push_back("YouTube: waiting for a live broadcast");
 			announcedWaiting_ = true;
 		}
-		out.nextDelayMs = kWaitForBroadcastMs;
+		out.nextDelayMs = now < fastSearchUntil_ ? fastSearchMs_ : searchMs_;
 		return;
 	}
 
@@ -417,7 +416,7 @@ void ChatSession::EndChat(StepResult &out)
 	pageToken_.clear();
 	state_ = State::WaitingForBroadcast;
 	out.notices.push_back("YouTube: live chat ended");
-	out.nextDelayMs = kWaitForBroadcastMs;
+	out.nextDelayMs = searchMs_;
 }
 
 void ChatSession::Deliver(std::vector<ChatMessage> &messages, StepResult &out)

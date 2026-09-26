@@ -27,6 +27,11 @@ namespace unified_chat {
 
 using Clock = std::chrono::steady_clock;
 
+static constexpr int kSearchMs = 30000;
+static constexpr int kFastSearchMs = 10000;
+static constexpr int kFastSearchSeconds = 60;
+static constexpr int kIdleSearchMs = 120000;
+
 static LinkState ToLinkState(youtube::State state)
 {
 	switch (state) {
@@ -40,13 +45,15 @@ static LinkState ToLinkState(youtube::State state)
 }
 
 YouTubeConnection::YouTubeConnection(std::string clientId, std::string clientSecret, oauth::Token token,
-				     std::string video, int pollSeconds, bool stream, ConnectionCallbacks callbacks)
+				     std::string video, int pollSeconds, bool stream, bool startedWithStream,
+				     ConnectionCallbacks callbacks)
 	: clientId_(std::move(clientId)),
 	  clientSecret_(std::move(clientSecret)),
 	  token_(std::move(token)),
 	  video_(std::move(video)),
 	  pollSeconds_(pollSeconds),
 	  stream_(stream),
+	  startedWithStream_(startedWithStream),
 	  callbacks_(std::move(callbacks))
 {
 	thread_ = std::thread(&YouTubeConnection::Run, this);
@@ -92,6 +99,14 @@ void YouTubeConnection::Run()
 				     });
 
 	session.SetStreaming(stream_);
+	if (startedWithStream_) {
+		// OBS just started streaming: YouTube takes a few seconds to bring the broadcast live, so look often
+		// for the first minute. The connection only exists while streaming, so this never runs idle.
+		session.SetBroadcastSearch(kSearchMs, kFastSearchMs, (int64_t)std::time(nullptr) + kFastSearchSeconds);
+	} else {
+		// Connected regardless of OBS's stream: look rarely while nothing is live.
+		session.SetBroadcastSearch(kIdleSearchMs);
+	}
 	session.SetLiveSink([this](std::vector<ChatMessage> messages) {
 		if (callbacks_.onMessages)
 			callbacks_.onMessages(std::move(messages));

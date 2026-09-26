@@ -37,6 +37,10 @@ static void OnFrontendEvent(enum obs_frontend_event event, void *private_data)
 		dock->Start();
 	else if (event == OBS_FRONTEND_EVENT_EXIT)
 		dock->Shutdown();
+	else if (event == OBS_FRONTEND_EVENT_STREAMING_STARTED)
+		dock->OnStreamingChanged(true);
+	else if (event == OBS_FRONTEND_EVENT_STREAMING_STOPPED)
+		dock->OnStreamingChanged(false);
 }
 
 static unified_chat::ChatDock *s_dock = nullptr;
