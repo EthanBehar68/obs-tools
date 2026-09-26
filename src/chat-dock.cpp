@@ -32,6 +32,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QKeyEvent>
 #include <QLabel>
 #include <QLineEdit>
+#include <QListWidget>
 #include <QScrollBar>
 #include <QTextBlock>
 #include <QTextBlockFormat>
@@ -53,6 +54,7 @@ namespace unified_chat {
 
 // Allowance for clock differences between this PC and YouTube when deciding what counts as chat history.
 static constexpr int64_t kHistoryGraceSeconds = 30;
+static constexpr size_t kMaxSuggestions = 8;
 
 static QString Text(const char *key)
 {
@@ -139,6 +141,18 @@ ChatDock::ChatDock(QWidget *parent) : QWidget(parent)
 
 	iconSize_ = qMax(14, fontMetrics().height());
 
+	// A child of the dock rather than a popup window: it never takes keyboard focus, so the input's own key
+	// handling (eventFilter) decides what Enter, Tab and the arrows do while it's open.
+	suggestions_ = new QListWidget(this);
+	suggestions_->setFocusPolicy(Qt::NoFocus);
+	suggestions_->setIconSize(QSize(iconSize_, iconSize_));
+	suggestions_->setUniformItemSizes(true);
+	suggestions_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+	suggestions_->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+	suggestions_->hide();
+	connect(suggestions_, &QListWidget::itemClicked, this,
+		[this](QListWidgetItem *item) { ApplySuggestion(suggestions_->row(item)); });
+
 	echoTimer_ = new QTimer(this);
 	echoTimer_->setSingleShot(true); // armed for the next merge deadline only, see ScheduleEchoTimer
 	connect(echoTimer_, &QTimer::timeout, this,
@@ -162,7 +176,14 @@ ChatDock::ChatDock(QWidget *parent) : QWidget(parent)
 		if (text.isEmpty()) {
 			SetReply(std::nullopt);
 			RestoreTarget();
+			HideSuggestions();
 		}
+	});
+	// Only the user's own typing updates suggestions; text set by the dock (a picked name) doesn't reopen them.
+	connect(input_, &QLineEdit::textEdited, this, [this]() { UpdateSuggestions(); });
+	connect(input_, &QLineEdit::cursorPositionChanged, this, [this]() {
+		if (suggestions_->isVisible()) // moved away from the "@word": follow or close
+			UpdateSuggestions();
 	});
 	connect(settingsButton_, &QToolButton::clicked, this, &ChatDock::OpenSettings);
 	connect(twitchStatus_, &QToolButton::clicked, this, &ChatDock::OpenSettings);
@@ -601,6 +622,84 @@ void ChatDock::OnLinkClicked(const QUrl &url)
 	input_->setFocus();
 }
 
+std::optional<Platform> ChatDock::MentionCandidatesPlatform() const
+{
+	// With Both chosen, offer everyone (each pick switches platform); otherwise the current platform only.
+	if (mentionTarget_.Home(target_->Target()) == SendTarget::Both)
+		return std::nullopt;
+	return target_->Target() == SendTarget::YouTube ? Platform::YouTube : Platform::Twitch;
+}
+
+bool ChatDock::CurrentMentionWord(int &start, int &end, QString &prefix) const
+{
+	const QString text = input_->text();
+	end = input_->cursorPosition();
+	start = end;
+	while (start > 0 && !text[start - 1].isSpace())
+		--start;
+	if (start >= text.size() || text[start] != QLatin1Char('@'))
+		return false;
+	prefix = text.mid(start + 1, end - start - 1);
+	return true;
+}
+
+void ChatDock::UpdateSuggestions()
+{
+	int start, end;
+	QString prefix;
+	if (!CurrentMentionWord(start, end, prefix) || prefix.isEmpty()) {
+		HideSuggestions();
+		return;
+	}
+	auto matches = chatters_.Complete(prefix.toStdString(), MentionCandidatesPlatform(), kMaxSuggestions);
+	if (matches.empty()) {
+		HideSuggestions();
+		return;
+	}
+
+	suggestions_->clear();
+	for (const auto &match : matches) {
+		auto item = new QListWidgetItem(PlatformIcon(match.platform), QString::fromStdString(match.mention));
+		item->setData(Qt::UserRole, (int)match.platform);
+		suggestions_->addItem(item);
+	}
+	suggestions_->setCurrentRow(0);
+
+	// Just above the input, over the bottom of the chat view.
+	const int rowHeight = qMax(suggestions_->sizeHintForRow(0), iconSize_ + 4);
+	const int height = rowHeight * suggestions_->count() + 2 * suggestions_->frameWidth();
+	const int width = qMin(input_->width(), qMax(200, input_->width() / 2));
+	const QPoint inputTopLeft = input_->mapTo(this, QPoint(0, 0));
+	suggestions_->setGeometry(inputTopLeft.x(), inputTopLeft.y() - height, width, height);
+	suggestions_->raise();
+	suggestions_->show();
+}
+
+void ChatDock::ApplySuggestion(int row)
+{
+	QListWidgetItem *item = suggestions_->item(row);
+	int start, end;
+	QString prefix;
+	if (!item || !CurrentMentionWord(start, end, prefix)) {
+		HideSuggestions();
+		return;
+	}
+	const auto platform = (Platform)item->data(Qt::UserRole).toInt();
+	const QString text = input_->text();
+	const QString replacement = QLatin1Char('@') + item->text() + QLatin1Char(' ');
+	input_->setText(text.left(start) + replacement + text.mid(end));
+	input_->setCursorPosition(start + (int)replacement.size());
+	HideSuggestions();
+	// Like clicking the name in chat: send to that person's platform, just for this message.
+	SwitchForMention(platform);
+}
+
+void ChatDock::HideSuggestions()
+{
+	if (suggestions_->isVisible())
+		suggestions_->hide();
+}
+
 bool ChatDock::CompleteMention()
 {
 	const QString text = input_->text();
@@ -608,18 +707,11 @@ bool ChatDock::CompleteMention()
 	const bool continuing = !completions_.empty() && cursor == completionEnd_;
 
 	if (!continuing) {
-		int start = cursor;
-		while (start > 0 && !text[start - 1].isSpace())
-			--start;
-		const QString word = text.mid(start, cursor - start);
-		if (!word.startsWith(QLatin1Char('@')))
+		int start, end;
+		QString prefix;
+		if (!CurrentMentionWord(start, end, prefix))
 			return false;
-
-		// With Both chosen, offer everyone (each pick switches platform); otherwise the current platform only.
-		std::optional<Platform> only;
-		if (mentionTarget_.Home(target_->Target()) != SendTarget::Both)
-			only = target_->Target() == SendTarget::YouTube ? Platform::YouTube : Platform::Twitch;
-		completions_ = chatters_.Complete(word.mid(1).toStdString(), only);
+		completions_ = chatters_.Complete(prefix.toStdString(), MentionCandidatesPlatform());
 		if (completions_.empty())
 			return true; // an "@word" with no match: keep focus in the input
 		completionIndex_ = 0;
@@ -646,9 +738,33 @@ bool ChatDock::eventFilter(QObject *watched, QEvent *event)
 {
 	if (watched == input_ && event->type() == QEvent::KeyPress) {
 		auto key = static_cast<QKeyEvent *>(event);
+		// While the suggestion list is open, these keys drive it instead of the input (Enter picks, not sends).
+		if (suggestions_->isVisible()) {
+			switch (key->key()) {
+			case Qt::Key_Up:
+				suggestions_->setCurrentRow(qMax(0, suggestions_->currentRow() - 1));
+				return true;
+			case Qt::Key_Down:
+				suggestions_->setCurrentRow(
+					qMin(suggestions_->count() - 1, suggestions_->currentRow() + 1));
+				return true;
+			case Qt::Key_Return:
+			case Qt::Key_Enter:
+			case Qt::Key_Tab:
+				ApplySuggestion(suggestions_->currentRow());
+				return true;
+			case Qt::Key_Escape:
+				HideSuggestions();
+				return true;
+			default:
+				break;
+			}
+		}
 		if (key->key() == Qt::Key_Tab && key->modifiers() == Qt::NoModifier)
 			return CompleteMention() || QWidget::eventFilter(watched, event);
 		completions_.clear(); // any other key ends a completion cycle
+	} else if (watched == input_ && event->type() == QEvent::FocusOut) {
+		HideSuggestions();
 	}
 	return QWidget::eventFilter(watched, event);
 }

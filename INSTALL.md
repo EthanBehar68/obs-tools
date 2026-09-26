@@ -93,7 +93,8 @@ If YouTube goes live some other way (another app, or a multistream output with a
 - **Tagging people:**
   - **Click a name** in the chat to start a message to that person. `@name ` goes into the input, and the target switches to their platform **for that message**, so a Twitch name never goes to YouTube and vice versa. After you send (or clear the input), the target goes back to the one you chose. If you click the target switch yourself in the meantime, your pick stays.
   - For a **Twitch** message, the reply is threaded under that message on Twitch, and a *Replying to @name* bar appears above the input. Click **✕** on the bar to send a plain mention instead. YouTube has no replies, so there it's a plain `@handle` mention.
-  - **Type `@` and part of a name, then press Tab** to complete it from people who've chatted recently. Press Tab again to cycle through matches. With the target on Both, each name you cycle to switches to that person's platform, again only until you send.
+  - **Type `@` and a letter** and a list of matching people who've chatted recently appears above the input, each with its platform icon (up to 8, most recent first). Use **↑/↓** to choose, **Enter** or **Tab** to pick (Enter picks a name here, it doesn't send), **Esc** to close, or click a name. Picking a name switches to that person's platform for the message, like clicking their name in chat. On Both the list shows people from both platforms; otherwise only the current platform.
+  - With just `@` typed (no letter), **Tab** cycles through recent chatters instead.
   - Twitch replies from others show who they answer: `Viewer → @Dezad: welcome back`.
   - **Messages that mention you** (your Twitch login or YouTube name) get a tinted background.
 - **Clear** empties the view. **Messages to keep** in Settings caps how much history the dock holds (default 500).

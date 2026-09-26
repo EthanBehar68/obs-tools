@@ -35,6 +35,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 class QLabel;
 class QLineEdit;
+class QListWidget;
 class QTextBrowser;
 class QTimer;
 class QToolButton;
@@ -97,6 +98,12 @@ private:
 	void RestoreTarget();
 	void SetReply(std::optional<PendingReply> reply);
 	bool CompleteMention(); // "@" + Tab; returns false when there's nothing to complete
+	// The "@word" the cursor is in: its range in the input and the text after '@'. False when there is none.
+	bool CurrentMentionWord(int &start, int &end, QString &prefix) const;
+	std::optional<Platform> MentionCandidatesPlatform() const; // nullopt = both platforms
+	void UpdateSuggestions(); // the list shown while typing "@" plus at least one letter
+	void ApplySuggestion(int row);
+	void HideSuggestions();
 	void LearnOwnName(const ChatMessage &message);
 	void UpdateMentionNames();
 	void RegisterIcons();
@@ -138,6 +145,7 @@ private:
 	QTextBrowser *view_;
 	QWidget *replyBar_;
 	QLabel *replyLabel_;
+	QListWidget *suggestions_; // floats above the input; never takes focus from it
 	QLineEdit *input_;
 	TargetSwitch *target_;
 };
