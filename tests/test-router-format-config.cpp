@@ -126,6 +126,36 @@ TEST_CASE("FormatMessageHtml puts a star after the platform icons on your own li
 	CHECK(FormatMessageHtml(theirs, 16).find(kSelfBadgeResource) == std::string::npos);
 }
 
+TEST_CASE("Other people's names are mention links; your own isn't")
+{
+	ChatMessage viewer{Platform::Twitch, "m1", "Dezad", "hi"};
+	viewer.mention = "dezad";
+	auto html = FormatMessageHtml(viewer, 16);
+	CHECK(html.find("<a href=\"unified-chat://mention/twitch/dezad/m1\"") != std::string::npos);
+	CHECK(html.find(">Dezad</span></a>") != std::string::npos);
+
+	ChatMessage mine = viewer;
+	mine.isSelf = true;
+	CHECK(FormatMessageHtml(mine, 16).find("<a ") == std::string::npos);
+
+	ChatMessage noMention{Platform::YouTube, "y1", "Someone", "hi"};
+	CHECK(FormatMessageHtml(noMention, 16).find("<a ") == std::string::npos);
+}
+
+TEST_CASE("Replies show who they answer between the name and the text")
+{
+	ChatMessage reply{Platform::Twitch, "m2", "Viewer", "welcome back"};
+	reply.mention = "viewer";
+	reply.replyTo = "<Dezad>";
+	auto html = FormatMessageHtml(reply, 16);
+	auto name = html.find(">Viewer</span>");
+	auto marker = html.find("\xE2\x86\x92 @&lt;Dezad&gt;");
+	auto text = html.find(": welcome back");
+	REQUIRE(marker != std::string::npos);
+	CHECK(name < marker);
+	CHECK(marker < text);
+}
+
 TEST_CASE("FormatNoticeHtml escapes")
 {
 	CHECK(FormatNoticeHtml("<x>").find("&lt;x&gt;") != std::string::npos);

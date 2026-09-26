@@ -29,9 +29,12 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include <QDateTime>
 #include <QHBoxLayout>
+#include <QKeyEvent>
+#include <QLabel>
 #include <QLineEdit>
 #include <QScrollBar>
 #include <QTextBlock>
+#include <QTextBlockFormat>
 #include <QTextBrowser>
 #include <QTextCursor>
 #include <QTextDocument>
@@ -111,6 +114,21 @@ ChatDock::ChatDock(QWidget *parent) : QWidget(parent)
 	view_->document()->setDocumentMargin(4);
 	layout->addWidget(view_, 1);
 
+	// Shown while a Twitch reply is being written.
+	replyBar_ = new QWidget(this);
+	auto replyLayout = new QHBoxLayout(replyBar_);
+	replyLayout->setContentsMargins(0, 0, 0, 0);
+	replyLabel_ = new QLabel(replyBar_);
+	auto replyCancel = new QToolButton(replyBar_);
+	replyCancel->setText(QStringLiteral("✕"));
+	replyCancel->setAutoRaise(true);
+	replyCancel->setToolTip(Text("Reply.Cancel"));
+	replyLayout->addWidget(replyLabel_, 1);
+	replyLayout->addWidget(replyCancel);
+	replyBar_->hide();
+	layout->addWidget(replyBar_);
+	connect(replyCancel, &QToolButton::clicked, this, [this]() { SetReply(std::nullopt); });
+
 	auto footer = new QHBoxLayout();
 	input_ = new QLineEdit(this);
 	input_->setMaxLength(500);
@@ -128,8 +146,12 @@ ChatDock::ChatDock(QWidget *parent) : QWidget(parent)
 	RegisterIcons();
 
 	connect(input_, &QLineEdit::returnPressed, this, &ChatDock::SendCurrent);
+	input_->installEventFilter(this); // "@" + Tab completion
+	connect(view_, &QTextBrowser::anchorClicked, this, &ChatDock::OnLinkClicked);
 	connect(target_, &TargetSwitch::TargetChanged, this, [this]() {
 		config_.sendTarget = target_->Target();
+		if (config_.sendTarget != SendTarget::Twitch)
+			SetReply(std::nullopt);
 		UpdatePlaceholder();
 		SaveConfig();
 	});
@@ -195,6 +217,7 @@ void ChatDock::LoadConfig()
 	target_->SetTarget(config_.sendTarget);
 	view_->document()->setMaximumBlockCount(config_.maxMessages);
 	botMerger_.SetBots(config_.mergeBots);
+	UpdateMentionNames();
 	UpdatePlaceholder();
 }
 
@@ -235,8 +258,10 @@ ConnectionCallbacks ChatDock::MakeCallbacks(Platform platform)
 			[this, platform, token, login]() {
 				if (platform == Platform::Twitch) {
 					config_.twitchToken = token;
-					if (!login.empty())
+					if (!login.empty() && login != config_.twitchLogin) {
 						config_.twitchLogin = login;
+						UpdateMentionNames();
+					}
 				} else {
 					config_.youtubeToken = token;
 				}
@@ -318,6 +343,7 @@ void ChatDock::OpenSettings()
 	config_ = result;
 	view_->document()->setMaximumBlockCount(config_.maxMessages);
 	botMerger_.SetBots(config_.mergeBots);
+	UpdateMentionNames();
 	SaveConfig();
 	if (started_) {
 		// The dock already shows this chat up to now; a fresh connection shouldn't replay it.
@@ -354,34 +380,43 @@ void ChatDock::SendCurrent()
 	uint64_t sendId = merger_.Begin(plan.targets, QDateTime::currentMSecsSinceEpoch());
 	ScheduleEchoTimer();
 	for (Platform platform : plan.targets) {
-		if (platform == Platform::Twitch && twitch_)
-			twitch_->Send(plan.text, sendId);
-		else if (platform == Platform::YouTube && youtube_)
+		if (platform == Platform::Twitch && twitch_) {
+			if (reply_)
+				twitch_->Send(plan.text, sendId, reply_->messageId, reply_->mention);
+			else
+				twitch_->Send(plan.text, sendId);
+		} else if (platform == Platform::YouTube && youtube_) {
 			youtube_->Send(plan.text, sendId);
-		else
+		} else {
 			AppendLines(merger_.Fail(sendId, platform));
+		}
 	}
 	input_->clear();
+	SetReply(std::nullopt);
 }
 
-void ChatDock::AppendHtml(const QStringList &lines, const std::vector<int> &lineIds)
+void ChatDock::AppendHtml(const std::vector<HtmlLine> &lines)
 {
-	if (lines.isEmpty())
+	if (lines.empty())
 		return;
 
 	QScrollBar *bar = view_->verticalScrollBar();
 	const bool atBottom = bar->value() >= bar->maximum() - 4;
 
+	QTextBlockFormat highlighted;
+	highlighted.setBackground(highlightColor_);
+
 	// The document relayouts the changed range and trims to the maximum block count once, at endEditBlock.
 	QTextCursor cursor(view_->document());
 	cursor.movePosition(QTextCursor::End);
 	cursor.beginEditBlock();
-	for (qsizetype i = 0; i < lines.size(); ++i) {
+	for (const auto &line : lines) {
 		if (!empty_)
 			cursor.insertBlock();
-		cursor.insertHtml(lines[i]);
-		if ((size_t)i < lineIds.size())
-			cursor.block().setUserState(lineIds[(size_t)i]);
+		// A new block inherits the previous block's format, so set it every time.
+		cursor.setBlockFormat(line.highlight ? highlighted : QTextBlockFormat());
+		cursor.insertHtml(line.html);
+		cursor.block().setUserState(line.lineId);
 		empty_ = false;
 	}
 	cursor.endEditBlock();
@@ -435,41 +470,167 @@ void ChatDock::AppendLines(const std::vector<DisplayLine> &lines)
 	if (backgroundStale_) {
 		backgroundStale_ = false;
 		view_->ensurePolished();
+		const QColor base = view_->palette().color(QPalette::Base);
 		const std::string previous = nameColors_.Background();
-		nameColors_.SetBackground(view_->palette().color(QPalette::Base).name().toStdString());
+		nameColors_.SetBackground(base.name().toStdString());
 		if (nameColors_.Background() != previous)
 			obs_log(LOG_INFO, "name colors: chat background is %s", nameColors_.Background().c_str());
+		// A step lighter on dark themes, darker on light ones: visible, but names stay readable.
+		highlightColor_ = base.lightness() < 128 ? base.lighter(140) : base.darker(112);
 	}
 	auto format = [this](const DisplayLine &line) {
 		return QString::fromStdString(FormatMessageHtml(line.message, iconSize_, line.platforms, &nameColors_));
 	};
 
 	const int64_t now = QDateTime::currentMSecsSinceEpoch();
-	QStringList html;
-	std::vector<int> lineIds;
-	html.reserve((qsizetype)lines.size());
-	lineIds.reserve(lines.size());
+	std::vector<HtmlLine> html;
+	html.reserve(lines.size());
 	for (const auto &line : lines) {
+		const ChatMessage &message = line.message;
+		if (message.isSelf)
+			LearnOwnName(message);
+		else
+			chatters_.Add(message.platform, message.mention);
+		const bool highlight = !message.isSelf && !mentions_.Empty() && mentions_.Matches(message.text);
+
 		int lineId = -1;
-		if (line.platforms.size() == 1 && botMerger_.IsBot(line.message.author)) {
+		if (line.platforms.size() == 1 && botMerger_.IsBot(message.author)) {
 			// A bot's copy of a line already shown for the other platform: add the icon to that line.
-			if (auto merged = botMerger_.Match(line.message, now)) {
+			if (auto merged = botMerger_.Match(message, now)) {
 				QString mergedHtml = format(merged->line);
-				if (ReplaceLine(merged->lineId, mergedHtml))
-					continue;
-				html.append(mergedHtml);
-				lineIds.push_back(-1);
+				if (!ReplaceLine(merged->lineId, mergedHtml))
+					html.push_back({mergedHtml, -1, highlight});
 				continue;
 			}
 			lineId = nextLineId_;
 			nextLineId_ = nextLineId_ == (std::numeric_limits<int>::max)() ? 1 : nextLineId_ + 1;
-			botMerger_.Remember(line.message, lineId, now);
+			botMerger_.Remember(message, lineId, now);
 		}
-		html.append(format(line));
-		lineIds.push_back(lineId);
+		html.push_back({format(line), lineId, highlight});
 	}
-	AppendHtml(html, lineIds);
+	AppendHtml(html);
 	ScheduleEchoTimer();
+}
+
+void ChatDock::LearnOwnName(const ChatMessage &message)
+{
+	// Your YouTube handle/name isn't configured anywhere; your own messages reveal it (a sent echo may carry
+	// the channel title, a polled one the handle), so keep a few spellings for mention highlighting.
+	if (message.platform != Platform::YouTube || message.mention.empty())
+		return;
+	if (std::find(ownYouTubeNames_.begin(), ownYouTubeNames_.end(), message.mention) != ownYouTubeNames_.end())
+		return;
+	if (ownYouTubeNames_.size() >= 4)
+		ownYouTubeNames_.erase(ownYouTubeNames_.begin());
+	ownYouTubeNames_.push_back(message.mention);
+	UpdateMentionNames();
+}
+
+void ChatDock::UpdateMentionNames()
+{
+	std::vector<std::string> names = ownYouTubeNames_;
+	if (!config_.twitchLogin.empty())
+		names.push_back(config_.twitchLogin);
+	mentions_.SetNames(names);
+}
+
+void ChatDock::SetTarget(SendTarget target)
+{
+	if (target_->Target() == target)
+		return;
+	target_->SetTarget(target);
+	config_.sendTarget = target;
+	if (target != SendTarget::Twitch)
+		SetReply(std::nullopt);
+	UpdatePlaceholder();
+	SaveConfig();
+}
+
+void ChatDock::SetReply(std::optional<PendingReply> reply)
+{
+	reply_ = std::move(reply);
+	if (reply_)
+		replyLabel_->setText(Text("Reply.To").arg(QString::fromStdString(reply_->mention)));
+	replyBar_->setVisible(reply_.has_value());
+}
+
+void ChatDock::OnLinkClicked(const QUrl &url)
+{
+	auto link = ParseMentionLink(url.toString(QUrl::FullyEncoded).toStdString());
+	if (!link)
+		return;
+
+	// Talk to them where they are: a Twitch name must never go to YouTube and vice versa.
+	SetTarget(link->platform == Platform::Twitch ? SendTarget::Twitch : SendTarget::YouTube);
+
+	const QString mention = QStringLiteral("@") + QString::fromStdString(link->mention) + QLatin1Char(' ');
+	QString text = input_->text();
+	if (!text.contains(mention.trimmed(), Qt::CaseInsensitive)) {
+		if (!text.isEmpty() && !text.endsWith(QLatin1Char(' ')))
+			text += QLatin1Char(' ');
+		text = text.isEmpty() ? mention : text + mention;
+		input_->setText(text);
+	}
+	input_->setCursorPosition((int)input_->text().size());
+
+	// Twitch can thread the answer under that message; YouTube has no replies.
+	if (link->platform == Platform::Twitch && !link->messageId.empty())
+		SetReply(PendingReply{link->messageId, link->mention});
+	else
+		SetReply(std::nullopt);
+	input_->setFocus();
+}
+
+bool ChatDock::CompleteMention()
+{
+	const QString text = input_->text();
+	const int cursor = input_->cursorPosition();
+	const bool continuing = !completions_.empty() && cursor == completionEnd_;
+
+	if (!continuing) {
+		int start = cursor;
+		while (start > 0 && !text[start - 1].isSpace())
+			--start;
+		const QString word = text.mid(start, cursor - start);
+		if (!word.startsWith(QLatin1Char('@')))
+			return false;
+
+		std::optional<Platform> only;
+		if (target_->Target() == SendTarget::Twitch)
+			only = Platform::Twitch;
+		else if (target_->Target() == SendTarget::YouTube)
+			only = Platform::YouTube;
+		completions_ = chatters_.Complete(word.mid(1).toStdString(), only);
+		if (completions_.empty())
+			return true; // an "@word" with no match: keep focus in the input
+		completionIndex_ = 0;
+		completionStart_ = start;
+		completionEnd_ = cursor;
+	} else {
+		completionIndex_ = (completionIndex_ + 1) % completions_.size();
+	}
+
+	const auto &entry = completions_[completionIndex_];
+	const QString replacement = QStringLiteral("@") + QString::fromStdString(entry.mention) + QLatin1Char(' ');
+	input_->setText(text.left(completionStart_) + replacement + text.mid(completionEnd_));
+	completionEnd_ = completionStart_ + (int)replacement.size();
+	input_->setCursorPosition(completionEnd_);
+
+	// On Both, completing a name picks that person's platform, as clicking it would.
+	if (target_->Target() == SendTarget::Both)
+		SetTarget(entry.platform == Platform::Twitch ? SendTarget::Twitch : SendTarget::YouTube);
+	return true;
+}
+
+bool ChatDock::eventFilter(QObject *watched, QEvent *event)
+{
+	if (watched == input_ && event->type() == QEvent::KeyPress) {
+		auto key = static_cast<QKeyEvent *>(event);
+		if (key->key() == Qt::Key_Tab && key->modifiers() == Qt::NoModifier)
+			return CompleteMention() || QWidget::eventFilter(watched, event);
+		completions_.clear(); // any other key ends a completion cycle
+	}
+	return QWidget::eventFilter(watched, event);
 }
 
 void ChatDock::changeEvent(QEvent *event)
@@ -481,7 +642,7 @@ void ChatDock::changeEvent(QEvent *event)
 
 void ChatDock::AppendNotice(const QString &text)
 {
-	AppendHtml({QString::fromStdString(FormatNoticeHtml(text.toStdString()))});
+	AppendHtml({{QString::fromStdString(FormatNoticeHtml(text.toStdString()))}});
 }
 
 void ChatDock::SetLinkState(Platform platform, LinkState state)

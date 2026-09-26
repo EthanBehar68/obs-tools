@@ -21,19 +21,24 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "core/chat-config.hpp"
 #include "core/bot-merger.hpp"
 #include "core/echo-merger.hpp"
+#include "core/mentions.hpp"
 #include "core/name-color.hpp"
 #include "net/twitch-connection.hpp"
 #include "net/youtube-connection.hpp"
 
-#include <QStringList>
+#include <QColor>
+#include <QString>
 #include <QWidget>
 
 #include <memory>
+#include <optional>
 
+class QLabel;
 class QLineEdit;
 class QTextBrowser;
 class QTimer;
 class QToolButton;
+class QUrl;
 
 namespace unified_chat {
 
@@ -53,8 +58,21 @@ public:
 
 protected:
 	void changeEvent(QEvent *event) override;
+	bool eventFilter(QObject *watched, QEvent *event) override;
 
 private:
+	struct HtmlLine {
+		QString html;
+		int lineId = -1;        // tags the line so ReplaceLine can find it later
+		bool highlight = false; // mentions you
+	};
+
+	// A Twitch reply being written: the message it answers.
+	struct PendingReply {
+		std::string messageId;
+		std::string mention;
+	};
+
 	void LoadConfig();
 	void SaveConfig();
 	void Connect();
@@ -68,11 +86,18 @@ private:
 	void ScheduleEchoTimer();
 	void AppendNotice(const QString &text);
 	// Inserts all lines in one edit block, so the view lays out and scrolls once per batch.
-	// lineIds[i], when given and not -1, tags line i so ReplaceLine can find it later.
-	void AppendHtml(const QStringList &lines, const std::vector<int> &lineIds = {});
+	void AppendHtml(const std::vector<HtmlLine> &lines);
 	bool ReplaceLine(int lineId, const QString &html);
 	void SetLinkState(Platform platform, LinkState state);
 	void UpdatePlaceholder();
+
+	// Mentions and replies
+	void OnLinkClicked(const QUrl &url);
+	void SetTarget(SendTarget target);
+	void SetReply(std::optional<PendingReply> reply);
+	bool CompleteMention(); // "@" + Tab; returns false when there's nothing to complete
+	void LearnOwnName(const ChatMessage &message);
+	void UpdateMentionNames();
 	void RegisterIcons();
 	ConnectionCallbacks MakeCallbacks(Platform platform);
 
@@ -92,12 +117,25 @@ private:
 	BotMerger botMerger_;
 	int nextLineId_ = 1;
 	bool backgroundStale_ = true; // the theme's stylesheet sets the view's real background at polish time
+	QColor highlightColor_;
+
+	MentionMatcher mentions_;
+	std::vector<std::string> ownYouTubeNames_; // learned from your own YouTube messages
+	RecentChatters chatters_;
+	std::optional<PendingReply> reply_;
+	// Tab completion in progress: candidates, which one is shown, and the text range it occupies.
+	std::vector<RecentChatters::Entry> completions_;
+	size_t completionIndex_ = 0;
+	int completionStart_ = 0;
+	int completionEnd_ = 0;
 
 	QToolButton *twitchStatus_;
 	QToolButton *youtubeStatus_;
 	QToolButton *clearButton_;
 	QToolButton *settingsButton_;
 	QTextBrowser *view_;
+	QWidget *replyBar_;
+	QLabel *replyLabel_;
 	QLineEdit *input_;
 	TargetSwitch *target_;
 };

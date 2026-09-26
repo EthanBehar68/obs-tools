@@ -74,6 +74,8 @@ static std::optional<ChatMessage> MessageFromItem(const json &item, std::string_
 	chat.platform = Platform::YouTube;
 	chat.id = StringAt(item, {"id"});
 	chat.author = StringAt(item, {"authorDetails", "displayName"});
+	// Live chat shows @handles (since late 2025) and displayName appears to carry them; a mention is "@handle".
+	chat.mention = chat.author.rfind('@', 0) == 0 ? chat.author.substr(1) : chat.author;
 	chat.text = StringAt(item, {"snippet", "displayMessage"});
 	if (chat.text.empty())
 		chat.text = StringAt(item, {"snippet", "textMessageDetails", "messageText"});

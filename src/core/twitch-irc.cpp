@@ -19,6 +19,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "twitch-irc.hpp"
 #include "text-util.hpp"
 
+#include <algorithm>
 #include <json.hpp>
 
 namespace unified_chat::twitch {
@@ -206,6 +207,20 @@ std::vector<std::string> IrcSession::Start()
 	return lines;
 }
 
+// Replies often start with "@parent "; the reply marker already names them, so don't repeat it.
+static void DropLeadingMention(std::string &text, std::string_view login, std::string_view displayName)
+{
+	for (std::string_view name : {login, displayName}) {
+		if (name.empty() || text.size() < name.size() + 2 || text[0] != '@')
+			continue;
+		if (ToLower(std::string_view(text).substr(1, name.size())) != ToLower(name) ||
+		    text[name.size() + 1] != ' ')
+			continue;
+		text.erase(0, name.size() + 2);
+		return;
+	}
+}
+
 void IrcSession::HandleLine(std::string_view line, SessionOutput &out)
 {
 	auto parsed = ParseIrcLine(line);
@@ -223,6 +238,7 @@ void IrcSession::HandleLine(std::string_view line, SessionOutput &out)
 		chat.author = msg.Tag("display-name");
 		if (chat.author.empty())
 			chat.author = std::string(msg.Nick());
+		chat.mention = std::string(msg.Nick());
 		chat.color = SanitizeColor(msg.Tag("color"));
 		chat.text = msg.params[1];
 		if (chat.text.rfind(kActionPrefix, 0) == 0) {
@@ -230,6 +246,11 @@ void IrcSession::HandleLine(std::string_view line, SessionOutput &out)
 			chat.text.erase(0, kActionPrefix.size());
 			if (!chat.text.empty() && chat.text.back() == '\x01')
 				chat.text.pop_back();
+		}
+		if (const auto &parentLogin = msg.Tag("reply-parent-user-login"); !parentLogin.empty()) {
+			const auto &parentName = msg.Tag("reply-parent-display-name");
+			chat.replyTo = parentName.empty() ? parentLogin : parentName;
+			DropLeadingMention(chat.text, parentLogin, parentName);
 		}
 		chat.isSelf = msg.Nick() == nick_;
 		out.messages.push_back(std::move(chat));
@@ -261,27 +282,43 @@ void IrcSession::HandleLine(std::string_view line, SessionOutput &out)
 	}
 }
 
-std::optional<std::string> IrcSession::BuildPrivmsg(std::string_view text) const
+static bool IsMessageIdChar(char c)
+{
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-';
+}
+
+std::optional<std::string> IrcSession::BuildPrivmsg(std::string_view text, std::string_view replyParentId) const
 {
 	std::string body = Trim(StripLineBreaks(text));
 	if (body.empty() || channel_.empty())
 		return std::nullopt;
 	if (body.rfind("/me ", 0) == 0)
 		body = std::string(kActionPrefix) + body.substr(4) + "\x01";
-	return "PRIVMSG #" + channel_ + " :" + body;
+
+	// Message IDs are UUIDs; anything else is dropped rather than risk breaking the tag syntax.
+	std::string tags;
+	if (!replyParentId.empty() && replyParentId.size() <= 64 &&
+	    std::all_of(replyParentId.begin(), replyParentId.end(), IsMessageIdChar))
+		tags = "@reply-parent-msg-id=" + std::string(replyParentId) + " ";
+	return tags + "PRIVMSG #" + channel_ + " :" + body;
 }
 
-ChatMessage IrcSession::LocalEcho(std::string_view text) const
+ChatMessage IrcSession::LocalEcho(std::string_view text, std::string_view replyTo) const
 {
 	ChatMessage chat;
 	chat.platform = Platform::Twitch;
 	chat.author = displayName_.empty() ? login_ : displayName_;
+	chat.mention = login_;
 	chat.color = color_;
 	chat.isSelf = true;
 	chat.text = Trim(StripLineBreaks(text));
 	if (chat.text.rfind("/me ", 0) == 0) {
 		chat.isAction = true;
 		chat.text.erase(0, 4);
+	}
+	if (!replyTo.empty()) {
+		chat.replyTo = std::string(replyTo);
+		DropLeadingMention(chat.text, replyTo, {});
 	}
 	return chat;
 }

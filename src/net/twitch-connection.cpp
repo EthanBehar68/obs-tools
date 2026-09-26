@@ -170,11 +170,11 @@ void TwitchConnection::Wake()
 #endif
 }
 
-void TwitchConnection::Send(std::string text, uint64_t sendId)
+void TwitchConnection::Send(std::string text, uint64_t sendId, std::string replyParentId, std::string replyTo)
 {
 	{
 		std::lock_guard lock(mutex_);
-		outgoing_.push_back({std::move(text), sendId});
+		outgoing_.push_back({std::move(text), sendId, std::move(replyParentId), std::move(replyTo)});
 	}
 	Wake();
 }
@@ -289,7 +289,7 @@ void TwitchConnection::RunSession(void *handle)
 				failed();
 				continue;
 			}
-			auto line = session.BuildPrivmsg(outgoing.text);
+			auto line = session.BuildPrivmsg(outgoing.text, outgoing.replyParentId);
 			if (!line) {
 				failed();
 				continue;
@@ -300,7 +300,7 @@ void TwitchConnection::RunSession(void *handle)
 				return;
 			}
 			if (callbacks_.onMessages) {
-				ChatMessage echo = session.LocalEcho(outgoing.text);
+				ChatMessage echo = session.LocalEcho(outgoing.text, outgoing.replyTo);
 				echo.sendId = outgoing.sendId;
 				callbacks_.onMessages({std::move(echo)});
 			}

@@ -17,6 +17,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
 #include "chat-format.hpp"
+#include "mentions.hpp"
 #include "name-color.hpp"
 #include "text-util.hpp"
 
@@ -53,7 +54,18 @@ std::string FormatMessageHtml(const ChatMessage &message, int iconSize, const st
 		html += "<img src=\"" + std::string(IconResource(platform)) + imageSize;
 	if (message.isSelf)
 		html += "<img src=\"" + std::string(kSelfBadgeResource) + imageSize;
-	html += "<span style=\"color: " + color + "; font-weight: bold;\">" + HtmlEscape(message.author) + "</span>";
+	const std::string name =
+		"<span style=\"color: " + color + "; font-weight: bold;\">" + HtmlEscape(message.author) + "</span>";
+	// Other people's names are links: clicking one starts a mention (and on Twitch, a reply). The inner span
+	// keeps the name color instead of the palette's link color.
+	if (!message.isSelf && !message.mention.empty())
+		html += "<a href=\"" + HtmlEscape(BuildMentionLink(message.platform, message.mention, message.id)) +
+			"\" style=\"text-decoration: none;\">" + name + "</a>";
+	else
+		html += name;
+
+	if (!message.replyTo.empty())
+		html += " <span style=\"color: #9a9a9a;\">\xE2\x86\x92 @" + HtmlEscape(message.replyTo) + "</span>";
 
 	if (message.isAction)
 		html += " <span style=\"color: " + color + "; font-style: italic;\">" + HtmlEscape(message.text) +

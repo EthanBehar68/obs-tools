@@ -90,6 +90,12 @@ If YouTube goes live some other way (another app, or a multistream output with a
   - Twitch allows 500 characters and YouTube allows 200. If a message is too long for any selected platform, nothing is sent and the text stays in the box so you can shorten it.
   - If one selected platform is disconnected, the message still goes to the other and the dock notes which one was skipped.
   - `/me waves` sends a Twitch action (shown in italics).
+- **Tagging people:**
+  - **Click a name** in the chat to start a message to that person. `@name ` goes into the input, and the target switches to their platform, so a Twitch name never goes to YouTube and vice versa.
+  - For a **Twitch** message, the reply is threaded under that message on Twitch, and a *Replying to @name* bar appears above the input. Click **✕** on the bar to send a plain mention instead. YouTube has no replies, so there it's a plain `@handle` mention.
+  - **Type `@` and part of a name, then press Tab** to complete it from people who've chatted recently. Press Tab again to cycle through matches. With the target on Both, completing a name switches to that person's platform.
+  - Twitch replies from others show who they answer: `Viewer → @Dezad: welcome back`.
+  - **Messages that mention you** (your Twitch login or YouTube name) get a tinted background.
 - **Clear** empties the view. **Messages to keep** in Settings caps how much history the dock holds (default 500).
 - System notices (connection changes, subscriptions and raids, errors) appear as grey italic lines.
 

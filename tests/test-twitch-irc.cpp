@@ -185,6 +185,52 @@ TEST_CASE("BuildPrivmsg sanitizes and supports /me")
 	CHECK(session.LocalEcho("/me dances").isAction);
 }
 
+TEST_CASE("Messages carry the login to mention the author by")
+{
+	IrcSession session("streamer", "", "");
+	SessionOutput out;
+	session.HandleLine("@display-name=\xE3\x81\x82\xE3\x81\x84;id=m1 :aiko_jp!aiko_jp@aiko_jp.tmi.twitch.tv "
+			   "PRIVMSG #streamer :hi",
+			   out);
+	REQUIRE(out.messages.size() == 1);
+	CHECK(out.messages[0].author == "\xE3\x81\x82\xE3\x81\x84"); // localized display name
+	CHECK(out.messages[0].mention == "aiko_jp");
+	CHECK(out.messages[0].replyTo.empty());
+}
+
+TEST_CASE("Incoming replies name their parent and drop the repeated leading @mention")
+{
+	IrcSession session("streamer", "", "");
+	SessionOutput out;
+	session.HandleLine(
+		"@display-name=Viewer;id=m2;reply-parent-msg-id=m1;reply-parent-user-login=dezad;"
+		"reply-parent-display-name=Dezad;reply-parent-msg-body=hello :viewer!viewer@viewer.tmi.twitch.tv "
+		"PRIVMSG #streamer :@Dezad welcome back",
+		out);
+	session.HandleLine("@display-name=Other;id=m3;reply-parent-user-login=dezad :other!other@other.tmi.twitch.tv "
+			   "PRIVMSG #streamer :@someoneelse hi",
+			   out);
+	REQUIRE(out.messages.size() == 2);
+	CHECK(out.messages[0].replyTo == "Dezad");
+	CHECK(out.messages[0].text == "welcome back");
+	CHECK(out.messages[1].replyTo == "dezad"); // no display name: the login
+	CHECK(out.messages[1].text == "@someoneelse hi");
+}
+
+TEST_CASE("BuildPrivmsg sends threaded replies and refuses unsafe parent ids")
+{
+	IrcSession session("streamer", "me", "token");
+	CHECK(session.BuildPrivmsg("@dezad hi", "885196de-cb67-427a-baa8-82f9b0fcd05f") ==
+	      "@reply-parent-msg-id=885196de-cb67-427a-baa8-82f9b0fcd05f PRIVMSG #streamer :@dezad hi");
+	CHECK(session.BuildPrivmsg("hi", "bad id;x=y") == "PRIVMSG #streamer :hi");
+	CHECK(session.BuildPrivmsg("hi", "") == "PRIVMSG #streamer :hi");
+
+	auto echo = session.LocalEcho("@dezad hi", "dezad");
+	CHECK(echo.replyTo == "dezad");
+	CHECK(echo.text == "hi");
+	CHECK(echo.mention == "me");
+}
+
 TEST_CASE("ParseValidateLogin reads the login")
 {
 	CHECK(ParseValidateLogin(R"({"client_id":"c","login":"mychannel","scopes":["chat:read"],"expires_in":5000})") ==

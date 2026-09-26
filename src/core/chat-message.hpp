@@ -36,6 +36,9 @@ struct ChatMessage {
 	bool isSelf = false;
 	uint64_t sendId = 0;  // set on local echoes of a message sent from the dock
 	int64_t postedAt = 0; // unix seconds when the platform says it was posted; 0 = unknown
+	// New fields go at the end so positional initialization elsewhere keeps its meaning.
+	std::string mention; // what to type after '@' to mention the author: Twitch login, YouTube handle
+	std::string replyTo; // for a reply, the display name of the message it answers
 };
 
 inline std::string_view PlatformName(Platform platform)

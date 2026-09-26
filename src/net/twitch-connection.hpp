@@ -48,6 +48,8 @@ struct ConnectionCallbacks {
 struct OutgoingMessage {
 	std::string text;
 	uint64_t sendId = 0;
+	std::string replyParentId; // Twitch only: id of the message this answers
+	std::string replyTo;       // its author's display name, for the local echo
 };
 
 // Owns a worker thread holding one Twitch IRC connection (TLS via libcurl CONNECT_ONLY).
@@ -61,8 +63,9 @@ public:
 	TwitchConnection(const TwitchConnection &) = delete;
 	TwitchConnection &operator=(const TwitchConnection &) = delete;
 
-	// sendId is copied onto the local echo so the dock can match it up.
-	void Send(std::string text, uint64_t sendId = 0);
+	// sendId is copied onto the local echo so the dock can match it up. With replyParentId the message is sent
+	// as a threaded reply to that message.
+	void Send(std::string text, uint64_t sendId = 0, std::string replyParentId = {}, std::string replyTo = {});
 
 private:
 	void Run();

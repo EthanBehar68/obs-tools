@@ -83,8 +83,9 @@ public:
 	bool CanSend() const { return IsAuthenticated() && joined_; }
 	const std::string &Channel() const { return channel_; }
 
-	std::optional<std::string> BuildPrivmsg(std::string_view text) const;
-	ChatMessage LocalEcho(std::string_view text) const;
+	// With replyParentId (the id tag of a received message), sends a threaded Twitch reply to it.
+	std::optional<std::string> BuildPrivmsg(std::string_view text, std::string_view replyParentId = {}) const;
+	ChatMessage LocalEcho(std::string_view text, std::string_view replyTo = {}) const;
 
 private:
 	std::string channel_;
