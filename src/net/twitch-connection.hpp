@@ -38,6 +38,8 @@ enum class LinkState { Disconnected, Standby, Connecting, ReadOnly, Connected };
 struct ConnectionCallbacks {
 	// Messages that arrived together (one socket read or one poll), in order.
 	std::function<void(std::vector<ChatMessage>)> onMessages;
+	// A deletion, timeout, ban or chat clear; always after the messages that arrived before it.
+	std::function<void(ModerationEvent)> onModeration;
 	std::function<void(const std::string &)> onNotice;
 	std::function<void(LinkState)> onState;
 	std::function<void(const oauth::Token &, const std::string &login)> onTokenChanged;

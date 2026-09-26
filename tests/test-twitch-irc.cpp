@@ -231,6 +231,47 @@ TEST_CASE("BuildPrivmsg sends threaded replies and refuses unsafe parent ids")
 	CHECK(echo.mention == "me");
 }
 
+TEST_CASE("Moderation: deleted messages, timeouts, bans and chat clears")
+{
+	IrcSession session("streamer", "", "");
+	SessionOutput out;
+	session.HandleLine("@login=dezad;room-id=1;target-msg-id=885196de-cb67-427a-baa8-82f9b0fcd05f;tmi-sent-ts=1 "
+			   ":tmi.twitch.tv CLEARMSG #streamer :buy followers",
+			   out);
+	session.HandleLine("@ban-duration=600;room-id=1;target-user-id=42;tmi-sent-ts=2 "
+			   ":tmi.twitch.tv CLEARCHAT #streamer :trollguy",
+			   out);
+	session.HandleLine("@room-id=1;target-user-id=43;tmi-sent-ts=3 :tmi.twitch.tv CLEARCHAT #streamer :spammer",
+			   out);
+	session.HandleLine("@room-id=1;tmi-sent-ts=4 :tmi.twitch.tv CLEARCHAT #streamer", out);
+	REQUIRE(out.moderation.size() == 4);
+	CHECK(out.messages.empty());
+
+	CHECK(out.moderation[0].kind == ModerationEvent::Kind::DeleteMessage);
+	CHECK(out.moderation[0].messageId == "885196de-cb67-427a-baa8-82f9b0fcd05f");
+	CHECK(out.moderation[0].userLogin == "dezad");
+
+	CHECK(out.moderation[1].kind == ModerationEvent::Kind::RemoveUser);
+	CHECK(out.moderation[1].userLogin == "trollguy");
+	CHECK(out.moderation[1].userId == "42");
+	CHECK(out.moderation[1].durationSeconds == 600);
+
+	CHECK(out.moderation[2].kind == ModerationEvent::Kind::RemoveUser);
+	CHECK(out.moderation[2].durationSeconds == 0); // no duration: a ban
+
+	CHECK(out.moderation[3].kind == ModerationEvent::Kind::ClearChat);
+}
+
+TEST_CASE("Messages carry the author's user id")
+{
+	IrcSession session("streamer", "", "");
+	SessionOutput out;
+	session.HandleLine(
+		"@display-name=Viewer;id=m1;user-id=42 :viewer!viewer@viewer.tmi.twitch.tv PRIVMSG #streamer :hi", out);
+	REQUIRE(out.messages.size() == 1);
+	CHECK(out.messages[0].authorId == "42");
+}
+
 TEST_CASE("ParseValidateLogin reads the login")
 {
 	CHECK(ParseValidateLogin(R"({"client_id":"c","login":"mychannel","scopes":["chat:read"],"expires_in":5000})") ==

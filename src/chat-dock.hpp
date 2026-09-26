@@ -36,6 +36,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 class QLabel;
 class QLineEdit;
 class QListWidget;
+class QTextBlock;
 class QTextBrowser;
 class QTimer;
 class QToolButton;
@@ -44,6 +45,7 @@ class QUrl;
 namespace unified_chat {
 
 class TargetSwitch;
+struct ModerationTag;
 
 class ChatDock : public QWidget {
 	Q_OBJECT
@@ -62,10 +64,26 @@ protected:
 	bool eventFilter(QObject *watched, QEvent *event) override;
 
 private:
+	// What a chat line is, for moderation: which platforms it's on, which message, whose, and where its text is.
+	struct LineInfo {
+		bool twitch = false;
+		bool youtube = false;
+		std::string messageId; // of the message's own platform
+		std::string login;     // lower case, Twitch
+		std::string authorId;
+		std::string author; // display name, for notices
+		int textLength = 0; // UTF-16 length of the message text, which ends the line
+		int severity = 0;   // of the moderation tag shown, 0 = none
+		int tagLength = 0;  // UTF-16 length of that tag, which follows the text
+	};
+
+	struct LineData; // QTextBlockUserData holding a LineInfo; owned by its text block
+
 	struct HtmlLine {
 		QString html;
-		int lineId = -1;        // tags the line so ReplaceLine can find it later
-		bool highlight = false; // mentions you
+		int lineId = -1;              // tags the line so ReplaceLine can find it later
+		bool highlight = false;       // mentions you
+		std::optional<LineInfo> info; // chat lines only, not notices
 	};
 
 	// A Twitch reply being written: the message it answers.
@@ -88,7 +106,11 @@ private:
 	void AppendNotice(const QString &text);
 	// Inserts all lines in one edit block, so the view lays out and scrolls once per batch.
 	void AppendHtml(const std::vector<HtmlLine> &lines);
-	bool ReplaceLine(int lineId, const QString &html);
+	bool ReplaceLine(int lineId, const QString &html, const DisplayLine &line);
+	static LineInfo MakeLineInfo(const DisplayLine &line);
+	// Strikes the matching lines through, tags them and, for timeouts, bans and clears, adds a notice.
+	void ApplyModeration(const ModerationEvent &event);
+	static void StrikeLine(const QTextBlock &block, LineInfo &info, const ModerationTag &tag);
 	void SetLinkState(Platform platform, LinkState state);
 	void UpdatePlaceholder();
 

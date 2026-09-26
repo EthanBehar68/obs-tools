@@ -40,6 +40,9 @@ std::string HtmlEscape(std::string_view text);
 // Returns a normalized "#rrggbb" color, or an empty string when the input is not a hex color.
 std::string SanitizeColor(std::string_view color);
 
+// 600 -> "10 minutes", 5400 -> "1 hour 30 minutes", 172800 -> "2 days" (for timeout notices).
+std::string FormatDuration(int64_t seconds);
+
 // "2026-09-26T02:13:45.123+00:00" or "...Z" (RFC 3339) -> unix seconds; 0 when it can't be parsed.
 int64_t ParseRfc3339(std::string_view text);
 

@@ -114,6 +114,10 @@ void YouTubeConnection::Run()
 			callbacks_.onMessages(std::move(messages));
 	});
 	session.SetInterrupt([this] { return sendPending_.load(); });
+	session.SetModerationSink([this](ModerationEvent event) {
+		if (callbacks_.onModeration)
+			callbacks_.onModeration(std::move(event));
+	});
 
 	LinkState reported = LinkState::Disconnected;
 	auto nextStep = Clock::now();
@@ -148,6 +152,10 @@ void YouTubeConnection::Run()
 			auto step = session.Step((int64_t)std::time(nullptr));
 			if (!step.messages.empty() && callbacks_.onMessages)
 				callbacks_.onMessages(std::move(step.messages));
+			for (auto &event : step.moderation) {
+				if (callbacks_.onModeration)
+					callbacks_.onModeration(std::move(event));
+			}
 			for (const auto &text : step.notices)
 				notice(text);
 			nextStep = Clock::now() + std::chrono::milliseconds(step.nextDelayMs);

@@ -612,6 +612,65 @@ TEST_CASE("Chat history from before the cutoff isn't shown, polling or streaming
 	CHECK(streamed.messages[0].id == "new1");
 }
 
+namespace {
+
+std::string BanItem(const std::string &id, const std::string &channelId, const std::string &name, bool temporary,
+		    const std::string &publishedAt = "2026-09-26T03:00:00Z")
+{
+	return R"({"id":")" + id + R"(","snippet":{"type":"userBannedEvent","publishedAt":")" + publishedAt +
+	       R"(","displayMessage":")" + name +
+	       R"( has been banned","userBannedDetails":{"bannedUserDetails":{"channelId":")" + channelId +
+	       R"(","displayName":")" + name + R"("},"banType":")" + (temporary ? "temporary" : "permanent") + R"(")" +
+	       (temporary ? R"(,"banDurationSeconds":"300")" : "") +
+	       R"(}},"authorDetails":{"displayName":"Mod","channelId":"UCmod"}})";
+}
+
+} // namespace
+
+TEST_CASE("YouTube bans become moderation events, not chat lines")
+{
+	auto page = ParseMessagesPage(
+		Page(Item("m1", "@dazed263", "bad words", "UCdazed") + "," +
+		     BanItem("b1", "UCdazed", "@dazed263", true) + "," + BanItem("b2", "UCspam", "@spammer", false) +
+		     "," + R"({"id":"t1","snippet":{"type":"tombstone","publishedAt":"2026-09-26T03:00:00Z"}})"));
+	REQUIRE(page);
+	REQUIRE(page->messages.size() == 1); // the ban notices and the tombstone aren't chat lines
+	CHECK(page->messages[0].authorId == "UCdazed");
+
+	REQUIRE(page->moderation.size() == 2);
+	CHECK(page->moderation[0].platform == Platform::YouTube);
+	CHECK(page->moderation[0].kind == ModerationEvent::Kind::RemoveUser);
+	CHECK(page->moderation[0].userId == "UCdazed");
+	CHECK(page->moderation[0].userName == "@dazed263");
+	CHECK(page->moderation[0].durationSeconds == 300);
+	CHECK(page->moderation[1].durationSeconds == 0); // permanent
+}
+
+TEST_CASE("Bans are delivered once, after their messages, and old ones are history")
+{
+	FakeHttp http;
+	ChatSession session(http, oauth::GoogleProvider("id", "sec"), FreshToken(), "", 5000, nullptr);
+	session.SetHistoryCutoff(1790388000); // 2026-09-26T02:00:00Z
+	std::vector<ModerationEvent> live;
+	session.SetModerationSink([&](ModerationEvent event) { live.push_back(std::move(event)); });
+	http.Queue(200, kBroadcastLive);
+	http.Queue(200, kChannel);
+	session.Step(0);
+
+	// Polling: bans come back in the result (behind the messages), not through the live sink.
+	http.Queue(200, Page(BanItem("b1", "UCdazed", "@dazed263", false) + "," +
+			     BanItem("old", "UCx", "@x", false, "2026-09-26T01:00:00Z")));
+	auto polled = session.Step(1);
+	REQUIRE(polled.moderation.size() == 1);
+	CHECK(polled.moderation[0].eventId == "b1");
+	CHECK(live.empty());
+
+	// A repeat of b1 isn't delivered again.
+	http.Queue(200, Page(BanItem("b1", "UCdazed", "@dazed263", false)));
+	CHECK(session.Step(2).moderation.empty());
+	CHECK(http.requests.back().url.find("userBannedDetails") != std::string::npos);
+}
+
 TEST_CASE("Broadcast search is fast right after the stream starts, then slows down")
 {
 	FakeHttp http;

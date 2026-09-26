@@ -18,6 +18,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include "settings-dialog.hpp"
 #include "platform-icons.hpp"
+#include "core/chat-format.hpp"
 #include "core/text-util.hpp"
 #include "core/twitch-irc.hpp"
 
@@ -29,6 +30,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QDesktopServices>
 #include <QDialogButtonBox>
 #include <QFormLayout>
+#include <QGridLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -59,6 +61,64 @@ static std::string ToStd(const QString &value)
 static QPushButton *MakeButton(const char *key, QWidget *parent)
 {
 	return new QPushButton(Text(key), parent);
+}
+
+// What the marks in the chat view mean: one row per mark, a sample on the left and its meaning on the right.
+static QGroupBox *MakeLegend(QWidget *parent)
+{
+	auto box = new QGroupBox(Text("Legend.Title"), parent);
+	auto grid = new QGridLayout(box);
+	grid->setColumnStretch(1, 1);
+	grid->setHorizontalSpacing(12);
+	int row = 0;
+
+	auto addRow = [&](QWidget *sample, const char *meaningKey) {
+		auto meaning = new QLabel(Text(meaningKey), box);
+		meaning->setWordWrap(true);
+		grid->addWidget(sample, row, 0, Qt::AlignLeft | Qt::AlignVCenter);
+		grid->addWidget(meaning, row, 1);
+		++row;
+	};
+	auto image = [&](const QImage &picture) {
+		auto label = new QLabel(box);
+		label->setPixmap(QPixmap::fromImage(picture));
+		return label;
+	};
+	auto html = [&](const QString &text) {
+		auto label = new QLabel(text, box);
+		label->setTextFormat(Qt::RichText);
+		return label;
+	};
+	const qreal dpr = parent ? parent->devicePixelRatioF() : 1.0;
+	const int size = 16;
+	auto grey = [](const QString &text) {
+		return QStringLiteral("<span style='color:#9a9a9a;'>") + text + "</span>";
+	};
+	auto struck = [](const char *tagColor, const QString &tag) {
+		return QStringLiteral("<s style='color:%1;'>message</s> <i style='color:%2;'>%3</i>")
+			.arg(QString::fromUtf8(kDimmedTextColor), QString::fromUtf8(tagColor), tag);
+	};
+
+	addRow(image(PlatformImage(Platform::Twitch, size, dpr)), "Legend.Twitch");
+	addRow(image(PlatformImage(Platform::YouTube, size, dpr)), "Legend.YouTube");
+	addRow(image(SelfBadgeImage(size, dpr)), "Legend.Self");
+	addRow(html(QStringLiteral("<b>name</b>")), "Legend.Name");
+	addRow(html(grey(QStringLiteral("→ @name"))), "Legend.Reply");
+
+	auto mention = html(QStringLiteral("&nbsp;@you&nbsp;"));
+	mention->setAutoFillBackground(true);
+	QPalette palette = mention->palette();
+	const QColor base = palette.color(QPalette::Base);
+	palette.setColor(QPalette::Window, base.lightness() < 128 ? base.lighter(140) : base.darker(112));
+	mention->setPalette(palette);
+	addRow(mention, "Legend.Mention");
+
+	addRow(html(struck(kTagGreyColor, QStringLiteral("(deleted)"))), "Legend.Deleted");
+	addRow(html(struck(kTagTimeoutColor, QStringLiteral("(timed out …)"))), "Legend.TimedOut");
+	addRow(html(struck(kTagBanColor, QStringLiteral("(banned)"))), "Legend.Banned");
+	addRow(html(struck(kTagGreyColor, QStringLiteral("(chat cleared)"))), "Legend.Cleared");
+	addRow(html(QStringLiteral("<i>") + grey(QStringLiteral("notice")) + "</i>"), "Legend.Notice");
+	return box;
 }
 
 SettingsDialog::SettingsDialog(const ChatConfig &config, QWidget *parent) : QDialog(parent), config_(config)
@@ -148,6 +208,8 @@ SettingsDialog::SettingsDialog(const ChatConfig &config, QWidget *parent) : QDia
 	mergeBots_->setToolTip(Text("Settings.MergeBotsTip"));
 	generalForm->addRow(Text("Settings.MergeBots"), mergeBots_);
 	layout->addWidget(generalBox);
+
+	layout->addWidget(MakeLegend(this));
 
 	auto buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
 	layout->addWidget(buttons);

@@ -45,4 +45,22 @@ std::string FormatMessageHtml(const ChatMessage &message, int iconSize, const st
 			      NameColorResolver *colors = nullptr);
 std::string FormatNoticeHtml(std::string_view text);
 
+// How a line removed by a moderator is marked. A line keeps its most severe tag: banned > timed out >
+// deleted / chat cleared.
+struct ModerationTag {
+	int severity;      // 1 deleted or chat cleared, 2 timed out, 3 banned
+	std::string label; // "(deleted)", "(timed out 10 minutes)", ...
+	std::string color; // "#rrggbb"
+};
+ModerationTag TagFor(const ModerationEvent &event);
+// The notice shown when it happens ("Twitch: dezad was timed out for 10 minutes"); empty for a single deleted
+// message, which only gets its tag.
+std::string ModerationNotice(const ModerationEvent &event, std::string_view name);
+
+// Colors used by the view and the legend.
+constexpr const char *kDimmedTextColor = "#a0a0a0";
+constexpr const char *kTagGreyColor = "#9a9a9a";
+constexpr const char *kTagTimeoutColor = "#e0a030";
+constexpr const char *kTagBanColor = "#e8554e";
+
 } // namespace unified_chat

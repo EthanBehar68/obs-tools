@@ -337,8 +337,12 @@ void TwitchConnection::RunSession(void *handle)
 					SendLine(curl, sock, reply);
 				for (auto &message : out.messages)
 					batch.push_back(std::move(message));
-				if (!out.notices.empty() || out.authFailed || out.reconnect)
+				if (!out.notices.empty() || !out.moderation.empty() || out.authFailed || out.reconnect)
 					flush();
+				for (auto &event : out.moderation) {
+					if (callbacks_.onModeration)
+						callbacks_.onModeration(std::move(event));
+				}
 				for (const auto &notice : out.notices)
 					Notice(notice);
 				if (out.authFailed) {

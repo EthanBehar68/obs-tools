@@ -65,6 +65,7 @@ private:
 struct SessionOutput {
 	std::vector<std::string> outgoing;
 	std::vector<ChatMessage> messages;
+	std::vector<ModerationEvent> moderation;
 	std::vector<std::string> notices;
 	bool reconnect = false;
 	bool authFailed = false;

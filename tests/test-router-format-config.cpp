@@ -111,7 +111,7 @@ TEST_CASE("FormatMessageHtml shows icon, name and message in order")
 	auto html = FormatMessageHtml(msg, 16);
 	auto icon = html.find(kTwitchIconResource);
 	auto name = html.find(">Viewer</span>");
-	auto text = html.find(": hello");
+	auto text = html.find(": <span style=\"white-space: pre-wrap;\">hello</span>");
 	CHECK(icon != std::string::npos);
 	CHECK(name != std::string::npos);
 	CHECK(text != std::string::npos);
@@ -137,8 +137,8 @@ TEST_CASE("FormatMessageHtml renders /me actions without a colon")
 {
 	ChatMessage msg{Platform::Twitch, "1", "A", "waves", "", true};
 	auto html = FormatMessageHtml(msg, 16);
-	CHECK(html.find(": waves") == std::string::npos);
-	CHECK(html.find("font-style: italic;\">waves") != std::string::npos);
+	CHECK(html.find(": <span") == std::string::npos);
+	CHECK(html.find("font-style: italic; white-space: pre-wrap;\">waves") != std::string::npos);
 }
 
 TEST_CASE("FormatMessageHtml puts a star after the platform icons on your own lines")
@@ -183,10 +183,42 @@ TEST_CASE("Replies show who they answer between the name and the text")
 	auto html = FormatMessageHtml(reply, 16);
 	auto name = html.find(">Viewer</span>");
 	auto marker = html.find("\xE2\x86\x92 @&lt;Dezad&gt;");
-	auto text = html.find(": welcome back");
+	auto text = html.find(">welcome back</span>");
 	REQUIRE(marker != std::string::npos);
 	CHECK(name < marker);
 	CHECK(marker < text);
+}
+
+TEST_CASE("Moderation tags and notices")
+{
+	ModerationEvent deleted;
+	deleted.kind = ModerationEvent::Kind::DeleteMessage;
+	CHECK(TagFor(deleted).label == "(deleted)");
+	CHECK(TagFor(deleted).severity == 1);
+	CHECK(ModerationNotice(deleted, "dezad").empty());
+
+	ModerationEvent timeout;
+	timeout.kind = ModerationEvent::Kind::RemoveUser;
+	timeout.durationSeconds = 600;
+	CHECK(TagFor(timeout).label == "(timed out 10 minutes)");
+	CHECK(TagFor(timeout).color == std::string(kTagTimeoutColor));
+	CHECK(ModerationNotice(timeout, "trollguy") == "Twitch: trollguy was timed out for 10 minutes");
+
+	ModerationEvent ban;
+	ban.platform = Platform::YouTube;
+	ban.kind = ModerationEvent::Kind::RemoveUser;
+	CHECK(TagFor(ban).label == "(banned)");
+	CHECK(ModerationNotice(ban, "@dazed263") == "YouTube: @dazed263 was banned");
+
+	ModerationEvent clear;
+	clear.kind = ModerationEvent::Kind::ClearChat;
+	CHECK(TagFor(clear).label == "(chat cleared)");
+	CHECK(ModerationNotice(clear, "") == "Twitch: chat was cleared by a moderator");
+
+	// Precedence: banned > timed out > deleted / cleared.
+	CHECK(TagFor(ban).severity > TagFor(timeout).severity);
+	CHECK(TagFor(timeout).severity > TagFor(deleted).severity);
+	CHECK(TagFor(clear).severity == TagFor(deleted).severity);
 }
 
 TEST_CASE("FormatNoticeHtml escapes")

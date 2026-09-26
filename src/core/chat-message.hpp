@@ -37,8 +37,28 @@ struct ChatMessage {
 	uint64_t sendId = 0;  // set on local echoes of a message sent from the dock
 	int64_t postedAt = 0; // unix seconds when the platform says it was posted; 0 = unknown
 	// New fields go at the end so positional initialization elsewhere keeps its meaning.
-	std::string mention; // what to type after '@' to mention the author: Twitch login, YouTube handle
-	std::string replyTo; // for a reply, the display name of the message it answers
+	std::string mention;  // what to type after '@' to mention the author: Twitch login, YouTube handle
+	std::string replyTo;  // for a reply, the display name of the message it answers
+	std::string authorId; // Twitch user-id, YouTube channel ID; lets a ban find the author's lines
+};
+
+// A moderator removed something from chat. The view strikes the affected lines through and, except for a
+// single deleted message, adds a notice.
+struct ModerationEvent {
+	enum class Kind {
+		DeleteMessage, // one message (messageId)
+		RemoveUser,    // timeout (durationSeconds > 0) or ban: all of that user's messages
+		ClearChat,     // everything on this platform
+	};
+	Platform platform = Platform::Twitch;
+	Kind kind = Kind::DeleteMessage;
+	std::string messageId;
+	std::string userLogin; // Twitch login (matches ChatMessage::mention)
+	std::string userId;    // matches ChatMessage::authorId
+	std::string userName;  // for the notice
+	int64_t durationSeconds = 0;
+	std::string eventId;  // YouTube: the event's own id (dedup)
+	int64_t postedAt = 0; // YouTube: unix seconds (history cutoff); 0 = unknown
 };
 
 inline std::string_view PlatformName(Platform platform)

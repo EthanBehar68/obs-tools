@@ -55,6 +55,19 @@ TEST_CASE("ParseRfc3339 converts YouTube timestamps to unix seconds")
 	CHECK(ParseRfc3339("2026-09-26T02:13:45") == 0); // no zone
 }
 
+TEST_CASE("FormatDuration reads naturally for timeout notices")
+{
+	CHECK(FormatDuration(1) == "1 second");
+	CHECK(FormatDuration(30) == "30 seconds");
+	CHECK(FormatDuration(60) == "1 minute");
+	CHECK(FormatDuration(600) == "10 minutes");
+	CHECK(FormatDuration(3600) == "1 hour");
+	CHECK(FormatDuration(5400) == "1 hour 30 minutes");
+	CHECK(FormatDuration(86400) == "1 day");
+	CHECK(FormatDuration(1209600) == "14 days");
+	CHECK(FormatDuration(-5) == "0 seconds");
+}
+
 TEST_CASE("UrlEncode and FormEncode")
 {
 	CHECK(UrlEncode("a b&c=d/é") == "a%20b%26c%3Dd%2F%C3%A9");

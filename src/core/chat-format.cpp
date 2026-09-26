@@ -67,12 +67,44 @@ std::string FormatMessageHtml(const ChatMessage &message, int iconSize, const st
 	if (!message.replyTo.empty())
 		html += " <span style=\"color: #9a9a9a;\">\xE2\x86\x92 @" + HtmlEscape(message.replyTo) + "</span>";
 
+	// The message text always comes last and keeps its spaces (pre-wrap), so the view can find it by length to
+	// strike it through when a moderator removes it.
 	if (message.isAction)
-		html += " <span style=\"color: " + color + "; font-style: italic;\">" + HtmlEscape(message.text) +
-			"</span>";
+		html += " <span style=\"color: " + color + "; font-style: italic; white-space: pre-wrap;\">" +
+			HtmlEscape(message.text) + "</span>";
 	else
-		html += ": " + HtmlEscape(message.text);
+		html += ": <span style=\"white-space: pre-wrap;\">" + HtmlEscape(message.text) + "</span>";
 	return html;
+}
+
+ModerationTag TagFor(const ModerationEvent &event)
+{
+	switch (event.kind) {
+	case ModerationEvent::Kind::RemoveUser:
+		if (event.durationSeconds > 0)
+			return {2, "(timed out " + FormatDuration(event.durationSeconds) + ")", kTagTimeoutColor};
+		return {3, "(banned)", kTagBanColor};
+	case ModerationEvent::Kind::ClearChat:
+		return {1, "(chat cleared)", kTagGreyColor};
+	default:
+		return {1, "(deleted)", kTagGreyColor};
+	}
+}
+
+std::string ModerationNotice(const ModerationEvent &event, std::string_view name)
+{
+	const std::string platform(PlatformName(event.platform));
+	switch (event.kind) {
+	case ModerationEvent::Kind::RemoveUser:
+		if (event.durationSeconds > 0)
+			return platform + ": " + std::string(name) + " was timed out for " +
+			       FormatDuration(event.durationSeconds);
+		return platform + ": " + std::string(name) + " was banned";
+	case ModerationEvent::Kind::ClearChat:
+		return platform + ": chat was cleared by a moderator";
+	default:
+		return {};
+	}
 }
 
 std::string FormatNoticeHtml(std::string_view text)

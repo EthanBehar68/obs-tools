@@ -109,6 +109,23 @@ std::string SanitizeColor(std::string_view color)
 	return ToLower(value);
 }
 
+std::string FormatDuration(int64_t seconds)
+{
+	auto unit = [](int64_t count, const char *name) {
+		return std::to_string(count) + " " + name + (count == 1 ? "" : "s");
+	};
+	if (seconds < 60)
+		return unit(seconds < 0 ? 0 : seconds, "second");
+	if (seconds < 3600)
+		return unit((seconds + 30) / 60, "minute");
+	if (seconds < 86400) {
+		const int64_t minutes = (seconds % 3600 + 30) / 60;
+		std::string text = unit(seconds / 3600, "hour");
+		return minutes == 0 || minutes == 60 ? text : text + " " + unit(minutes, "minute");
+	}
+	return unit((seconds + 43200) / 86400, "day");
+}
+
 // Days since 1970-01-01 for a proleptic Gregorian date (Howard Hinnant's days_from_civil).
 static int64_t DaysFromCivil(int64_t y, unsigned m, unsigned d)
 {

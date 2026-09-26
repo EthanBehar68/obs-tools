@@ -20,6 +20,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "text-util.hpp"
 
 #include <algorithm>
+#include <cstdlib>
 #include <json.hpp>
 
 namespace unified_chat::twitch {
@@ -239,6 +240,7 @@ void IrcSession::HandleLine(std::string_view line, SessionOutput &out)
 		if (chat.author.empty())
 			chat.author = std::string(msg.Nick());
 		chat.mention = std::string(msg.Nick());
+		chat.authorId = msg.Tag("user-id");
 		chat.color = SanitizeColor(msg.Tag("color"));
 		chat.text = msg.params[1];
 		if (chat.text.rfind(kActionPrefix, 0) == 0) {
@@ -254,6 +256,28 @@ void IrcSession::HandleLine(std::string_view line, SessionOutput &out)
 		}
 		chat.isSelf = msg.Nick() == nick_;
 		out.messages.push_back(std::move(chat));
+	} else if (msg.command == "CLEARMSG") {
+		ModerationEvent event;
+		event.kind = ModerationEvent::Kind::DeleteMessage;
+		event.messageId = msg.Tag("target-msg-id");
+		event.userLogin = msg.Tag("login");
+		event.userName = event.userLogin;
+		if (!event.messageId.empty())
+			out.moderation.push_back(std::move(event));
+	} else if (msg.command == "CLEARCHAT") {
+		// With a user: a timeout (ban-duration) or a ban. Without: the whole chat was cleared.
+		ModerationEvent event;
+		if (msg.params.size() >= 2 && !msg.params[1].empty()) {
+			event.kind = ModerationEvent::Kind::RemoveUser;
+			event.userLogin = msg.params[1];
+			event.userName = event.userLogin;
+			event.userId = msg.Tag("target-user-id");
+			const auto &duration = msg.Tag("ban-duration");
+			event.durationSeconds = duration.empty() ? 0 : std::strtoll(duration.c_str(), nullptr, 10);
+		} else {
+			event.kind = ModerationEvent::Kind::ClearChat;
+		}
+		out.moderation.push_back(std::move(event));
 	} else if (msg.command == "USERNOTICE") {
 		std::string notice = msg.Tag("system-msg");
 		if (msg.params.size() >= 2 && !msg.params[1].empty())

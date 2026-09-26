@@ -97,6 +97,13 @@ If YouTube goes live some other way (another app, or a multistream output with a
   - With just `@` typed (no letter), **Tab** cycles through recent chatters instead.
   - Twitch replies from others show who they answer: `Viewer → @Dezad: welcome back`.
   - **Messages that mention you** (your Twitch login or YouTube name) get a tinted background.
+- **Moderation stays visible.** Nothing a moderator removes disappears from the dock. The message text is struck through and dimmed, but you can still read it, and a coloured tag says why:
+  - *(deleted)*, grey: a single message was deleted (Twitch only; YouTube no longer reports single deletions).
+  - *(timed out 10 minutes)*, amber: the author was timed out, and all their lines get the tag.
+  - *(banned)*, red: the author was banned (Twitch or YouTube).
+  - *(chat cleared)*, grey: a moderator cleared the Twitch chat.
+
+  A line keeps its most serious tag (banned > timed out > deleted). Timeouts, bans and clears also add a grey notice at the bottom, e.g. *Twitch: trollguy was timed out for 10 minutes*. **Settings → Legend** explains every mark the dock uses.
 - **Clear** empties the view. **Messages to keep** in Settings caps how much history the dock holds (default 500).
 - System notices (connection changes, subscriptions and raids, errors) appear as grey italic lines.
 

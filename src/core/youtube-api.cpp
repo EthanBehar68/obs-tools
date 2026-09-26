@@ -21,6 +21,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "text-util.hpp"
 
 #include <algorithm>
+#include <cstdlib>
 #include <iterator>
 #include <json.hpp>
 
@@ -36,7 +37,8 @@ static constexpr int kQuotaRetryMs = 15 * 60 * 1000;
 // Keep these in step with MessageFromItem, ParseMessagesPage and the First*/ParseOwnChannel readers.
 static constexpr const char *kMessagesFields =
 	"&fields=nextPageToken,pollingIntervalMillis,offlineAt,"
-	"items(id,snippet(type,publishedAt,displayMessage,textMessageDetails/messageText),"
+	"items(id,snippet(type,publishedAt,displayMessage,textMessageDetails/messageText,"
+	"userBannedDetails(bannedUserDetails(channelId,displayName),banType,banDurationSeconds)),"
 	"authorDetails(displayName,channelId,isChatOwner,isChatModerator,isChatSponsor))";
 static constexpr const char *kBroadcastFields = "&fields=items/snippet/liveChatId";
 static constexpr const char *kVideoFields = "&fields=items/liveStreamingDetails/activeLiveChatId";
@@ -88,9 +90,45 @@ static std::optional<ChatMessage> MessageFromItem(const json &item, std::string_
 		chat.color = "#5e84f1";
 	else if (BoolAt(item, "authorDetails", "isChatSponsor"))
 		chat.color = "#2ba640";
-	chat.isSelf = !ownChannelId.empty() && StringAt(item, {"authorDetails", "channelId"}) == ownChannelId;
+	chat.authorId = StringAt(item, {"authorDetails", "channelId"});
+	chat.isSelf = !ownChannelId.empty() && chat.authorId == ownChannelId;
 	chat.postedAt = ParseRfc3339(StringAt(item, {"snippet", "publishedAt"}));
 	return chat;
+}
+
+// Google encodes 64-bit integers as JSON strings; accept either form.
+static int64_t Int64At(const json &obj, std::initializer_list<const char *> path)
+{
+	const json *node = &obj;
+	for (const char *key : path) {
+		if (!node->is_object())
+			return 0;
+		auto it = node->find(key);
+		if (it == node->end())
+			return 0;
+		node = &*it;
+	}
+	if (node->is_number_integer())
+		return node->get<int64_t>();
+	if (node->is_string())
+		return std::strtoll(node->get<std::string>().c_str(), nullptr, 10);
+	return 0;
+}
+
+static std::optional<ModerationEvent> BanFromItem(const json &item)
+{
+	ModerationEvent event;
+	event.platform = Platform::YouTube;
+	event.kind = ModerationEvent::Kind::RemoveUser;
+	event.eventId = StringAt(item, {"id"});
+	event.postedAt = ParseRfc3339(StringAt(item, {"snippet", "publishedAt"}));
+	event.userId = StringAt(item, {"snippet", "userBannedDetails", "bannedUserDetails", "channelId"});
+	event.userName = StringAt(item, {"snippet", "userBannedDetails", "bannedUserDetails", "displayName"});
+	if (StringAt(item, {"snippet", "userBannedDetails", "banType"}) == "temporary")
+		event.durationSeconds = Int64At(item, {"snippet", "userBannedDetails", "banDurationSeconds"});
+	if (event.userId.empty())
+		return std::nullopt;
+	return event;
 }
 
 std::optional<MessagesPage> ParseMessagesPage(const std::string &body, std::string_view ownChannelId)
@@ -109,10 +147,19 @@ std::optional<MessagesPage> ParseMessagesPage(const std::string &body, std::stri
 	auto items = obj.find("items");
 	if (items != obj.end() && items->is_array()) {
 		for (const auto &item : *items) {
-			if (StringAt(item, {"snippet", "type"}) == "chatEndedEvent") {
+			const std::string type = StringAt(item, {"snippet", "type"});
+			if (type == "chatEndedEvent") {
 				page.chatEnded = true;
 				continue;
 			}
+			if (type == "userBannedEvent") {
+				// A ban isn't a chat line (its display text would read as one): it strikes the user's lines.
+				if (auto ban = BanFromItem(item))
+					page.moderation.push_back(std::move(*ban));
+				continue;
+			}
+			if (type == "tombstone")
+				continue;
 			if (auto chat = MessageFromItem(item, ownChannelId))
 				page.messages.push_back(std::move(*chat));
 		}
@@ -402,6 +449,7 @@ void ChatSession::Poll(int64_t now, StepResult &out)
 		if (seen_.Insert(chat.id) && !IsHistory(chat))
 			out.messages.push_back(std::move(chat));
 	}
+	DeliverModeration(page->moderation, out, false);
 
 	if (page->chatEnded) {
 		EndChat(out);
@@ -435,6 +483,23 @@ void ChatSession::Deliver(std::vector<ChatMessage> &messages, StepResult &out)
 		liveSink_(std::move(fresh));
 	else
 		std::move(fresh.begin(), fresh.end(), std::back_inserter(out.messages));
+}
+
+void ChatSession::DeliverModeration(std::vector<ModerationEvent> &events, StepResult &out, bool live)
+{
+	for (auto &event : events) {
+		// Same rules as messages: once only, and not from before the history cutoff.
+		if (!seen_.Insert(event.eventId))
+			continue;
+		if (historyCutoff_ != 0 && event.postedAt != 0 && event.postedAt < historyCutoff_)
+			continue;
+		// Polling returns messages in the StepResult, so bans must go there too, behind them; only a stream,
+		// whose messages went to the live sink, uses the moderation sink.
+		if (live && moderationSink_)
+			moderationSink_(std::move(event));
+		else
+			out.moderation.push_back(std::move(event));
+	}
 }
 
 void ChatSession::FallBackToPolling(const std::string &reason, StepResult &out)
@@ -477,6 +542,7 @@ void ChatSession::Stream(int64_t now, StepResult &out)
 			if (!page->nextPageToken.empty())
 				pageToken_ = page->nextPageToken;
 			Deliver(page->messages, out);
+			DeliverModeration(page->moderation, out, liveSink_ != nullptr);
 			if (page->chatEnded) {
 				ended = true;
 				return false;

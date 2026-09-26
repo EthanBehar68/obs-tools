@@ -21,6 +21,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "settings-dialog.hpp"
 #include "target-switch.hpp"
 #include "core/chat-format.hpp"
+#include "core/text-util.hpp"
 
 #include <obs-frontend-api.h>
 #include <obs-module.h>
@@ -36,6 +37,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QScrollBar>
 #include <QTextBlock>
 #include <QTextBlockFormat>
+#include <QTextBlockUserData>
+#include <QTextCharFormat>
 #include <QTextBrowser>
 #include <QTextCursor>
 #include <QTextDocument>
@@ -51,6 +54,11 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <limits>
 
 namespace unified_chat {
+
+struct ChatDock::LineData : QTextBlockUserData {
+	explicit LineData(LineInfo lineInfo) : info(std::move(lineInfo)) {}
+	LineInfo info;
+};
 
 // Allowance for clock differences between this PC and YouTube when deciding what counts as chat history.
 static constexpr int64_t kHistoryGraceSeconds = 30;
@@ -273,6 +281,11 @@ ConnectionCallbacks ChatDock::MakeCallbacks(Platform platform)
 			this, [this, messages = std::move(messages)]() { AppendMessages(messages); },
 			Qt::QueuedConnection);
 	};
+	// Queued like messages, so it runs after the lines it refers to have been added.
+	callbacks.onModeration = [this](ModerationEvent event) {
+		QMetaObject::invokeMethod(
+			this, [this, event = std::move(event)]() { ApplyModeration(event); }, Qt::QueuedConnection);
+	};
 	callbacks.onNotice = [this](const std::string &text) {
 		obs_log(LOG_INFO, "%s", text.c_str());
 		QString qtext = QString::fromStdString(text);
@@ -447,6 +460,8 @@ void ChatDock::AppendHtml(const std::vector<HtmlLine> &lines)
 		cursor.setBlockFormat(line.highlight ? highlighted : QTextBlockFormat());
 		cursor.insertHtml(line.html);
 		cursor.block().setUserState(line.lineId);
+		if (line.info)
+			cursor.block().setUserData(new LineData(*line.info));
 		empty_ = false;
 	}
 	cursor.endEditBlock();
@@ -455,7 +470,7 @@ void ChatDock::AppendHtml(const std::vector<HtmlLine> &lines)
 		bar->setValue(bar->maximum());
 }
 
-bool ChatDock::ReplaceLine(int lineId, const QString &html)
+bool ChatDock::ReplaceLine(int lineId, const QString &html, const DisplayLine &line)
 {
 	// Only runs when a bot's twin arrives; the line is normally among the last few.
 	for (QTextBlock block = view_->document()->lastBlock(); block.isValid(); block = block.previous()) {
@@ -464,9 +479,104 @@ bool ChatDock::ReplaceLine(int lineId, const QString &html)
 		QTextCursor cursor(block);
 		cursor.movePosition(QTextCursor::EndOfBlock, QTextCursor::KeepAnchor);
 		cursor.insertHtml(html);
+		block.setUserData(new LineData(MakeLineInfo(line))); // now on both platforms
 		return true;
 	}
 	return false; // already trimmed by the message limit
+}
+
+ChatDock::LineInfo ChatDock::MakeLineInfo(const DisplayLine &line)
+{
+	LineInfo info;
+	for (Platform platform : line.platforms)
+		(platform == Platform::Twitch ? info.twitch : info.youtube) = true;
+	const ChatMessage &message = line.message;
+	info.messageId = message.id;
+	info.login = ToLower(message.mention);
+	info.authorId = message.authorId;
+	info.author = message.author;
+	info.textLength = (int)QString::fromStdString(message.text).size();
+	return info;
+}
+
+void ChatDock::StrikeLine(const QTextBlock &block, LineInfo &info, const ModerationTag &tag)
+{
+	if (info.severity >= tag.severity)
+		return; // already marked at least this seriously (banned > timed out > deleted / cleared)
+
+	QTextCursor cursor(block);
+	int end = block.position() + block.length() - 1; // the text, then any tag, end the block
+	if (info.tagLength > 0) {
+		// A more serious tag replaces the old one; the text is already struck.
+		cursor.setPosition(end - info.tagLength);
+		cursor.setPosition(end, QTextCursor::KeepAnchor);
+		cursor.removeSelectedText();
+		end -= info.tagLength;
+	} else {
+		cursor.setPosition(end - info.textLength);
+		cursor.setPosition(end, QTextCursor::KeepAnchor);
+		QTextCharFormat struck;
+		struck.setFontStrikeOut(true);
+		struck.setForeground(QColor(QString::fromUtf8(kDimmedTextColor)));
+		cursor.mergeCharFormat(struck);
+	}
+
+	QTextCharFormat tagFormat;
+	tagFormat.setForeground(QColor(QString::fromStdString(tag.color)));
+	tagFormat.setFontItalic(true);
+	const QString label = QLatin1Char(' ') + QString::fromStdString(tag.label);
+	cursor.setPosition(end);
+	cursor.insertText(label, tagFormat);
+	info.tagLength = (int)label.size();
+	info.severity = tag.severity;
+}
+
+void ChatDock::ApplyModeration(const ModerationEvent &event)
+{
+	const ModerationTag tag = TagFor(event);
+	const std::string login = ToLower(event.userLogin);
+	std::string author;
+
+	// Rare, so a walk back over the kept lines is cheap enough.
+	QTextCursor edit(view_->document());
+	edit.beginEditBlock();
+	for (QTextBlock block = view_->document()->lastBlock(); block.isValid(); block = block.previous()) {
+		auto data = static_cast<LineData *>(block.userData());
+		if (!data)
+			continue; // a notice
+		LineInfo &info = data->info;
+		if (!(event.platform == Platform::Twitch ? info.twitch : info.youtube))
+			continue;
+
+		bool match = false;
+		switch (event.kind) {
+		case ModerationEvent::Kind::DeleteMessage:
+			match = !event.messageId.empty() && info.messageId == event.messageId;
+			break;
+		case ModerationEvent::Kind::RemoveUser:
+			match = (!event.userId.empty() && info.authorId == event.userId) ||
+				(!login.empty() && info.login == login);
+			break;
+		case ModerationEvent::Kind::ClearChat:
+			match = true;
+			break;
+		}
+		if (!match)
+			continue;
+		if (author.empty())
+			author = info.author;
+		StrikeLine(block, info, tag);
+		if (event.kind == ModerationEvent::Kind::DeleteMessage)
+			break;
+	}
+	edit.endEditBlock();
+
+	std::string name = !event.userName.empty() && event.platform == Platform::YouTube ? event.userName : author;
+	if (name.empty())
+		name = event.userName;
+	const std::string notice = ModerationNotice(event, name);
+	if (!notice.empty())
+		AppendNotice(QString::fromStdString(notice));
 }
 
 void ChatDock::AppendMessages(const std::vector<ChatMessage> &messages)
@@ -528,15 +638,15 @@ void ChatDock::AppendLines(const std::vector<DisplayLine> &lines)
 			// A bot's copy of a line already shown for the other platform: add the icon to that line.
 			if (auto merged = botMerger_.Match(message, now)) {
 				QString mergedHtml = format(merged->line);
-				if (!ReplaceLine(merged->lineId, mergedHtml))
-					html.push_back({mergedHtml, -1, highlight});
+				if (!ReplaceLine(merged->lineId, mergedHtml, merged->line))
+					html.push_back({mergedHtml, -1, highlight, MakeLineInfo(merged->line)});
 				continue;
 			}
 			lineId = nextLineId_;
 			nextLineId_ = nextLineId_ == (std::numeric_limits<int>::max)() ? 1 : nextLineId_ + 1;
 			botMerger_.Remember(message, lineId, now);
 		}
-		html.push_back({format(line), lineId, highlight});
+		html.push_back({format(line), lineId, highlight, MakeLineInfo(line)});
 	}
 	AppendHtml(html);
 	ScheduleEchoTimer();

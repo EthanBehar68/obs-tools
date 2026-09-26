@@ -38,6 +38,7 @@ constexpr const char *kApiBase = "https://www.googleapis.com/youtube/v3";
 
 struct MessagesPage {
 	std::vector<ChatMessage> messages;
+	std::vector<ModerationEvent> moderation; // bans
 	std::string nextPageToken;
 	int pollingIntervalMs = 0;
 	bool chatEnded = false;
@@ -81,6 +82,7 @@ enum class State { SignedOut, WaitingForBroadcast, Polling, Error };
 
 struct StepResult {
 	std::vector<ChatMessage> messages;
+	std::vector<ModerationEvent> moderation;
 	std::vector<std::string> notices;
 	int nextDelayMs = 0;
 };
@@ -107,6 +109,9 @@ public:
 	void SetStreaming(bool enabled) { streaming_ = enabled; }
 	// Receives streamed messages while a Step is still running. Without a sink they go into StepResult.
 	void SetLiveSink(MessageSink sink) { liveSink_ = std::move(sink); }
+	// Receives bans from a stream while a Step is running, after the messages that arrived with them. When
+	// polling, or without a live sink, bans go into StepResult behind its messages.
+	void SetModerationSink(std::function<void(ModerationEvent)> sink) { moderationSink_ = std::move(sink); }
 	// Checked while a stream is open; returning true ends the Step early (e.g. to send a message).
 	void SetInterrupt(std::function<bool()> interrupt) { interrupt_ = std::move(interrupt); }
 	bool IsStreaming() const { return streaming_ && !streamFailed_; }
@@ -138,6 +143,7 @@ private:
 	void FallBackToPolling(const std::string &reason, StepResult &out);
 	void EndChat(StepResult &out);
 	void Deliver(std::vector<ChatMessage> &messages, StepResult &out);
+	void DeliverModeration(std::vector<ModerationEvent> &events, StepResult &out, bool live);
 	bool IsHistory(const ChatMessage &chat) const
 	{
 		return historyCutoff_ != 0 && chat.postedAt != 0 && chat.postedAt < historyCutoff_;
@@ -167,6 +173,7 @@ private:
 	bool streaming_ = false;
 	bool streamFailed_ = false;
 	MessageSink liveSink_;
+	std::function<void(ModerationEvent)> moderationSink_;
 	std::function<bool()> interrupt_;
 };
 
