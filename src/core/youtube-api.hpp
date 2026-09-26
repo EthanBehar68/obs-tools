@@ -110,6 +110,9 @@ public:
 	// Checked while a stream is open; returning true ends the Step early (e.g. to send a message).
 	void SetInterrupt(std::function<bool()> interrupt) { interrupt_ = std::move(interrupt); }
 	bool IsStreaming() const { return streaming_ && !streamFailed_; }
+	// Messages posted before this (unix seconds) are chat history, e.g. from an earlier session on a reused
+	// broadcast, and aren't shown. Messages without a timestamp are always shown. 0 = show everything.
+	void SetHistoryCutoff(int64_t unixSeconds) { historyCutoff_ = unixSeconds; }
 	// How often to look for a live broadcast while none is found: every fastMs until fastUntil (unix seconds,
 	// e.g. just after the stream started, while YouTube is still bringing the broadcast up), then every normalMs.
 	void SetBroadcastSearch(int normalMs, int fastMs = 0, int64_t fastUntil = 0)
@@ -135,6 +138,10 @@ private:
 	void FallBackToPolling(const std::string &reason, StepResult &out);
 	void EndChat(StepResult &out);
 	void Deliver(std::vector<ChatMessage> &messages, StepResult &out);
+	bool IsHistory(const ChatMessage &chat) const
+	{
+		return historyCutoff_ != 0 && chat.postedAt != 0 && chat.postedAt < historyCutoff_;
+	}
 	int HandleError(const HttpResponse &res, StepResult &out);
 
 	HttpClient &http_;
@@ -152,6 +159,7 @@ private:
 	RecentIds seen_;
 	bool announcedWaiting_ = false;
 
+	int64_t historyCutoff_ = 0;
 	int searchMs_ = 30000;
 	int fastSearchMs_ = 0;
 	int64_t fastSearchUntil_ = 0;

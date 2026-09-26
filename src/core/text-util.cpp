@@ -109,6 +109,64 @@ std::string SanitizeColor(std::string_view color)
 	return ToLower(value);
 }
 
+// Days since 1970-01-01 for a proleptic Gregorian date (Howard Hinnant's days_from_civil).
+static int64_t DaysFromCivil(int64_t y, unsigned m, unsigned d)
+{
+	y -= m <= 2;
+	const int64_t era = (y >= 0 ? y : y - 399) / 400;
+	const unsigned yoe = (unsigned)(y - era * 400);
+	const unsigned doy = (153 * (m + (m > 2 ? -3 : 9)) + 2) / 5 + d - 1;
+	const unsigned doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+	return era * 146097 + (int64_t)doe - 719468;
+}
+
+int64_t ParseRfc3339(std::string_view text)
+{
+	auto number = [&](size_t pos, size_t len, int &out) {
+		if (pos + len > text.size())
+			return false;
+		out = 0;
+		for (size_t i = pos; i < pos + len; ++i) {
+			if (!std::isdigit((unsigned char)text[i]))
+				return false;
+			out = out * 10 + (text[i] - '0');
+		}
+		return true;
+	};
+
+	// YYYY-MM-DDTHH:MM:SS
+	int year, month, day, hour, minute, second;
+	if (text.size() < 20 || !number(0, 4, year) || text[4] != '-' || !number(5, 2, month) || text[7] != '-' ||
+	    !number(8, 2, day) || (text[10] != 'T' && text[10] != 't' && text[10] != ' ') || !number(11, 2, hour) ||
+	    text[13] != ':' || !number(14, 2, minute) || text[16] != ':' || !number(17, 2, second))
+		return 0;
+	if (month < 1 || month > 12 || day < 1 || day > 31 || hour > 23 || minute > 59 || second > 60)
+		return 0;
+
+	size_t pos = 19;
+	if (pos < text.size() && text[pos] == '.') {
+		++pos;
+		while (pos < text.size() && std::isdigit((unsigned char)text[pos]))
+			++pos;
+	}
+
+	int64_t offset = 0;
+	if (pos < text.size() && (text[pos] == 'Z' || text[pos] == 'z')) {
+		offset = 0;
+	} else if (pos < text.size() && (text[pos] == '+' || text[pos] == '-')) {
+		int oh, om;
+		if (!number(pos + 1, 2, oh) || pos + 3 >= text.size() || text[pos + 3] != ':' ||
+		    !number(pos + 4, 2, om))
+			return 0;
+		offset = (text[pos] == '+' ? 1 : -1) * (int64_t)(oh * 3600 + om * 60);
+	} else {
+		return 0;
+	}
+
+	return DaysFromCivil(year, (unsigned)month, (unsigned)day) * 86400 + hour * 3600 + minute * 60 + second -
+	       offset;
+}
+
 std::string UrlEncode(std::string_view text)
 {
 	static const char hex[] = "0123456789ABCDEF";

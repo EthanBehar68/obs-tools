@@ -570,6 +570,48 @@ TEST_CASE("A stream that reports the chat ended goes back to waiting for a broad
 	CHECK(ended.nextDelayMs == 30000);
 }
 
+namespace {
+
+std::string TimedItem(const std::string &id, const std::string &text, const std::string &publishedAt)
+{
+	return R"({"id":")" + id + R"(","snippet":{"type":"textMessageEvent","publishedAt":")" + publishedAt +
+	       R"(","displayMessage":")" + text + R"("},"authorDetails":{"displayName":"Me","channelId":"UCme"}})";
+}
+
+} // namespace
+
+TEST_CASE("Chat history from before the cutoff isn't shown, polling or streaming")
+{
+	// Cutoff 2026-09-26T02:00:00Z; an old session's messages on a reused broadcast are earlier.
+	const int64_t cutoff = 1790388000;
+	const std::string backlog = TimedItem("old1", "hello", "2026-09-25T23:10:00.5+00:00") + "," +
+				    TimedItem("old2", "but do you see this?", "2026-09-26T01:59:59Z") + "," +
+				    TimedItem("new1", "we're live", "2026-09-26T02:00:05.25Z") + "," +
+				    Item("undated", "Ann", "no timestamp");
+
+	FakeHttp http;
+	ChatSession polling(http, oauth::GoogleProvider("id", "sec"), FreshToken(), "", 5000, nullptr);
+	polling.SetHistoryCutoff(cutoff);
+	http.Queue(200, kBroadcastLive);
+	http.Queue(200, kChannel);
+	polling.Step(0);
+	http.Queue(200, Page(backlog));
+	auto polled = polling.Step(1);
+	REQUIRE(polled.messages.size() == 2);
+	CHECK(polled.messages[0].id == "new1");
+	CHECK(polled.messages[0].postedAt == 1790388005);
+	CHECK(polled.messages[1].id == "undated");
+	CHECK(http.requests.back().url.find("publishedAt") != std::string::npos);
+
+	ChatSession streaming(http, oauth::GoogleProvider("id", "sec"), FreshToken(), "", 5000, nullptr);
+	streaming.SetHistoryCutoff(cutoff);
+	ConnectStreaming(http, streaming, nullptr);
+	http.QueueStream(200, {"[" + StreamObject(backlog, "t1") + "]"});
+	auto streamed = streaming.Step(1);
+	REQUIRE(streamed.messages.size() == 2);
+	CHECK(streamed.messages[0].id == "new1");
+}
+
 TEST_CASE("Broadcast search is fast right after the stream starts, then slows down")
 {
 	FakeHttp http;

@@ -42,10 +42,14 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QWindow>
 
 #include <algorithm>
+#include <ctime>
 #include <iterator>
 #include <limits>
 
 namespace unified_chat {
+
+// Allowance for clock differences between this PC and YouTube when deciding what counts as chat history.
+static constexpr int64_t kHistoryGraceSeconds = 30;
 
 static QString Text(const char *key)
 {
@@ -166,6 +170,7 @@ void ChatDock::Start()
 		return;
 	started_ = true;
 	obsStreaming_ = obs_frontend_streaming_active(); // the plugin may load while already live
+	historyCutoff_ = (int64_t)std::time(nullptr) - kHistoryGraceSeconds;
 	LoadConfig();
 	Connect();
 }
@@ -270,7 +275,7 @@ void ChatDock::ConnectYouTube()
 	youtube_ = std::make_unique<YouTubeConnection>(config_.youtubeClientId, config_.youtubeClientSecret,
 						       config_.youtubeToken, config_.youtubeVideo,
 						       config_.youtubePollSeconds, config_.youtubeStream,
-						       config_.youtubeConnectOnStream,
+						       config_.youtubeConnectOnStream, historyCutoff_,
 						       MakeCallbacks(Platform::YouTube));
 }
 
@@ -279,6 +284,9 @@ void ChatDock::OnStreamingChanged(bool streaming)
 	if (obsStreaming_ == streaming)
 		return;
 	obsStreaming_ = streaming;
+	if (streaming)
+		historyCutoff_ =
+			(int64_t)std::time(nullptr) - kHistoryGraceSeconds; // chat before going live is history
 	if (started_ && config_.youtubeConnectOnStream)
 		ConnectYouTube();
 }
@@ -311,8 +319,12 @@ void ChatDock::OpenSettings()
 	view_->document()->setMaximumBlockCount(config_.maxMessages);
 	botMerger_.SetBots(config_.mergeBots);
 	SaveConfig();
-	if (started_)
+	if (started_) {
+		// The dock already shows this chat up to now; a fresh connection shouldn't replay it.
+		if (youtube_)
+			historyCutoff_ = (int64_t)std::time(nullptr);
 		Connect();
+	}
 }
 
 void ChatDock::UpdatePlaceholder()

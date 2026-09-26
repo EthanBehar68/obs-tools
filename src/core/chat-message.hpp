@@ -34,7 +34,8 @@ struct ChatMessage {
 	std::string color; // "#RRGGBB" or empty
 	bool isAction = false;
 	bool isSelf = false;
-	uint64_t sendId = 0; // set on local echoes of a message sent from the dock
+	uint64_t sendId = 0;  // set on local echoes of a message sent from the dock
+	int64_t postedAt = 0; // unix seconds when the platform says it was posted; 0 = unknown
 };
 
 inline std::string_view PlatformName(Platform platform)

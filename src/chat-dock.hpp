@@ -83,6 +83,7 @@ private:
 	LinkState youtubeState_ = LinkState::Disconnected;
 	bool started_ = false;
 	bool obsStreaming_ = false;
+	int64_t historyCutoff_ = 0; // YouTube messages posted before this (unix seconds) aren't shown
 	bool empty_ = true;
 	int iconSize_ = 16;
 	EchoMerger merger_;

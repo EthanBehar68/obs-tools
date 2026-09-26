@@ -36,7 +36,7 @@ static constexpr int kQuotaRetryMs = 15 * 60 * 1000;
 // Keep these in step with MessageFromItem, ParseMessagesPage and the First*/ParseOwnChannel readers.
 static constexpr const char *kMessagesFields =
 	"&fields=nextPageToken,pollingIntervalMillis,offlineAt,"
-	"items(id,snippet(type,displayMessage,textMessageDetails/messageText),"
+	"items(id,snippet(type,publishedAt,displayMessage,textMessageDetails/messageText),"
 	"authorDetails(displayName,channelId,isChatOwner,isChatModerator,isChatSponsor))";
 static constexpr const char *kBroadcastFields = "&fields=items/snippet/liveChatId";
 static constexpr const char *kVideoFields = "&fields=items/liveStreamingDetails/activeLiveChatId";
@@ -87,6 +87,7 @@ static std::optional<ChatMessage> MessageFromItem(const json &item, std::string_
 	else if (BoolAt(item, "authorDetails", "isChatSponsor"))
 		chat.color = "#2ba640";
 	chat.isSelf = !ownChannelId.empty() && StringAt(item, {"authorDetails", "channelId"}) == ownChannelId;
+	chat.postedAt = ParseRfc3339(StringAt(item, {"snippet", "publishedAt"}));
 	return chat;
 }
 
@@ -396,7 +397,7 @@ void ChatSession::Poll(int64_t now, StepResult &out)
 
 	state_ = State::Polling;
 	for (auto &chat : page->messages) {
-		if (seen_.Insert(chat.id))
+		if (seen_.Insert(chat.id) && !IsHistory(chat))
 			out.messages.push_back(std::move(chat));
 	}
 
@@ -423,7 +424,7 @@ void ChatSession::Deliver(std::vector<ChatMessage> &messages, StepResult &out)
 {
 	std::vector<ChatMessage> fresh;
 	for (auto &chat : messages) {
-		if (seen_.Insert(chat.id))
+		if (seen_.Insert(chat.id) && !IsHistory(chat))
 			fresh.push_back(std::move(chat));
 	}
 	if (fresh.empty())

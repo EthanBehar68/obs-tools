@@ -34,7 +34,8 @@ namespace unified_chat {
 class YouTubeConnection {
 public:
 	YouTubeConnection(std::string clientId, std::string clientSecret, oauth::Token token, std::string video,
-			  int pollSeconds, bool stream, bool startedWithStream, ConnectionCallbacks callbacks);
+			  int pollSeconds, bool stream, bool startedWithStream, int64_t historyCutoff,
+			  ConnectionCallbacks callbacks);
 	~YouTubeConnection();
 
 	YouTubeConnection(const YouTubeConnection &) = delete;
@@ -53,6 +54,7 @@ private:
 	int pollSeconds_;
 	bool stream_;
 	bool startedWithStream_;
+	int64_t historyCutoff_;
 	ConnectionCallbacks callbacks_;
 
 	std::atomic<bool> stop_ = false;

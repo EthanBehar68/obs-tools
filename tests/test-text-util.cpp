@@ -42,6 +42,19 @@ TEST_CASE("SanitizeColor accepts only #rrggbb")
 	CHECK(SanitizeColor("#123456;background:url(x)") == "");
 }
 
+TEST_CASE("ParseRfc3339 converts YouTube timestamps to unix seconds")
+{
+	CHECK(ParseRfc3339("1970-01-01T00:00:00Z") == 0);
+	CHECK(ParseRfc3339("2026-09-26T02:13:45.123456+00:00") == 1790388825);
+	CHECK(ParseRfc3339("2026-09-26T02:13:45Z") == 1790388825);
+	CHECK(ParseRfc3339("2026-09-25T19:13:45-07:00") == 1790388825);
+	CHECK(ParseRfc3339("2024-02-29T12:00:00Z") == 1709208000); // leap day
+	CHECK(ParseRfc3339("") == 0);
+	CHECK(ParseRfc3339("2026-09-26") == 0);
+	CHECK(ParseRfc3339("2026-13-01T00:00:00Z") == 0);
+	CHECK(ParseRfc3339("2026-09-26T02:13:45") == 0); // no zone
+}
+
 TEST_CASE("UrlEncode and FormEncode")
 {
 	CHECK(UrlEncode("a b&c=d/é") == "a%20b%26c%3Dd%2F%C3%A9");
