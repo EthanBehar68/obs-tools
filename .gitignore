@@ -22,6 +22,7 @@
 !README.md
 !INSTALL.md
 !BUILDING.md
+!CHANGELOG.md
 
 # Exclude lock files
 *.lock.json
