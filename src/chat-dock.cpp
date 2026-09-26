@@ -149,11 +149,20 @@ ChatDock::ChatDock(QWidget *parent) : QWidget(parent)
 	input_->installEventFilter(this); // "@" + Tab completion
 	connect(view_, &QTextBrowser::anchorClicked, this, &ChatDock::OnLinkClicked);
 	connect(target_, &TargetSwitch::TargetChanged, this, [this]() {
+		// Picked by hand: this is the target now, even in the middle of a mention.
+		mentionTarget_.Forget();
 		config_.sendTarget = target_->Target();
 		if (config_.sendTarget != SendTarget::Twitch)
 			SetReply(std::nullopt);
 		UpdatePlaceholder();
 		SaveConfig();
+	});
+	connect(input_, &QLineEdit::textChanged, this, [this](const QString &text) {
+		// Sent (the input is cleared) or the mention was deleted: back to the chosen target.
+		if (text.isEmpty()) {
+			SetReply(std::nullopt);
+			RestoreTarget();
+		}
 	});
 	connect(settingsButton_, &QToolButton::clicked, this, &ChatDock::OpenSettings);
 	connect(twitchStatus_, &QToolButton::clicked, this, &ChatDock::OpenSettings);
@@ -534,16 +543,27 @@ void ChatDock::UpdateMentionNames()
 	mentions_.SetNames(names);
 }
 
-void ChatDock::SetTarget(SendTarget target)
+void ChatDock::SwitchForMention(Platform platform)
 {
-	if (target_->Target() == target)
-		return;
-	target_->SetTarget(target);
-	config_.sendTarget = target;
+	// Temporary: config_.sendTarget (the saved choice) stays as it is and comes back after sending.
+	const SendTarget target = mentionTarget_.Switch(target_->Target(), platform);
+	if (target_->Target() != target) {
+		target_->SetTarget(target);
+		UpdatePlaceholder();
+	}
 	if (target != SendTarget::Twitch)
 		SetReply(std::nullopt);
+}
+
+void ChatDock::RestoreTarget()
+{
+	auto home = mentionTarget_.Restore();
+	if (!home || target_->Target() == *home)
+		return;
+	target_->SetTarget(*home);
+	if (*home != SendTarget::Twitch)
+		SetReply(std::nullopt);
 	UpdatePlaceholder();
-	SaveConfig();
 }
 
 void ChatDock::SetReply(std::optional<PendingReply> reply)
@@ -561,7 +581,7 @@ void ChatDock::OnLinkClicked(const QUrl &url)
 		return;
 
 	// Talk to them where they are: a Twitch name must never go to YouTube and vice versa.
-	SetTarget(link->platform == Platform::Twitch ? SendTarget::Twitch : SendTarget::YouTube);
+	SwitchForMention(link->platform);
 
 	const QString mention = QStringLiteral("@") + QString::fromStdString(link->mention) + QLatin1Char(' ');
 	QString text = input_->text();
@@ -595,11 +615,10 @@ bool ChatDock::CompleteMention()
 		if (!word.startsWith(QLatin1Char('@')))
 			return false;
 
+		// With Both chosen, offer everyone (each pick switches platform); otherwise the current platform only.
 		std::optional<Platform> only;
-		if (target_->Target() == SendTarget::Twitch)
-			only = Platform::Twitch;
-		else if (target_->Target() == SendTarget::YouTube)
-			only = Platform::YouTube;
+		if (mentionTarget_.Home(target_->Target()) != SendTarget::Both)
+			only = target_->Target() == SendTarget::YouTube ? Platform::YouTube : Platform::Twitch;
 		completions_ = chatters_.Complete(word.mid(1).toStdString(), only);
 		if (completions_.empty())
 			return true; // an "@word" with no match: keep focus in the input
@@ -616,9 +635,10 @@ bool ChatDock::CompleteMention()
 	completionEnd_ = completionStart_ + (int)replacement.size();
 	input_->setCursorPosition(completionEnd_);
 
-	// On Both, completing a name picks that person's platform, as clicking it would.
-	if (target_->Target() == SendTarget::Both)
-		SetTarget(entry.platform == Platform::Twitch ? SendTarget::Twitch : SendTarget::YouTube);
+	// With Both chosen, every name shown while cycling switches to that person's platform. This checks the
+	// chosen target, not the current one, which the previous name in the cycle may already have switched.
+	if (mentionTarget_.Home(target_->Target()) == SendTarget::Both)
+		SwitchForMention(entry.platform);
 	return true;
 }
 

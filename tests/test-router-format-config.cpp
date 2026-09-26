@@ -65,6 +65,39 @@ TEST_CASE("PlanSend ignores empty input")
 	CHECK(plan.errors.empty());
 }
 
+TEST_CASE("MentionTarget switches per mention and restores the chosen target")
+{
+	MentionTarget target;
+	CHECK_FALSE(target.Pending());
+	CHECK(target.Home(SendTarget::Both) == SendTarget::Both);
+
+	// On Both, Tab cycles dazed263 (YouTube) -> dezad (Twitch) -> duxclarus (Twitch): each switches.
+	SendTarget current = SendTarget::Both;
+	current = target.Switch(current, Platform::YouTube);
+	CHECK(current == SendTarget::YouTube);
+	CHECK(target.Home(current) == SendTarget::Both); // still Both, so the next pick may switch again
+	current = target.Switch(current, Platform::Twitch);
+	CHECK(current == SendTarget::Twitch);
+	current = target.Switch(current, Platform::Twitch);
+	CHECK(current == SendTarget::Twitch);
+	CHECK(target.Home(current) == SendTarget::Both);
+
+	// Sending restores Both, once.
+	CHECK(target.Restore() == SendTarget::Both);
+	CHECK_FALSE(target.Pending());
+	CHECK_FALSE(target.Restore());
+}
+
+TEST_CASE("MentionTarget keeps a target the user picked by hand")
+{
+	MentionTarget target;
+	SendTarget current = target.Switch(SendTarget::Twitch, Platform::YouTube);
+	CHECK(current == SendTarget::YouTube);
+	target.Forget(); // the user clicked the switch mid-mention
+	CHECK_FALSE(target.Restore());
+	CHECK(target.Home(SendTarget::YouTube) == SendTarget::YouTube);
+}
+
 TEST_CASE("SendTarget string round trip")
 {
 	for (auto target : {SendTarget::Twitch, SendTarget::YouTube, SendTarget::Both})

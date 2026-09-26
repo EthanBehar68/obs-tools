@@ -93,7 +93,8 @@ private:
 
 	// Mentions and replies
 	void OnLinkClicked(const QUrl &url);
-	void SetTarget(SendTarget target);
+	void SwitchForMention(Platform platform); // temporary, undone by RestoreTarget
+	void RestoreTarget();
 	void SetReply(std::optional<PendingReply> reply);
 	bool CompleteMention(); // "@" + Tab; returns false when there's nothing to complete
 	void LearnOwnName(const ChatMessage &message);
@@ -123,6 +124,7 @@ private:
 	std::vector<std::string> ownYouTubeNames_; // learned from your own YouTube messages
 	RecentChatters chatters_;
 	std::optional<PendingReply> reply_;
+	MentionTarget mentionTarget_;
 	// Tab completion in progress: candidates, which one is shown, and the text range it occupies.
 	std::vector<RecentChatters::Entry> completions_;
 	size_t completionIndex_ = 0;
