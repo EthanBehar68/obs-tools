@@ -134,6 +134,8 @@ private:
 	bool ConfirmModeration(ModerationAction &action, bool customTimeout); // every action asks first
 	void RunModeration(const ModerationAction &action);
 	void SetLinkState(Platform platform, LinkState state);
+	void SetViewers(Platform platform, int64_t viewers); // -1 = not live / unknown
+	void UpdateStatusButtons();
 	void UpdatePlaceholder();
 
 	// Mentions and replies
@@ -158,6 +160,8 @@ private:
 	std::unique_ptr<YouTubeConnection> youtube_;
 	LinkState twitchState_ = LinkState::Disconnected;
 	LinkState youtubeState_ = LinkState::Disconnected;
+	int64_t twitchViewers_ = -1; // checked every 5 minutes while live; -1 = not shown
+	int64_t youtubeViewers_ = -1;
 	bool started_ = false;
 	bool plaintextBackup_ = false; // config.json.bak still holds unencrypted secrets until the next save
 	bool obsStreaming_ = false;

@@ -39,6 +39,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QLocale>
 #include <QMenu>
 #include <QMessageBox>
 #include <QScrollBar>
@@ -313,6 +314,10 @@ ConnectionCallbacks ChatDock::MakeCallbacks(Platform platform)
 		QMetaObject::invokeMethod(
 			this, [this, messages = std::move(messages)]() { AppendMessages(messages); },
 			Qt::QueuedConnection);
+	};
+	callbacks.onViewers = [this, platform](int64_t viewers) {
+		QMetaObject::invokeMethod(
+			this, [this, platform, viewers]() { SetViewers(platform, viewers); }, Qt::QueuedConnection);
 	};
 	callbacks.onChannelId = [this](std::string channelId) {
 		QMetaObject::invokeMethod(
@@ -1244,11 +1249,43 @@ void ChatDock::AppendNotice(const QString &text)
 
 void ChatDock::SetLinkState(Platform platform, LinkState state)
 {
-	QToolButton *button = platform == Platform::Twitch ? twitchStatus_ : youtubeStatus_;
 	(platform == Platform::Twitch ? twitchState_ : youtubeState_) = state;
-	button->setText(Text(StateKey(state)));
-	button->setToolTip(QString::fromUtf8(PlatformName(platform).data(), (int)PlatformName(platform).size()) + ": " +
-			   Text(StateKey(state)));
+	// A count only means something while connected to a live chat.
+	if (state != LinkState::Connected && state != LinkState::ReadOnly)
+		(platform == Platform::Twitch ? twitchViewers_ : youtubeViewers_) = -1;
+	UpdateStatusButtons();
+}
+
+void ChatDock::SetViewers(Platform platform, int64_t viewers)
+{
+	(platform == Platform::Twitch ? twitchViewers_ : youtubeViewers_) = viewers;
+	UpdateStatusButtons();
+}
+
+void ChatDock::UpdateStatusButtons()
+{
+	auto viewersText = [](int64_t viewers) {
+		return Text("Status.Viewers").arg(QLocale().toString((qlonglong)viewers));
+	};
+	const int64_t total = (twitchViewers_ > 0 ? twitchViewers_ : 0) + (youtubeViewers_ > 0 ? youtubeViewers_ : 0);
+
+	for (Platform platform : {Platform::Twitch, Platform::YouTube}) {
+		QToolButton *button = platform == Platform::Twitch ? twitchStatus_ : youtubeStatus_;
+		const LinkState state = platform == Platform::Twitch ? twitchState_ : youtubeState_;
+		const int64_t viewers = platform == Platform::Twitch ? twitchViewers_ : youtubeViewers_;
+		QString text = Text(StateKey(state));
+		if (viewers >= 0)
+			text += QStringLiteral("  \U0001F441 ") + QLocale().toString((qlonglong)viewers);
+		button->setText(text);
+
+		QString tip = QString::fromUtf8(PlatformName(platform).data(), (int)PlatformName(platform).size()) +
+			      ": " + Text(StateKey(state));
+		if (viewers >= 0)
+			tip += ", " + viewersText(viewers);
+		if (twitchViewers_ >= 0 && youtubeViewers_ >= 0)
+			tip += "\n" + Text("Status.TotalViewers").arg(QLocale().toString((qlonglong)total));
+		button->setToolTip(tip);
+	}
 }
 
 } // namespace unified_chat

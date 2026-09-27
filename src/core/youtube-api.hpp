@@ -58,6 +58,9 @@ std::optional<ChatMessage> ParseChatMessage(const std::string &json);
 std::optional<OwnChannel> ParseOwnChannel(const std::string &json);
 std::optional<std::string> ParseBroadcastLiveChatId(const std::string &json);
 std::optional<std::string> ParseVideoLiveChatId(const std::string &json);
+std::optional<std::string> ParseBroadcastVideoId(const std::string &json);
+// videos.list liveStreamingDetails.concurrentViewers; nullopt when absent (e.g. hidden or not live).
+std::optional<int64_t> ParseConcurrentViewers(const std::string &json);
 std::string ParseErrorReason(const std::string &json);
 std::string BuildInsertBody(const std::string &liveChatId, std::string_view text);
 
@@ -85,6 +88,7 @@ enum class State { SignedOut, WaitingForBroadcast, Polling, Error };
 struct StepResult {
 	std::vector<ChatMessage> messages;
 	std::vector<ModerationEvent> moderation;
+	std::optional<int64_t> viewers; // set when checked: the concurrent viewer count, or -1 when not available
 	std::vector<std::string> notices;
 	int nextDelayMs = 0;
 };
@@ -124,6 +128,8 @@ public:
 	// Checked while a stream is open; returning true ends the Step early (e.g. to send a message).
 	void SetInterrupt(std::function<bool()> interrupt) { interrupt_ = std::move(interrupt); }
 	bool IsStreaming() const { return streaming_ && !streamFailed_; }
+	// Check the live viewer count every 5 minutes while connected (1 quota unit each). Off by default.
+	void SetViewerChecks(bool enabled) { viewerChecks_ = enabled; }
 	// Messages posted before this (unix seconds) are chat history, e.g. from an earlier session on a reused
 	// broadcast, and aren't shown. Messages without a timestamp are always shown. 0 = show everything.
 	void SetHistoryCutoff(int64_t unixSeconds) { historyCutoff_ = unixSeconds; }
@@ -152,6 +158,7 @@ private:
 	void FindLiveChat(int64_t now, StepResult &out);
 	void Poll(int64_t now, StepResult &out);
 	void Stream(int64_t now, StepResult &out);
+	void CheckViewers(int64_t now, StepResult &out);
 	void FallBackToPolling(const std::string &reason, StepResult &out);
 	void EndChat(StepResult &out);
 	void Deliver(std::vector<ChatMessage> &messages, StepResult &out);
@@ -171,6 +178,9 @@ private:
 
 	State state_ = State::SignedOut;
 	std::string liveChatId_;
+	std::string liveVideoId_; // the broadcast's video, for the viewer count
+	int64_t nextViewerCheck_ = 0;
+	bool viewerChecks_ = false;
 	std::string pageToken_;
 	std::string ownChannelId_;
 	std::string ownName_;

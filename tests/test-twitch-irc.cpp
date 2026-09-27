@@ -272,6 +272,14 @@ TEST_CASE("Messages carry the author's user id")
 	CHECK(out.messages[0].authorId == "42");
 }
 
+TEST_CASE("ParseStreamViewerCount reads Helix Get Streams")
+{
+	CHECK(ParseStreamViewerCount(R"({"data":[{"type":"live","viewer_count":23}],"pagination":{}})").value_or(0) ==
+	      23);
+	CHECK(ParseStreamViewerCount(R"({"data":[],"pagination":{}})").value_or(0) == -1); // offline
+	CHECK_FALSE(ParseStreamViewerCount(R"({"error":"Unauthorized","status":401})"));
+}
+
 TEST_CASE("ParseValidateLogin reads the login")
 {
 	CHECK(ParseValidateLogin(R"({"client_id":"c","login":"mychannel","scopes":["chat:read"],"expires_in":5000})") ==

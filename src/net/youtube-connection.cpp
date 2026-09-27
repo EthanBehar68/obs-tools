@@ -110,6 +110,7 @@ void YouTubeConnection::Run()
 				     });
 
 	session.SetStreaming(stream_);
+	session.SetViewerChecks(true);
 	session.SetHistoryCutoff(historyCutoff_);
 	if (startedWithStream_) {
 		// OBS just started streaming: YouTube takes a few seconds to bring the broadcast live, so look often
@@ -175,6 +176,8 @@ void YouTubeConnection::Run()
 			auto step = session.Step((int64_t)std::time(nullptr));
 			if (!step.messages.empty() && callbacks_.onMessages)
 				callbacks_.onMessages(std::move(step.messages));
+			if (step.viewers && callbacks_.onViewers)
+				callbacks_.onViewers(*step.viewers);
 			for (auto &event : step.moderation) {
 				if (callbacks_.onModeration)
 					callbacks_.onModeration(std::move(event));

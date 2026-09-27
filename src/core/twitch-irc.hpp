@@ -52,6 +52,9 @@ std::string NormalizeChannel(std::string_view input);
 // Returns the login from an https://id.twitch.tv/oauth2/validate response, or an empty string.
 std::string ParseValidateLogin(const std::string &json);
 
+// Helix Get Streams: the live viewer count, -1 when the channel isn't live, nullopt for an unreadable response.
+std::optional<int64_t> ParseStreamViewerCount(const std::string &json);
+
 // Splits a raw byte stream into complete IRC lines, keeping any partial line for the next call.
 class LineBuffer {
 public:

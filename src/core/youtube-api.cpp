@@ -40,7 +40,9 @@ static constexpr const char *kMessagesFields =
 	"items(id,snippet(type,publishedAt,displayMessage,textMessageDetails/messageText,"
 	"userBannedDetails(bannedUserDetails(channelId,displayName),banType,banDurationSeconds)),"
 	"authorDetails(displayName,channelId,isChatOwner,isChatModerator,isChatSponsor))";
-static constexpr const char *kBroadcastFields = "&fields=items/snippet/liveChatId";
+static constexpr const char *kBroadcastFields = "&fields=items(id,snippet/liveChatId)";
+static constexpr const char *kViewersFields = "&fields=items/liveStreamingDetails/concurrentViewers";
+static constexpr int64_t kViewerCheckSeconds = 300; // YouTube updates the count about once a minute
 static constexpr const char *kVideoFields = "&fields=items/liveStreamingDetails/activeLiveChatId";
 static constexpr const char *kChannelFields = "&fields=items(id,snippet/title)";
 
@@ -197,6 +199,31 @@ std::optional<std::string> ParseBroadcastLiveChatId(const std::string &body)
 std::optional<std::string> ParseVideoLiveChatId(const std::string &body)
 {
 	return FirstItemString(body, {"liveStreamingDetails", "activeLiveChatId"});
+}
+
+std::optional<std::string> ParseBroadcastVideoId(const std::string &body)
+{
+	// The broadcast's id is also its video id; take the one whose chat we connect to.
+	json obj = json::parse(body, nullptr, false);
+	if (!obj.is_object() || !obj.contains("items") || !obj["items"].is_array())
+		return std::nullopt;
+	for (const auto &item : obj["items"]) {
+		if (!StringAt(item, {"snippet", "liveChatId"}).empty() && !StringAt(item, {"id"}).empty())
+			return StringAt(item, {"id"});
+	}
+	return std::nullopt;
+}
+
+std::optional<int64_t> ParseConcurrentViewers(const std::string &body)
+{
+	auto value = FirstItemString(body, {"liveStreamingDetails", "concurrentViewers"}); // a string in the API
+	if (!value)
+		return std::nullopt;
+	char *end = nullptr;
+	const long long viewers = std::strtoll(value->c_str(), &end, 10);
+	if (*end || viewers < 0)
+		return std::nullopt;
+	return viewers;
 }
 
 std::optional<OwnChannel> ParseOwnChannel(const std::string &body)
@@ -418,6 +445,8 @@ void ChatSession::FindLiveChat(int64_t now, StepResult &out)
 	}
 
 	liveChatId_ = *chatId;
+	liveVideoId_ = videoId_.empty() ? ParseBroadcastVideoId(res.body).value_or(std::string()) : videoId_;
+	nextViewerCheck_ = now; // show the count soon after connecting, then every few minutes
 	pageToken_.clear();
 	state_ = State::Polling;
 	announcedWaiting_ = false;
@@ -476,6 +505,8 @@ void ChatSession::Poll(int64_t now, StepResult &out)
 void ChatSession::EndChat(StepResult &out)
 {
 	liveChatId_.clear();
+	liveVideoId_.clear();
+	out.viewers = -1; // no longer live
 	pageToken_.clear();
 	state_ = State::WaitingForBroadcast;
 	out.notices.push_back("YouTube: live chat ended");
@@ -613,13 +644,29 @@ StepResult ChatSession::Step(int64_t now)
 		out.nextDelayMs = kErrorRetryMs;
 		return out;
 	}
-	if (liveChatId_.empty())
+	if (liveChatId_.empty()) {
 		FindLiveChat(now, out);
-	else if (IsStreaming())
+		return out;
+	}
+	if (viewerChecks_ && !liveVideoId_.empty() && now >= nextViewerCheck_)
+		CheckViewers(now, out);
+	if (IsStreaming())
 		Stream(now, out);
 	else
 		Poll(now, out);
 	return out;
+}
+
+void ChatSession::CheckViewers(int64_t now, StepResult &out)
+{
+	// 1 quota unit; failures just wait for the next check (the count isn't worth a notice).
+	nextViewerCheck_ = now + kViewerCheckSeconds;
+	HttpResponse res = Authorized(false,
+				      std::string(kApiBase) + "/videos?part=liveStreamingDetails&id=" +
+					      UrlEncode(liveVideoId_) + kViewersFields,
+				      {}, now);
+	if (res.Ok())
+		out.viewers = ParseConcurrentViewers(res.body).value_or(-1);
 }
 
 ModerationOutcome ChatSession::Moderate(const ModerationAction &action, int64_t now)

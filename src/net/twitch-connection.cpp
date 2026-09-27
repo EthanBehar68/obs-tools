@@ -18,6 +18,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include "twitch-connection.hpp"
 #include "curl-http-client.hpp"
+#include "core/text-util.hpp"
 #include "core/twitch-irc.hpp"
 
 #include <curl/curl.h>
@@ -40,6 +41,7 @@ using Clock = std::chrono::steady_clock;
 static constexpr auto kStaleConnection = std::chrono::minutes(6);
 static constexpr auto kValidateInterval = std::chrono::hours(1);
 static constexpr int kMaxBackoffMs = 60000;
+static constexpr auto kViewerCheckInterval = std::chrono::minutes(5);
 static constexpr int kMaxReadsPerDrain = 32; // 16 KB each; a flood can't hold up outgoing messages
 
 static int64_t UnixNow()
@@ -231,6 +233,17 @@ void TwitchConnection::Moderate(const ModerationAction &action, const std::strin
 		Notice(action.userName + " was unbanned");
 }
 
+void TwitchConnection::CheckViewers(const std::string &channelId)
+{
+	CurlHttpClient http(&stop_);
+	auto res = http.Get("https://api.twitch.tv/helix/streams?user_id=" + UrlEncode(channelId),
+			    {"Authorization: Bearer " + token_.accessToken, "Client-Id: " + clientId_});
+	if (!res.Ok())
+		return; // try again at the next check; a count isn't worth a notice
+	if (auto viewers = twitch::ParseStreamViewerCount(res.body); viewers && callbacks_.onViewers)
+		callbacks_.onViewers(*viewers);
+}
+
 void TwitchConnection::Notice(const std::string &text)
 {
 	if (callbacks_.onNotice)
@@ -325,6 +338,7 @@ void TwitchConnection::RunSession(void *handle)
 
 	auto lastReceive = Clock::now();
 	auto lastValidate = Clock::now();
+	auto nextViewerCheck = Clock::now(); // soon after joining, then every kViewerCheckInterval
 	bool wasJoined = false;
 
 	while (!stop_) {
@@ -433,6 +447,12 @@ void TwitchConnection::RunSession(void *handle)
 			Notice("connection timed out");
 			return;
 		}
+		// The viewer count needs the API (a sign-in) and the channel's id, known once joined.
+		const bool canCountViewers = token_.IsValid() && session.IsJoined() && !session.ChannelId().empty();
+		if (canCountViewers && now >= nextViewerCheck) {
+			nextViewerCheck = now + kViewerCheckInterval;
+			CheckViewers(session.ChannelId());
+		}
 		if (token_.IsValid() && now - lastValidate > kValidateInterval) {
 			lastValidate = now;
 			if (!ValidateToken(true))
@@ -448,6 +468,8 @@ void TwitchConnection::RunSession(void *handle)
 		auto due = lastReceive + kStaleConnection;
 		if (token_.IsValid())
 			due = (std::min)(due, lastValidate + kValidateInterval);
+		if (canCountViewers)
+			due = (std::min)(due, nextViewerCheck);
 		auto waitMs = std::chrono::duration_cast<std::chrono::milliseconds>(due - Clock::now()).count() + 1;
 		WaitForActivity(socketEvent, wakeEvent_, sock, (int)std::clamp<long long>(waitMs, 0, 60 * 60 * 1000));
 	}

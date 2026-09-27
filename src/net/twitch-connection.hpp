@@ -43,6 +43,8 @@ struct ConnectionCallbacks {
 	std::function<void(ModerationEvent)> onModeration;
 	// Twitch: the channel's numeric id became known (for emote services and badges).
 	std::function<void(std::string channelId)> onChannelId;
+	// The live viewer count, checked every 5 minutes; -1 when not live or unknown.
+	std::function<void(int64_t viewers)> onViewers;
 	std::function<void(const std::string &)> onNotice;
 	std::function<void(LinkState)> onState;
 	std::function<void(const oauth::Token &, const std::string &login)> onTokenChanged;
@@ -82,6 +84,7 @@ private:
 	void WaitFor(int ms);
 	void Wake();
 	void Moderate(const ModerationAction &action, const std::string &channelId);
+	void CheckViewers(const std::string &channelId);
 	void Notice(const std::string &text);
 	void SetState(LinkState state);
 

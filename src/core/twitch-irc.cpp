@@ -161,6 +161,19 @@ std::string ParseValidateLogin(const std::string &body)
 	return login != obj.end() && login->is_string() ? login->get<std::string>() : std::string();
 }
 
+std::optional<int64_t> ParseStreamViewerCount(const std::string &body)
+{
+	auto obj = nlohmann::json::parse(body, nullptr, false);
+	if (!obj.is_object() || !obj.contains("data") || !obj["data"].is_array())
+		return std::nullopt;
+	if (obj["data"].empty())
+		return -1; // not live
+	const auto &stream = obj["data"][0];
+	if (!stream.is_object() || !stream.contains("viewer_count") || !stream["viewer_count"].is_number_integer())
+		return std::nullopt;
+	return stream["viewer_count"].get<int64_t>();
+}
+
 std::vector<std::string> LineBuffer::Append(std::string_view data)
 {
 	pending_.append(data);

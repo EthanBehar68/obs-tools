@@ -251,7 +251,7 @@ TEST_CASE("ChatSession finds the active broadcast then polls with page tokens")
 	auto again = session.Step(2);
 	CHECK(http.requests.back().url.find("pageToken=p2") != std::string::npos);
 	// Partial responses: every call asks only for what the parsers read.
-	CHECK(http.requests[0].url.find("&fields=items/snippet/liveChatId") != std::string::npos);
+	CHECK(http.requests[0].url.find("&fields=items(id,snippet/liveChatId)") != std::string::npos);
 	CHECK(http.requests[1].url.find("&fields=items(id,snippet/title)") != std::string::npos);
 	const std::string &pollUrl = http.requests.back().url;
 	for (const char *field :
@@ -748,6 +748,42 @@ TEST_CASE("YouTube moderation: delete strikes locally, bans can be lifted only w
 	auto refused = session.Moderate(ban, 5);
 	CHECK_FALSE(refused.ok);
 	CHECK(refused.error == "HTTP 403, The caller is not a moderator.");
+}
+
+TEST_CASE("Viewer count parsing")
+{
+	CHECK(ParseConcurrentViewers(R"({"items":[{"liveStreamingDetails":{"concurrentViewers":"12896"}}]})")
+		      .value_or(0) == 12896);
+	CHECK_FALSE(ParseConcurrentViewers(R"({"items":[{"liveStreamingDetails":{}}]})")); // hidden or not live
+	CHECK(ParseBroadcastVideoId(kBroadcastLive).value_or("") == "vid");
+}
+
+TEST_CASE("The viewer count is checked on connecting and then every 5 minutes")
+{
+	FakeHttp http;
+	ChatSession session(http, oauth::GoogleProvider("id", "sec"), FreshToken(), "", 5000, nullptr);
+	session.SetViewerChecks(true);
+	http.Queue(200, kBroadcastLive);
+	http.Queue(200, kChannel);
+	session.Step(1000);
+
+	http.Queue(200, R"({"items":[{"liveStreamingDetails":{"concurrentViewers":"41"}}]})");
+	http.Queue(200, Page(""));
+	auto first = session.Step(1001);
+	CHECK(first.viewers.value_or(0) == 41);
+	CHECK(http.requests[http.requests.size() - 2].url.find("/videos?part=liveStreamingDetails&id=vid") !=
+	      std::string::npos);
+
+	http.Queue(200, Page(""));
+	CHECK_FALSE(session.Step(1100).viewers); // not due yet
+
+	http.Queue(200, R"({"items":[{"liveStreamingDetails":{"concurrentViewers":"45"}}]})");
+	http.Queue(200, Page(""));
+	CHECK(session.Step(1301).viewers.value_or(0) == 45); // 300 s later
+
+	http.Queue(200, R"({"offlineAt":"2026-09-27T00:00:00Z","items":[]})");
+	auto ended = session.Step(1302);
+	CHECK(ended.viewers.value_or(0) == -1); // chat ended: no longer live
 }
 
 TEST_CASE("ChatSession without a token stays signed out and makes no requests")
