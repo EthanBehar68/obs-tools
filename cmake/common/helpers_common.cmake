@@ -37,13 +37,20 @@ function(check_uuid uuid_string return_value)
   set(${return_value} ${valid_uuid} PARENT_SCOPE)
 endfunction()
 
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/plugin-support.c.in")
-  configure_file(src/plugin-support.c.in plugin-support.c @ONLY)
-  add_library(plugin-support STATIC)
-  target_sources(plugin-support PRIVATE plugin-support.c PUBLIC src/plugin-support.h)
-  target_include_directories(plugin-support PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+# target_add_plugin_support: Give a plugin its own obs_log/PLUGIN_NAME/PLUGIN_VERSION from the current project()
+function(target_add_plugin_support target)
+  set(_support_dir "${CMAKE_SOURCE_DIR}/libs/obs-support")
+  configure_file("${_support_dir}/plugin-support.c.in" "${CMAKE_CURRENT_BINARY_DIR}/plugin-support.c" @ONLY)
+  add_library(${target}-support STATIC)
+  target_sources(
+    ${target}-support
+    PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/plugin-support.c"
+    PUBLIC "${_support_dir}/plugin-support.h"
+  )
+  target_include_directories(${target}-support PUBLIC "${_support_dir}")
   if(OS_LINUX OR OS_FREEBSD OR OS_OPENBSD)
     # add fPIC on Linux to prevent shared object errors
-    set_property(TARGET plugin-support PROPERTY POSITION_INDEPENDENT_CODE ON)
+    set_property(TARGET ${target}-support PROPERTY POSITION_INDEPENDENT_CODE ON)
   endif()
-endif()
+  target_link_libraries(${target} PRIVATE ${target}-support)
+endfunction()

@@ -20,7 +20,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "emotes.hpp"
 #include "mentions.hpp"
 #include "name-color.hpp"
-#include "text-util.hpp"
+#include "core/text-util.hpp"
 
 #include <algorithm>
 

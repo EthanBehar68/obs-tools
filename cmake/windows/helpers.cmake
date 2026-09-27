@@ -20,7 +20,7 @@ function(set_target_properties_plugin target)
 
   string(TIMESTAMP CURRENT_YEAR "%Y")
 
-  set_target_properties(${target} PROPERTIES VERSION 0 SOVERSION ${PLUGIN_VERSION})
+  set_target_properties(${target} PROPERTIES VERSION 0 SOVERSION ${PROJECT_VERSION})
 
   install(TARGETS ${target} RUNTIME DESTINATION "${target}/bin/64bit" LIBRARY DESTINATION "${target}/bin/64bit")
 
@@ -31,9 +31,7 @@ function(set_target_properties_plugin target)
     OPTIONAL
   )
 
-  if(TARGET plugin-support)
-    target_link_libraries(${target} PRIVATE plugin-support)
-  endif()
+  target_add_plugin_support(${target})
 
   add_custom_command(
     TARGET ${target}
@@ -54,8 +52,8 @@ function(set_target_properties_plugin target)
   list(FILTER target_ui_files INCLUDE REGEX ".+\\.(ui|qrc)")
   source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" PREFIX "UI Files" FILES ${target_ui_files})
 
-  configure_file(cmake/windows/resources/resource.rc.in "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_PROJECT_NAME}.rc")
-  target_sources(${CMAKE_PROJECT_NAME} PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_PROJECT_NAME}.rc")
+  configure_file("${CMAKE_SOURCE_DIR}/cmake/windows/resources/resource.rc.in" "${CMAKE_CURRENT_BINARY_DIR}/${target}.rc")
+  target_sources(${target} PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/${target}.rc")
 endfunction()
 
 # Helper function to add resources into bundle

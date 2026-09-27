@@ -17,7 +17,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
 #include "device-login.hpp"
-#include "curl-http-client.hpp"
+#include "net/curl-http-client.hpp"
 #include "core/twitch-irc.hpp"
 #include "core/youtube-api.hpp"
 

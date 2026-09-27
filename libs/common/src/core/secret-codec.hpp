@@ -1,6 +1,6 @@
 /*
-Plugin Name
-Copyright (C) <Year> <Developer> <Email Address>
+obs-tools
+Copyright (C) 2026 ebehar
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -16,24 +16,19 @@ You should have received a copy of the GNU General Public License along
 with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
-#include <plugin-support.h>
+#pragma once
 
-const char *PLUGIN_NAME = "@CMAKE_PROJECT_NAME@";
-const char *PLUGIN_VERSION = "@CMAKE_PROJECT_VERSION@";
+#include <functional>
+#include <optional>
+#include <string>
 
-void obs_log(int log_level, const char *format, ...)
-{
-	size_t length = 4 + strlen(PLUGIN_NAME) + strlen(format);
+namespace unified_chat {
 
-	char *template = malloc(length + 1);
+// Encrypts secrets at rest (on Windows: DPAPI, bound to the user's account). Both functions work on raw bytes;
+// unprotect returns nullopt when the data can't be decrypted, e.g. a config copied from another account.
+struct SecretCodec {
+	std::function<std::optional<std::string>(const std::string &)> protect;
+	std::function<std::optional<std::string>(const std::string &)> unprotect;
+};
 
-	snprintf(template, length, "[%s] %s", PLUGIN_NAME, format);
-
-	va_list(args);
-
-	va_start(args, format);
-	blogva(log_level, template, args);
-	va_end(args);
-
-	free(template);
-}
+} // namespace unified_chat

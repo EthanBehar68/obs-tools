@@ -29,9 +29,7 @@ function(set_target_properties_plugin target)
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}/obs-plugins
   )
 
-  if(TARGET plugin-support)
-    target_link_libraries(${target} PRIVATE plugin-support)
-  endif()
+  target_add_plugin_support(${target})
 
   add_custom_command(
     TARGET ${target}

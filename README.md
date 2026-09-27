@@ -1,37 +1,27 @@
-# Unified Chat for OBS (Twitch + YouTube)
+# obs-tools
 
-An OBS Studio plugin that adds one dockable chat window showing **Twitch** and **YouTube** live chat together. It's meant for multistreaming with [obs-multi-rtmp](https://github.com/sorayuki/obs-multi-rtmp).
+OBS Studio plugins for streaming to Twitch and YouTube at the same time, built from one repository.
 
-- Every line shows a **platform icon**, then the **display name**, then the **message**.
-- One text field at the bottom, next to a **Twitch / YouTube / Both** switch that picks where your message goes.
-- Twitch chat is read-only without signing in. Signing in lets you send messages.
-- YouTube chat attaches to your current live broadcast automatically, or to a video you choose.
-- Sign-in uses the OAuth device-code flow for both platforms: open a URL and type a code. No local web server is involved.
+| Plugin | What it does |
+|--------|--------------|
+| [Unified Chat](plugins/unified-chat/README.md) (`obs-unified-chat`) | One dock with Twitch and YouTube live chat together: send to either or both, emotes, badges, moderation, viewer counts. |
+
+Each plugin is a separate DLL with its own version, sign-in and settings, and installs and updates on its own. The plugins share tested code in `libs/common` (OAuth device sign-in, HTTP over libcurl, config encryption, text helpers).
+
+## Layout
 
 ```
-┌ Unified Chat ─────────────────────────────────┐
-│ [T] Connected  [▶] Connected    Clear Settings │
-│ [T] CoolViewer: hello from twitch             │
-│ [▶] Jane Doe: hi from youtube!                │
-│ [T] you: thanks both                          │
-│ [▶] Your Channel: thanks both                 │
-├───────────────────────────────────────────────┤
-│ Message Twitch and YouTube…     [T][▶][T▶]    │
-└───────────────────────────────────────────────┘
+libs\common\        shared code + its unit tests (no libobs, no Qt)
+libs\obs-support\   per-plugin obs_log / PLUGIN_NAME / PLUGIN_VERSION template
+plugins\<name>\     one folder per plugin: plugin.json (name, version), src, data, tests, docs
+dep\                vendored nlohmann/json and doctest
+cmake\ scripts\     build system (obs-plugintemplate based) and Build.ps1
 ```
 
-## Requirements
-
-- OBS Studio **32.2** or newer, Windows x64. The plugin is built against libobs 32.2.1, and OBS refuses to load plugins built for a newer minor version.
-- A Twitch application client ID and a Google OAuth client, both free. Setup steps are in [INSTALL.md](INSTALL.md).
-
-## Documentation
-
-- [INSTALL.md](INSTALL.md): install the plugin, create the Twitch and Google credentials, daily use, troubleshooting.
-- [BUILDING.md](BUILDING.md): build from source with the toolchain on the drive, run the tests, move the setup to another PC.
+[BUILDING.md](BUILDING.md) covers building, testing and packaging all plugins.
 
 ## License
 
-GPL-2.0-or-later, like OBS Studio and obs-multi-rtmp. Bundled third-party headers: nlohmann/json (MIT) and doctest (MIT), under `dep/`.
+GPL-2.0-or-later, like OBS Studio. Bundled third-party headers: nlohmann/json (MIT) and doctest (MIT), under `dep/`.
 
 Twitch and YouTube are trademarks of their respective owners. This project isn't affiliated with or endorsed by either.

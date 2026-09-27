@@ -1,4 +1,4 @@
-# Building Unified Chat from source
+# Building obs-tools from source
 
 Everything needed to build is in the `OBS-Dev` folder on the drive. The only thing that has to be installed on the PC is Visual Studio 2022 Build Tools, and an offline installer for it is included.
 
@@ -6,7 +6,7 @@ Everything needed to build is in the `OBS-Dev` folder on the drive. The only thi
 
 ```
 OBS-Dev\
-├── obs-unified-chat\          this repository
+├── obs-unified-chat\          this repository (obs-tools: every plugin)
 │   ├── .deps\                 downloaded OBS 32.2.1 sources, obs-deps and Qt 6 (prebuilt; no internet needed)
 │   ├── build_x64\             CMake build tree (regenerated automatically on a new PC)
 │   └── release\               output of Build.ps1 -Package
@@ -31,7 +31,7 @@ OBS-Dev\
    powershell -ExecutionPolicy Bypass -File .\scripts\Build.ps1 -Install
    ```
    - If the folder path, drive letter or compiler location changed since the last build, the script reconfigures from scratch. That includes rebuilding libobs from `.deps`, which takes about 8 to 10 minutes. Later builds take seconds.
-   - `-Package` also writes `release\obs-unified-chat-<version>-windows-x64.zip` for installing on other machines.
+   - `-Install` installs every plugin. `-Package` also writes one `release\<plugin>-<version>-windows-x64.zip` per plugin (name and version from its `plugin.json`) for installing on other machines.
    - `-Configuration Debug` builds a debug version. `-SkipTests` skips the unit tests.
 
 To use Git, put the portable copy on your PATH for the session:
@@ -52,7 +52,7 @@ ctest --preset windows-x64                  # unit tests
 cmake --install build_x64 --config RelWithDebInfo   # -> C:\ProgramData\obs-studio\plugins
 ```
 
-You can also open `build_x64\obs-unified-chat.sln` in Visual Studio 2022.
+You can also open `build_x64\obs-tools.sln` in Visual Studio 2022.
 
 ### Debugging inside OBS
 
@@ -60,49 +60,70 @@ Install a `Debug` or `RelWithDebInfo` build, then attach the Visual Studio debug
 
 ## Tests
 
-The unit tests live in `tests\` and use [doctest](https://github.com/doctest/doctest), vendored in `dep\doctest`. They cover the libobs-free core:
+Each library and plugin keeps its unit tests in its own `tests\` folder. They use [doctest](https://github.com/doctest/doctest), vendored in `dep\doctest`. They cover the libobs-free cores:
 
 | Area | File |
 |------|------|
+| **libs\common** (`common-tests.exe`) | |
+| Chunked JSON array splitting for the YouTube chat stream | `test-json-array-reader.cpp` |
+| OAuth device flow request bodies and Twitch/Google response mapping | `test-oauth.cpp` |
+| Text helpers (UTF-8 length, escaping, URL encoding) | `test-text-util.cpp` |
+| **plugins\unified-chat** (`unified-chat-tests.exe`) | |
 | Twitch IRC parsing, tag unescaping, login/PING/RECONNECT state machine, `/me`, CRLF injection | `test-twitch-irc.cpp` |
 | YouTube response parsing, video URL parsing, dedupe, and the full `ChatSession` against a scripted fake HTTP server (broadcast discovery, paging, token refresh, 401 retry, quota backoff, chat end, send + echo) | `test-youtube.cpp` |
-| OAuth device flow request bodies and Twitch/Google response mapping | `test-oauth.cpp` |
 | Send routing (targets, length limits, partial delivery), HTML escaping of chat lines, config round trip | `test-router-format-config.cpp` |
-| Text helpers (UTF-8 length, escaping, URL encoding) | `test-text-util.cpp` |
 
-Run them with `ctest --preset windows-x64`, or run `build_x64\RelWithDebInfo\unified-chat-tests.exe` directly (it accepts doctest options such as `-tc="*YouTube*"`). The tests need no network, OBS or Qt.
+Run them with `ctest --preset windows-x64`, or run `build_x64\libs\common\RelWithDebInfo\common-tests.exe` or `build_x64\plugins\unified-chat\RelWithDebInfo\unified-chat-tests.exe` directly (both accept doctest options such as `-tc="*YouTube*"`). The tests need no network, OBS or Qt.
 
 ## Project layout
 
 ```
-src\
-├── core\          platform logic: no libobs, no Qt, no I/O  -> static library unified-chat-core
-│   ├── twitch-irc.*      IRC parser + IrcSession state machine
-│   ├── youtube-api.*     Data API v3 parsing + ChatSession (drives an injected HttpClient); streams chat
-│   │                     via liveChat/messages/stream by default, falls back to polling
-│   ├── json-array-reader.*  splits the chunked JSON array of a chat stream into complete objects
-│   ├── oauth-device.*    RFC 8628 device flow for Twitch and Google
-│   ├── chat-router.*     Twitch / YouTube / Both routing and length rules
-│   ├── chat-format.*     chat line -> escaped Qt rich text
-│   ├── name-color.*      readable name colors (WCAG contrast vs. the chat background), cached per color
-│   ├── echo-merger.*     your own Both message shown as one line
-│   ├── bot-merger.*      a bot's identical Twitch + YouTube lines folded into one (line shown first, icon added later)
-│   ├── mentions.*        clickable-name links, "mentions you" matching, recent chatters for @ + Tab completion
-│   ├── emotes.*          Twitch emote/badge tags, BTTV/FFZ/7TV lists, emote index, message splitting, image URLs
-│   ├── moderation.*      Helix and YouTube moderation requests (delete, timeout, ban, unban), token identity/scopes
-│   └── chat-config.*     config.json (de)serialization
-├── net\           worker threads on the libcurl that ships with OBS
-│   ├── twitch-connection.*   TLS IRC to irc.chat.twitch.tv:6697 via CURLOPT_CONNECT_ONLY
-│   ├── asset-loader.*        one background thread downloading emote/badge lists and images
-│   ├── youtube-connection.*  YouTube poll/send loop
-│   ├── device-login.*        sign-in flow
-│   └── curl-http-client.*
-├── chat-dock.*        the dock widget
-├── settings-dialog.*
-├── target-switch.*    the Twitch / YouTube / Both switch
-├── platform-icons.*   icons painted with QPainter (no image assets)
-└── plugin-main.cpp    module entry, dock registration (obs_frontend_add_dock_by_id)
+CMakeLists.txt       root: shared CMake setup, then add_subdirectory for libs\common and each plugin
+buildspec.json       OBS / obs-deps / Qt pins for the whole repository
+libs\
+├── common\src\      shared by every plugin (namespace unified_chat for now)
+│   ├── core\        no libobs, no Qt, no I/O  -> static library obs-tools-core (tested)
+│   │   ├── oauth-device.*       RFC 8628 device flow for Twitch and Google
+│   │   ├── json-array-reader.*  splits a chunked JSON array into complete objects
+│   │   ├── text-util.*          UTF-8, escaping, URL encoding
+│   │   ├── http-client.hpp      the HttpClient interface the cores are tested against
+│   │   └── secret-codec.hpp     the SecretCodec interface
+│   ├── net\curl-http-client.*  HttpClient over the libcurl that ships with OBS  -> obs-tools-net
+│   └── secret-store.*          DPAPI SecretCodec                                -> obs-tools-net
+└── obs-support\     plugin-support.c.in / .h: each plugin gets its own obs_log prefix and version
+plugins\unified-chat\
+├── plugin.json      name (= DLL, install folder and config folder) and version
+├── src\
+│   ├── core\        chat logic: no libobs, no Qt, no I/O  -> static library unified-chat-core
+│   │   ├── twitch-irc.*      IRC parser + IrcSession state machine
+│   │   ├── youtube-api.*     Data API v3 parsing + ChatSession (drives an injected HttpClient); streams chat
+│   │   │                     via liveChat/messages/stream by default, falls back to polling
+│   │   ├── chat-router.*     Twitch / YouTube / Both routing and length rules
+│   │   ├── chat-format.*     chat line -> escaped Qt rich text
+│   │   ├── name-color.*      readable name colors (WCAG contrast vs. the chat background), cached per color
+│   │   ├── echo-merger.*     your own Both message shown as one line
+│   │   ├── bot-merger.*      a bot's identical Twitch + YouTube lines folded into one (line shown first, icon added later)
+│   │   ├── mentions.*        clickable-name links, "mentions you" matching, recent chatters for @ + Tab completion
+│   │   ├── emotes.*          Twitch emote/badge tags, BTTV/FFZ/7TV lists, emote index, message splitting, image URLs
+│   │   ├── moderation.*      Helix and YouTube moderation requests (delete, timeout, ban, unban), token identity/scopes
+│   │   └── chat-config.*     config.json (de)serialization
+│   ├── net\         worker threads
+│   │   ├── twitch-connection.*   TLS IRC to irc.chat.twitch.tv:6697 via CURLOPT_CONNECT_ONLY
+│   │   ├── asset-loader.*        one background thread downloading emote/badge lists and images
+│   │   ├── youtube-connection.*  YouTube poll/send loop
+│   │   └── device-login.*        sign-in flow
+│   ├── chat-dock.*        the dock widget
+│   ├── settings-dialog.*
+│   ├── target-switch.*    the Twitch / YouTube / Both switch
+│   ├── platform-icons.*   icons painted with QPainter (no image assets)
+│   └── plugin-main.cpp    module entry, dock registration (obs_frontend_add_dock_by_id)
+├── data\locale\en-US.ini
+└── tests\
 ```
+
+### Adding a plugin
+
+Create `plugins\<name>\` with a `plugin.json` (`name`, `version`) and a `CMakeLists.txt` that starts with `plugin_project()` and calls `set_target_properties_plugin(${PROJECT_NAME} ...)`, then add it to the root `CMakeLists.txt`. `plugin_project()` makes the plugin's name and version the ones used for its DLL, version resource and `obs_log` prefix. Plugins must not share a Twitch sign-in: Twitch refresh tokens are single-use, so two plugins refreshing one token would sign each other out.
 
 ### Design notes
 
@@ -114,11 +135,11 @@ src\
 
 ### Conventions followed
 
-- Build system: [obs-plugintemplate](https://github.com/obsproject/obs-plugintemplate), i.e. `buildspec.json`, `CMakePresets.json`, `cmake/`, `.github/` CI workflows, and `data/locale/en-US.ini` with `obs_module_text`.
+- Build system: [obs-plugintemplate](https://github.com/obsproject/obs-plugintemplate), i.e. `buildspec.json`, `CMakePresets.json`, `cmake/`, `.github/` CI workflows, and each plugin's `data/locale/en-US.ini` with `obs_module_text`. The template's single-plugin helpers were changed to work per target (version resource, `plugin-support`).
 - C++20 with Qt 6 Widgets, as in obs-multi-rtmp: kebab-case file names, PascalCase types and methods, `member_` fields, `obs_frontend_add_dock_by_id`, config saved on `OBS_FRONTEND_EVENT_EXIT`.
 - Formatting: the template's `.clang-format` (OBS style: tabs, 120 columns). Run the clang-format 19 that ships with VS Build Tools:
   ```powershell
-  & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2022\BuildTools\VC\Tools\Llvm\x64\bin\clang-format.exe" -i (Get-ChildItem src,tests -Recurse -Include *.cpp,*.hpp)
+  & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2022\BuildTools\VC\Tools\Llvm\x64\bin\clang-format.exe" -i (Get-ChildItem libs,plugins -Recurse -Include *.cpp,*.hpp)
   ```
 
 ## FAT32 / exFAT drive notes
@@ -126,7 +147,7 @@ src\
 The SanDisk drive is formatted FAT32, which needs two workarounds. Both are already in the repo:
 
 1. **Archive timestamps:** the obs-deps archives contain timestamps FAT32 can't store, so extraction failed with `Can't restore time`. `cmake/common/buildspec_common.cmake` extracts with `TOUCH` and applies the same patch to the downloaded OBS sources, following the same pattern obs-multi-rtmp uses for its macOS Swift patch.
-2. **Relinking:** `link.exe` can't overwrite its previous output on FAT32 (`LNK1105 ... error code 1224`). `CMakeLists.txt` deletes the old binary in a `PRE_LINK` step.
+2. **Relinking:** `link.exe` can't overwrite its previous output on FAT32 (`LNK1105 ... error code 1224`). The root `CMakeLists.txt` defines `_remove_output_before_link`, which deletes the old binary in a `PRE_LINK` step.
 
 FAT32 also can't hold files larger than 4 GB. Nothing in this project comes close; the largest file is the 260 MB Qt archive.
 

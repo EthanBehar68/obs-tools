@@ -17,8 +17,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
 #include "youtube-api.hpp"
-#include "json-array-reader.hpp"
-#include "text-util.hpp"
+#include "core/json-array-reader.hpp"
+#include "core/text-util.hpp"
 
 #include <algorithm>
 #include <cstdlib>

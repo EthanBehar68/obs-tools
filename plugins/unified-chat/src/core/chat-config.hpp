@@ -19,7 +19,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #pragma once
 
 #include "chat-router.hpp"
-#include "oauth-device.hpp"
+#include "core/oauth-device.hpp"
+#include "core/secret-codec.hpp"
 
 #include <functional>
 #include <optional>
@@ -54,13 +55,6 @@ struct ChatConfig {
 // "Nightbot, StreamElements" <-> {"Nightbot", "StreamElements"}; empty entries are dropped.
 std::vector<std::string> SplitNameList(std::string_view text);
 std::string JoinNameList(const std::vector<std::string> &names);
-
-// Encrypts secrets at rest (on Windows: DPAPI, bound to the user's account). Both functions work on raw bytes;
-// unprotect returns nullopt when the data can't be decrypted, e.g. a config copied from another account.
-struct SecretCodec {
-	std::function<std::optional<std::string>(const std::string &)> protect;
-	std::function<std::optional<std::string>(const std::string &)> unprotect;
-};
 
 // Tokens and the Google client secret are written as "enc:v1:<base64>" when a codec is given.
 std::string SerializeConfig(const ChatConfig &config, const SecretCodec *codec = nullptr);

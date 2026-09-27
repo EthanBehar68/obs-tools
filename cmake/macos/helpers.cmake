@@ -42,9 +42,7 @@ function(set_target_properties_plugin target)
     )
   endif()
 
-  if(TARGET plugin-support)
-    target_link_libraries(${target} PRIVATE plugin-support)
-  endif()
+  target_add_plugin_support(${target})
 
   target_install_resources(${target})
 

@@ -18,7 +18,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include "twitch-irc.hpp"
 #include "emotes.hpp"
-#include "text-util.hpp"
+#include "core/text-util.hpp"
 
 #include <algorithm>
 #include <cstdlib>

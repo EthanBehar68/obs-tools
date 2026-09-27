@@ -33,13 +33,13 @@
     },
     "platformConfig": {
         "macos": {
-            "bundleId": "com.github.obs-unified-chat"
+            "bundleId": "com.github.obs-tools"
         }
     },
-    "name": "obs-unified-chat",
-    "version": "1.2.0",
+    "name": "obs-tools",
+    "version": "1.0.0",
     "author": "ebehar",
     "website": "https://github.com/obs-unified-chat",
     "email": "me@example.com",
-    "displayName": "Unified Chat (Twitch + YouTube)"
+    "displayName": "OBS tools"
 }

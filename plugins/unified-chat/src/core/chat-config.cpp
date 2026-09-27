@@ -17,7 +17,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
 #include "chat-config.hpp"
-#include "text-util.hpp"
+#include "core/text-util.hpp"
 
 #include <algorithm>
 #include <type_traits>

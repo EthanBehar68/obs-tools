@@ -18,7 +18,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #pragma once
 
-#include "core/chat-config.hpp"
+#include "core/secret-codec.hpp"
 
 namespace unified_chat {
 

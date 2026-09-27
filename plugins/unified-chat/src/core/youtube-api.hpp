@@ -19,9 +19,9 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #pragma once
 
 #include "chat-message.hpp"
-#include "http-client.hpp"
+#include "core/http-client.hpp"
 #include "moderation.hpp"
-#include "oauth-device.hpp"
+#include "core/oauth-device.hpp"
 
 #include <cstdint>
 #include <deque>

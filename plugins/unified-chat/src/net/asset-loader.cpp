@@ -17,7 +17,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
 #include "asset-loader.hpp"
-#include "curl-http-client.hpp"
+#include "net/curl-http-client.hpp"
 
 namespace unified_chat {
 

@@ -17,7 +17,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
 #include "twitch-connection.hpp"
-#include "curl-http-client.hpp"
+#include "net/curl-http-client.hpp"
 #include "core/text-util.hpp"
 #include "core/twitch-irc.hpp"
 

@@ -2,16 +2,16 @@
 param(
     [ValidateSet('Debug', 'RelWithDebInfo', 'Release', 'MinSizeRel')]
     [string] $Configuration = 'RelWithDebInfo',
-    # Copy the plugin into C:\ProgramData\obs-studio\plugins (close OBS first)
+    # Copy the plugins into C:\ProgramData\obs-studio\plugins (close OBS first)
     [switch] $Install,
-    # Produce release\obs-unified-chat-<version>-windows-x64.zip
+    # Produce release\<plugin>-<version>-windows-x64.zip for each plugin
     [switch] $Package,
     [switch] $SkipTests,
     # Folder holding the portable toolchain. Defaults to ..\..\tools next to the repo.
     [string] $ToolsDir
 )
 
-# Configures, builds, tests and optionally installs/packages obs-unified-chat with the portable toolchain.
+# Configures, builds, tests and optionally installs/packages every plugin with the portable toolchain.
 
 $ErrorActionPreference = 'Stop'
 
@@ -69,14 +69,16 @@ try {
 
     if ($Package) {
         Write-Host '== Package'
-        $Spec = Get-Content (Join-Path $RepoDir 'buildspec.json') -Raw | ConvertFrom-Json
         $Staging = Join-Path $RepoDir "release\$Configuration"
         if (Test-Path $Staging) { Remove-Item -Recurse -Force $Staging }
         Invoke-Checked cmake @('--install', 'build_x64', '--config', $Configuration, '--prefix', $Staging)
-        $Zip = Join-Path $RepoDir "release\$($Spec.name)-$($Spec.version)-windows-x64.zip"
-        if (Test-Path $Zip) { Remove-Item -Force $Zip }
-        Compress-Archive -Path (Join-Path $Staging '*') -DestinationPath $Zip
-        Write-Host "Created $Zip"
+        foreach ($SpecFile in Get-ChildItem (Join-Path $RepoDir 'plugins\*\plugin.json')) {
+            $Spec = Get-Content $SpecFile.FullName -Raw | ConvertFrom-Json
+            $Zip = Join-Path $RepoDir "release\$($Spec.name)-$($Spec.version)-windows-x64.zip"
+            if (Test-Path $Zip) { Remove-Item -Force $Zip }
+            Compress-Archive -Path (Join-Path $Staging $Spec.name) -DestinationPath $Zip
+            Write-Host "Created $Zip"
+        }
     }
 } finally {
     Pop-Location

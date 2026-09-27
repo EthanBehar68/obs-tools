@@ -17,7 +17,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
 #include "youtube-connection.hpp"
-#include "curl-http-client.hpp"
+#include "net/curl-http-client.hpp"
 #include "core/youtube-api.hpp"
 
 #include <chrono>
