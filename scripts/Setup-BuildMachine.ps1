@@ -4,7 +4,7 @@ param(
     [string] $ToolsDir
 )
 
-# Prepares a Windows PC to build obs-unified-chat using only the toolchain copied on the drive.
+# Prepares a Windows PC to build obs-tools using only the toolchain copied on the drive.
 # Installs Visual Studio 2022 Build Tools from the offline layout (needs admin, no internet),
 # then marks the repo as a safe git directory (FAT32/exFAT drives have no file ownership).
 

@@ -44,7 +44,12 @@ try {
             Write-Host 'Build tree was configured on another machine or path; reconfiguring from scratch'
             Remove-Item -Recurse -Force (Join-Path $RepoDir 'build_x64')
             Get-ChildItem (Join-Path $RepoDir '.deps') -Directory -Filter 'obs-studio-*' -ErrorAction SilentlyContinue |
-                ForEach-Object { Remove-Item -Recurse -Force (Join-Path $_.FullName 'build_x64') -ErrorAction SilentlyContinue }
+                ForEach-Object {
+                    # libobs itself, and the 32-bit helper build OBS's CMake configures next to it
+                    foreach ($Tree in 'build_x64', 'build_x86') {
+                        Remove-Item -Recurse -Force (Join-Path $_.FullName $Tree) -ErrorAction SilentlyContinue
+                    }
+                }
         }
     }
 
