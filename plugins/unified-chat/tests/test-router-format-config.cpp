@@ -221,6 +221,21 @@ TEST_CASE("Moderation tags and notices")
 	CHECK(TagFor(clear).severity == TagFor(deleted).severity);
 }
 
+TEST_CASE("Follows and subscribers from Stream Alerts get a starred line in the platform's colour")
+{
+	const std::string follow = FormatAlertHtml(Platform::Twitch, "<Cool_User>", false, 16);
+	CHECK(follow.find(kTwitchIconResource) != std::string::npos);
+	CHECK(follow.find("\xE2\x98\x85 &lt;Cool_User&gt; followed") !=
+	      std::string::npos); // the star, then the escaped name
+	CHECK(follow.find("#a970ff") != std::string::npos);
+	CHECK(follow.find("(test)") == std::string::npos);
+
+	const std::string sub = FormatAlertHtml(Platform::YouTube, "Jane", true, 16);
+	CHECK(sub.find(kYouTubeIconResource) != std::string::npos);
+	CHECK(sub.find("Jane subscribed") != std::string::npos);
+	CHECK(sub.find("(test)") != std::string::npos);
+}
+
 TEST_CASE("FormatNoticeHtml escapes")
 {
 	CHECK(FormatNoticeHtml("<x>").find("&lt;x&gt;") != std::string::npos);
@@ -251,6 +266,9 @@ TEST_CASE("Config round trips through JSON")
 	CHECK(ParseConfig("{}").youtubeConnectOnStream); // waiting for Start Streaming is the default
 	CHECK(loaded.sendTarget == SendTarget::YouTube);
 	CHECK(loaded.maxMessages == 800);
+	CHECK(ParseConfig("{}").showAlerts); // on by default
+	config.showAlerts = false;
+	CHECK_FALSE(ParseConfig(SerializeConfig(config)).showAlerts);
 }
 
 namespace {

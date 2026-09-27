@@ -18,6 +18,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include "alerts-controller.hpp"
 #include "alerts-dialog.hpp"
+#include "ui/obs-tools-menu.hpp"
 
 #include <obs-frontend-api.h>
 #include <obs-module.h>
@@ -232,14 +233,16 @@ QString AlertsController::StatusText(AlertKind kind) const
 void AlertsController::Test(AlertKind kind)
 {
 	const char *name = kind == AlertKind::Follow ? "TestFollower" : "TestSubscriber";
-	Push({kind, "test-" + std::to_string(++testCount_), name});
+	Push({kind, "test-" + std::to_string(++testCount_), name}, true);
 }
 
-void AlertsController::Push(const AlertEvent &event)
+void AlertsController::Push(const AlertEvent &event, bool test)
 {
 	if (!queue_.Push(event))
 		return;
 	obs_log(LOG_INFO, "%s: %s", KindName(event.kind), event.name.c_str());
+	// The chat dock shows everyone as they arrive, including those a combined alert will cover.
+	unified_chat::NotifyAlert(event.kind == AlertKind::Follow, event.name, test);
 	if (phase_ == Phase::Idle)
 		ShowNext();
 }

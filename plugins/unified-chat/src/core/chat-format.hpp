@@ -48,6 +48,10 @@ std::string FormatMessageHtml(const ChatMessage &message, int iconSize, const st
 			      NameColorResolver *colors = nullptr, const EmoteIndex *emotes = nullptr,
 			      int emoteHeight = 0, int *renderedTextLength = nullptr);
 std::string FormatNoticeHtml(std::string_view text);
+// A follow (Twitch) or subscriber (YouTube) from Stream Alerts: the platform icon, then "★ name followed" in bold
+// in the platform's colour (made readable with colors); a test alert is marked "(test)".
+std::string FormatAlertHtml(Platform platform, std::string_view name, bool test, int iconSize,
+			    NameColorResolver *colors = nullptr);
 
 // How a line removed by a moderator is marked. A line keeps its most severe tag: banned > timed out >
 // deleted / chat cleared.

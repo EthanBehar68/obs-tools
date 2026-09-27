@@ -44,6 +44,8 @@ struct ChatConfig {
 	int maxMessages = 500;
 	// Accounts whose identical Twitch and YouTube messages are shown as one line.
 	std::vector<std::string> mergeBots{"Nightbot"};
+	// New followers and subscribers from the Stream Alerts plugin, as lines in the chat.
+	bool showAlerts = true;
 };
 
 // "Nightbot, StreamElements" <-> {"Nightbot", "StreamElements"}; empty entries are dropped.

@@ -22,6 +22,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include <QDialog>
 
+class QCheckBox;
 class QComboBox;
 class QLayout;
 class QLabel;
@@ -56,6 +57,7 @@ private:
 
 	QSpinBox *maxMessages_;
 	QLineEdit *mergeBots_;
+	QCheckBox *showAlerts_;
 };
 
 } // namespace unified_chat

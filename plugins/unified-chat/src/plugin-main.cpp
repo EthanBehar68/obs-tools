@@ -72,6 +72,10 @@ bool obs_module_load(void)
 		if (guarded)
 			guarded->OnAccountsChanged(twitch, google);
 	});
+	unified_chat::SetAlertHandler([guarded](bool follow, const std::string &name, bool test) {
+		if (guarded)
+			guarded->OnAlert(follow, name, test);
+	});
 	obs_log(LOG_INFO, "plugin loaded successfully (version %s)", PLUGIN_VERSION);
 	return true;
 }
@@ -79,6 +83,7 @@ bool obs_module_load(void)
 void obs_module_unload(void)
 {
 	unified_chat::ClearAccountsChangedHandler();
+	unified_chat::ClearAlertHandler();
 	if (s_dock)
 		obs_frontend_remove_event_callback(OnFrontendEvent, s_dock);
 	s_dock = nullptr;

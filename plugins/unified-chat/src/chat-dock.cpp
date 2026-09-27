@@ -1275,6 +1275,14 @@ void ChatDock::changeEvent(QEvent *event)
 	QWidget::changeEvent(event);
 }
 
+void ChatDock::OnAlert(bool follow, const std::string &name, bool test)
+{
+	if (!started_ || !config_.showAlerts)
+		return;
+	const Platform platform = follow ? Platform::Twitch : Platform::YouTube;
+	AppendHtml({{QString::fromStdString(FormatAlertHtml(platform, name, test, iconSize_, &nameColors_))}});
+}
+
 void ChatDock::AppendNotice(const QString &text)
 {
 	AppendHtml({{QString::fromStdString(FormatNoticeHtml(text.toStdString()))}});

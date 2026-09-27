@@ -9,7 +9,8 @@
 
 ### Chat
 - **Moderate from the dock:** right-click a line to delete it, time out, ban or unban (every action asks first).
-- **Viewer counts** on the status buttons while live, checked every 5 minutes.
+- **Viewer counts** on the status buttons while live (👤 23), checked every 5 minutes.
+- **Follows and subscribers in the chat:** with the Stream Alerts plugin, each new follower and subscriber is a highlighted line (★ name followed / subscribed). Settings → General → Show follows and subscribers.
 
 ## 1.2.0 (2026-09-26)
 

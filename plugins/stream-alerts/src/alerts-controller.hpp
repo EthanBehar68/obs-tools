@@ -59,7 +59,7 @@ private:
 	void StartListeners(bool twitch, bool google);
 	void StopListeners();
 	ListenerCallbacks MakeCallbacks(AlertKind kind);
-	void Push(const AlertEvent &event);
+	void Push(const AlertEvent &event, bool test = false);
 	void ShowNext();
 	void OnTimer();
 

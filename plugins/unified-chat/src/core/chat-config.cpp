@@ -87,6 +87,7 @@ std::string SerializeConfig(const ChatConfig &config)
 		{"send_target", std::string(SendTargetToString(config.sendTarget))},
 		{"max_messages", config.maxMessages},
 		{"merge_bots", config.mergeBots},
+		{"show_alerts", config.showAlerts},
 	};
 	return obj.dump(4);
 }
@@ -124,6 +125,10 @@ ChatConfig ParseConfig(const std::string &text, Accounts *legacy, const SecretCo
 
 	config.sendTarget = SendTargetFromString(Get<std::string>(obj, "send_target", "both"));
 	config.maxMessages = std::clamp(Get<int>(obj, "max_messages", 500), 50, 10000);
+
+	auto showAlerts = obj.find("show_alerts");
+	if (showAlerts != obj.end() && showAlerts->is_boolean())
+		config.showAlerts = showAlerts->get<bool>();
 
 	// Missing: keep the default. Present: use it as saved, even when the user emptied it.
 	auto bots = obj.find("merge_bots");

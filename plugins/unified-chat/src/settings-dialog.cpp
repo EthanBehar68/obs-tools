@@ -26,6 +26,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include <obs-module.h>
 
+#include <QCheckBox>
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QFormLayout>
@@ -179,6 +180,10 @@ SettingsDialog::SettingsDialog(const ChatConfig &config, QWidget *parent) : QDia
 	mergeBots_->setPlaceholderText(Text("Settings.MergeBotsHint"));
 	mergeBots_->setToolTip(Text("Settings.MergeBotsTip"));
 	generalForm->addRow(Text("Settings.MergeBots"), mergeBots_);
+	showAlerts_ = new QCheckBox(Text("Settings.ShowAlerts"), generalBox);
+	showAlerts_->setChecked(config.showAlerts);
+	showAlerts_->setToolTip(Text("Settings.ShowAlertsTip"));
+	generalForm->addRow(QString(), showAlerts_);
 	tabs->addTab(generalBox, Text("Settings.General"));
 
 	tabs->addTab(MakeLegend(tabs), Text("Legend.Title"));
@@ -210,6 +215,7 @@ ChatConfig SettingsDialog::Result() const
 	result.youtubeConnectOnStream = youtubeConnect_->currentData().toBool();
 	result.maxMessages = maxMessages_->value();
 	result.mergeBots = SplitNameList(mergeBots_->text().toStdString());
+	result.showAlerts = showAlerts_->isChecked();
 	return result;
 }
 

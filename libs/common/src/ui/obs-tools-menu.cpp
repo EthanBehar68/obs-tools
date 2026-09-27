@@ -32,6 +32,8 @@ static constexpr const char *kMenuProc = "obs_tools_menu";
 static constexpr const char *kMenuProcDecl = "void obs_tools_menu(out ptr menu)";
 static constexpr const char *kChangedSignal = "obs_tools_accounts_changed";
 static constexpr const char *kChangedSignalDecl = "void obs_tools_accounts_changed(bool twitch, bool google)";
+static constexpr const char *kAlertSignal = "obs_tools_alert";
+static constexpr const char *kAlertSignalDecl = "void obs_tools_alert(bool follow, string name, bool test)";
 
 static void PublishMenu(void *data, calldata_t *cd)
 {
@@ -67,6 +69,7 @@ QMenu *ObsToolsMenu()
 
 		proc_handler_add(obs_get_proc_handler(), kMenuProcDecl, PublishMenu, created);
 		signal_handler_add(obs_get_signal_handler(), kChangedSignalDecl);
+		signal_handler_add(obs_get_signal_handler(), kAlertSignalDecl);
 		return created;
 	}();
 	return menu;
@@ -111,6 +114,43 @@ void NotifyAccountsChanged(bool twitch, bool google)
 	calldata_set_bool(&cd, "twitch", twitch);
 	calldata_set_bool(&cd, "google", google);
 	signal_handler_signal(obs_get_signal_handler(), kChangedSignal, &cd);
+	calldata_free(&cd);
+}
+
+static std::function<void(bool, const std::string &, bool)> &AlertHandler()
+{
+	static std::function<void(bool, const std::string &, bool)> handler;
+	return handler;
+}
+
+static void OnAlert(void *, calldata_t *cd)
+{
+	const char *name = calldata_string(cd, "name");
+	if (AlertHandler())
+		AlertHandler()(calldata_bool(cd, "follow"), name ? name : "", calldata_bool(cd, "test"));
+}
+
+void SetAlertHandler(std::function<void(bool follow, const std::string &name, bool test)> handler)
+{
+	ObsToolsMenu(); // declares the signal if this plugin is the first
+	AlertHandler() = std::move(handler);
+	signal_handler_connect(obs_get_signal_handler(), kAlertSignal, OnAlert, nullptr);
+}
+
+void ClearAlertHandler()
+{
+	signal_handler_disconnect(obs_get_signal_handler(), kAlertSignal, OnAlert, nullptr);
+	AlertHandler() = nullptr;
+}
+
+void NotifyAlert(bool follow, const std::string &name, bool test)
+{
+	calldata_t cd;
+	calldata_init(&cd);
+	calldata_set_bool(&cd, "follow", follow);
+	calldata_set_string(&cd, "name", name.c_str());
+	calldata_set_bool(&cd, "test", test);
+	signal_handler_signal(obs_get_signal_handler(), kAlertSignal, &cd);
 	calldata_free(&cd);
 }
 

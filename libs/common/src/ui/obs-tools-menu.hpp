@@ -19,6 +19,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #pragma once
 
 #include <functional>
+#include <string>
 
 class QMenu;
 class QString;
@@ -36,5 +37,11 @@ void AddObsToolsMenuEntry(const QString &text, std::function<void()> onClick);
 void SetAccountsChangedHandler(std::function<void(bool twitch, bool google)> handler);
 void ClearAccountsChangedHandler();
 void NotifyAccountsChanged(bool twitch, bool google);
+
+// Stream Alerts announces each new follower (Twitch) or subscriber (YouTube), test alerts included, so the chat dock
+// can show them. Emitted and handled on the UI thread.
+void SetAlertHandler(std::function<void(bool follow, const std::string &name, bool test)> handler);
+void ClearAlertHandler();
+void NotifyAlert(bool follow, const std::string &name, bool test);
 
 } // namespace unified_chat

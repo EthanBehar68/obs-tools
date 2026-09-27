@@ -67,6 +67,8 @@ public:
 	// The shared Accounts window changed these sign-ins or client IDs.
 	void OnAccountsChanged(bool twitch, bool google);
 	void OpenSettings();
+	// A new follower or subscriber from Stream Alerts.
+	void OnAlert(bool follow, const std::string &name, bool test);
 
 protected:
 	void changeEvent(QEvent *event) override;

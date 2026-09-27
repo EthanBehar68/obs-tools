@@ -140,4 +140,19 @@ std::string FormatNoticeHtml(std::string_view text)
 	return "<span style=\"color: #9a9a9a; font-style: italic;\">" + HtmlEscape(text) + "</span>";
 }
 
+std::string FormatAlertHtml(Platform platform, std::string_view name, bool test, int iconSize,
+			    NameColorResolver *colors)
+{
+	std::string color(DefaultNameColor(platform));
+	if (colors)
+		color = colors->Resolve(color);
+	const std::string size = std::to_string(iconSize);
+	std::string html = "<img src=\"" + std::string(IconResource(platform)) + "\" width=\"" + size + "\" height=\"" +
+			   size + "\" style=\"vertical-align: middle;\"> <b style=\"color: " + color + ";\">\u2605 " +
+			   HtmlEscape(name) + (platform == Platform::Twitch ? " followed" : " subscribed") + "</b>";
+	if (test)
+		html += " <i style=\"color: #9a9a9a;\">(test)</i>";
+	return html;
+}
+
 } // namespace unified_chat

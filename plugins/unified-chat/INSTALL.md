@@ -115,6 +115,7 @@ If YouTube goes live some other way (another app, or a multistream output with a
   A line keeps its most serious tag (banned > timed out > deleted). Timeouts, bans and clears also add a grey notice at the bottom, e.g. *Twitch: trollguy was timed out for 10 minutes*. **Settings → Legend** explains every mark the dock uses.
 - **Clear** empties the view. **Messages to keep** in Settings caps how much history the dock holds (default 500).
 - System notices (connection changes, subscriptions and raids, errors) appear as grey italic lines.
+- **Follows and subscribers:** with the [Stream Alerts](../stream-alerts/README.md) plugin, each new Twitch follower and YouTube subscriber appears as a bold line in the platform's colour, e.g. **★ Cool_User followed** (test alerts are marked *(test)*). Everyone gets a line, including people a combined "+N more" alert covers. The lines are only in the dock, never sent to chat. Turn them off in **Settings → General → Show follows and subscribers**.
 
 ## 5. Where settings are stored
 

@@ -7,6 +7,7 @@ Follower alerts for **Twitch** and subscriber alerts for **YouTube**, built into
 - Alerts run **only while OBS is streaming**. Nothing connects or polls while you're offline.
 - Alerts play **one at a time** with a 1-second gap. Up to **10** wait their turn. Past that, the rest are combined into one alert, e.g. "**+14 more new followers!**" with as many names as fit, so a follow-bot flood or a raid can't take over the screen. Nobody is dropped, and every name is written to the OBS log.
 - Each person alerts **once per stream**, so unfollowing and following again doesn't repeat it.
+- With **Unified Chat** installed, each new follower and subscriber also appears in the chat dock as a highlighted line, straight away, even when their on-screen alert is still waiting or combined.
 
 ## Requirements
 
