@@ -73,13 +73,16 @@ endfunction()
 # target_install_resources: Helper function to add resources into bundle
 function(target_install_resources target)
   message(DEBUG "Installing resources for target ${target}...")
-  if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/data")
-    file(GLOB_RECURSE data_files "${CMAKE_CURRENT_SOURCE_DIR}/data/*")
+  if(NOT PLUGIN_DATA_DIR)
+    set(PLUGIN_DATA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/data")
+  endif()
+  if(EXISTS "${PLUGIN_DATA_DIR}")
+    file(GLOB_RECURSE data_files "${PLUGIN_DATA_DIR}/*")
     foreach(data_file IN LISTS data_files)
       cmake_path(
         RELATIVE_PATH
         data_file
-        BASE_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/data/"
+        BASE_DIRECTORY "${PLUGIN_DATA_DIR}/"
         OUTPUT_VARIABLE relative_path
       )
       cmake_path(GET relative_path PARENT_PATH relative_path)

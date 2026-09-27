@@ -6,12 +6,12 @@ OBS Studio plugins for streaming to Twitch and YouTube at the same time, built f
 |--------|--------------|
 | [Unified Chat](plugins/unified-chat/README.md) (`obs-unified-chat`) | One dock with Twitch and YouTube live chat together: send to either or both, emotes, badges, moderation, viewer counts. |
 
-Each plugin is a separate DLL with its own version, sign-in and settings, and installs and updates on its own. The plugins share tested code in `libs/common` (OAuth device sign-in, HTTP over libcurl, config encryption, text helpers).
+Each plugin is a separate DLL with its own version and settings, and installs and updates on its own. They share one set of Twitch and YouTube sign-ins (**Tools → OBS Tools → Accounts…**) and tested code in `libs/common` (OAuth device sign-in, the shared accounts file, HTTP over libcurl, encryption, text helpers).
 
 ## Layout
 
 ```
-libs\common\        shared code + its unit tests (no libobs, no Qt)
+libs\common\        shared code: tested core, networking, the shared Accounts window
 libs\obs-support\   per-plugin obs_log / PLUGIN_NAME / PLUGIN_VERSION template
 plugins\<name>\     one folder per plugin: plugin.json (name, version), src, data, tests, docs
 dep\                vendored nlohmann/json and doctest

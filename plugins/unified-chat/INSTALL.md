@@ -26,13 +26,13 @@ Reading Twitch chat only needs a channel name. Sending messages needs a sign-in,
    - **Category:** Chat Bot
    - **Client Type:** **Public**
 3. Click **Create**, then **Manage**, and copy the **Client ID**.
-4. In OBS, open **Unified Chat → Settings**:
-   - **Channel:** your channel name, or a `twitch.tv/...` URL
+4. In OBS, open **Tools → OBS Tools → Accounts…** (also reachable from **Settings → Twitch → Accounts…** in the dock):
    - **Client ID:** paste it
    - Click **Sign in**. Your browser opens `twitch.tv/activate` and the code is copied to your clipboard. Approve the request.
-   - The dialog shows **Signed in as ...**. Click **OK**.
+   - The window shows **Signed in as ...**. Click **Close**.
+5. In the dock's **Settings → Twitch**, set **Channel** to your channel name or a `twitch.tv/...` URL. If it's empty when you sign in, your own channel is filled in.
 
-The plugin keeps the sign-in refreshed automatically and validates it hourly, as Twitch requires. If you sign in with a different account than the channel (e.g. a bot account), messages are sent from that account.
+Sign-ins are shared by every OBS Tools plugin, so you only sign in once. The sign-in also allows follower alerts for the upcoming Stream Alerts plugin. It's refreshed automatically and validated hourly, as Twitch requires. If you sign in with a different account than the channel (e.g. a bot account), messages are sent from that account.
 
 ## 3. YouTube setup (one time)
 
@@ -47,7 +47,7 @@ YouTube requires a Google Cloud project with the YouTube Data API enabled, for b
 4. **Clients → Create client:**
    - **Application type:** **TVs and Limited Input devices**
    - Create it and copy the **Client ID** and **Client secret**.
-5. In OBS, open **Unified Chat → Settings**, paste both values into the YouTube section and click **Sign in**. Your browser opens `google.com/device` and the code is copied to your clipboard. Choose the account (and the brand channel, if you use one), then allow access.
+5. In OBS, open **Tools → OBS Tools → Accounts…**, paste both values into the YouTube (Google) section and click **Sign in**. Your browser opens `google.com/device` and the code is copied to your clipboard. Choose the account (and the brand channel, if you use one), then allow access.
 
 ### How the YouTube chat gets picked
 
@@ -104,7 +104,7 @@ If YouTube goes live some other way (another app, or a multistream output with a
   - Images download once per session in the background. A line appears at once with the right spacing and the picture fills in a moment later.
   - Emotes in your own sent messages: BTTV/FFZ/7TV ones show as pictures, but Twitch's own emotes stay as words, because Twitch doesn't send your message back with emote positions.
 - **Moderate from the dock:** right-click someone's line for **Delete message**, **Timeout** (1 minute, 10 minutes, 1 hour, 24 hours or Custom…), **Ban…** (with an optional reason on Twitch) and, on lines already marked timed out or banned, **Unban**. Every action asks first. You must be the broadcaster or a moderator of that chat.
-  - **Twitch:** after updating to this version, **sign in to Twitch again once** (Settings → Twitch → Sign in). The new sign-in adds the moderation permissions. Until then the dock tells you when you try.
+  - **Twitch:** after updating to this version, **sign in to Twitch again once** (Tools → OBS Tools → Accounts… → Sign in). The new sign-in adds the moderation permissions. Until then the dock tells you when you try.
   - **YouTube:** each action uses **50 quota units** (the confirmation says so). YouTube can only lift bans made from the dock during this session; use YouTube Studio for older ones.
 - **Moderation stays visible.** Nothing a moderator removes disappears from the dock. The message text is struck through and dimmed, but you can still read it, and a coloured tag says why:
   - *(deleted)*, grey: a single message was deleted (Twitch only; YouTube no longer reports single deletions).
@@ -118,9 +118,12 @@ If YouTube goes live some other way (another app, or a multistream output with a
 
 ## 5. Where settings are stored
 
-`%APPDATA%\obs-studio\plugin_config\obs-unified-chat\config.json`
+- `%APPDATA%\obs-studio\plugin_config\obs-unified-chat\config.json`: the chat settings (channel, YouTube options, message limit, merged bots). No sign-ins.
+- `%APPDATA%\obs-studio\plugin_config\obs-tools\accounts.json`: the client IDs and sign-ins shared by every OBS Tools plugin. Tokens and the Google client secret are encrypted for your Windows account, so the file can't be used on another PC or account. Don't share it anyway.
 
-This file holds your channel, client IDs and sign-in tokens in plain text, the same way OBS stores stream keys. Don't share it. **Sign out** in Settings removes the stored token. To revoke access completely, also disconnect the app at <https://www.twitch.tv/settings/connections> or <https://myaccount.google.com/permissions>.
+Versions up to 1.2.0 kept the sign-ins in `config.json`. The first start of a newer version moves them to `accounts.json` and removes them from `config.json` and its `.bak`, so you don't have to sign in again.
+
+**Sign out** in the Accounts window removes the stored token for every plugin. To revoke access completely, also disconnect the app at <https://www.twitch.tv/settings/connections> or <https://myaccount.google.com/permissions>.
 
 ## 6. Troubleshooting
 
@@ -130,7 +133,7 @@ Every plugin log line starts with `[obs-unified-chat]`. Check **Help → Log Fil
 |---------|-----|
 | No **Unified Chat** entry under Docks | Look in the log for `compiled with newer libobs`: update OBS to 32.2 or newer. Otherwise check the DLL path from step 1. |
 | `Twitch: no channel configured` | Enter a channel in Settings. |
-| `Twitch: login rejected` / `sign-in expired` | Click **Sign in** again. Chat keeps working read-only in the meantime. |
+| `Twitch: login rejected` / `sign-in expired` | Sign in again in **Tools → OBS Tools → Accounts…**. Chat keeps working read-only in the meantime. |
 | `could not start sign-in (invalid client)` | Wrong client ID, or for Twitch the app's client type isn't **Public**. |
 | YouTube sign-in fails with `invalid_client` or `unauthorized_client` | The Google client type must be **TVs and Limited Input devices**, and the secret must belong to that client. |
 | YouTube sign-in blocked with "access denied" | Add your account under **Test users**, or publish the app (step 3). |

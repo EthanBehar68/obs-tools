@@ -36,7 +36,7 @@ set_target_properties(unified-chat-core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 add_library(${PROJECT_NAME} MODULE)
 
 find_package(libobs REQUIRED)
-target_link_libraries(${PROJECT_NAME} PRIVATE OBS::libobs unified-chat-core obs-tools-net)
+target_link_libraries(${PROJECT_NAME} PRIVATE OBS::libobs unified-chat-core obs-tools-ui)
 
 if(ENABLE_FRONTEND_API)
   find_package(obs-frontend-api REQUIRED)
@@ -63,8 +63,6 @@ target_sources(
     src/chat-dock.hpp
     src/net/asset-loader.cpp
     src/net/asset-loader.hpp
-    src/net/device-login.cpp
-    src/net/device-login.hpp
     src/net/twitch-connection.cpp
     src/net/twitch-connection.hpp
     src/net/youtube-connection.cpp
@@ -83,6 +81,8 @@ if(WIN32)
 endif()
 
 _remove_output_before_link(${PROJECT_NAME})
+
+plugin_merge_data()
 
 set_target_properties_plugin(${PROJECT_NAME} PROPERTIES OUTPUT_NAME ${PROJECT_NAME})
 

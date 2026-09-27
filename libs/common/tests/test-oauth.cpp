@@ -9,12 +9,22 @@ TEST_CASE("Twitch device request uses scopes and no secret")
 	auto provider = TwitchProvider(" abc ");
 	CHECK(provider.clientId == "abc");
 	const std::string scopes = "chat%3Aread%20chat%3Aedit%20moderator%3Amanage%3Abanned_users"
-				   "%20moderator%3Amanage%3Achat_messages";
+				   "%20moderator%3Amanage%3Achat_messages%20moderator%3Aread%3Afollowers";
 	CHECK(BuildDeviceRequestBody(provider) == "client_id=abc&scopes=" + scopes);
 	CHECK(BuildDevicePollBody(provider, "dc") ==
 	      "client_id=abc&scopes=" + scopes + "&device_code=dc" +
 		      "&grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Adevice_code");
 	CHECK(BuildRefreshBody(provider, "r1") == "client_id=abc&grant_type=refresh_token&refresh_token=r1");
+}
+
+TEST_CASE("Twitch validate login and Google error reasons are read")
+{
+	CHECK(ParseTwitchLogin(R"({"client_id":"c","login":"mychannel","scopes":["chat:read"]})") == "mychannel");
+	CHECK(ParseTwitchLogin("[]") == "");
+	CHECK(ParseGoogleErrorReason(R"({"error":{"errors":[{"reason":"quotaExceeded"}],"message":"m"}})") ==
+	      "quotaExceeded");
+	CHECK(ParseGoogleErrorReason(R"({"error":{"errors":[1],"message":"m"}})") == "m");
+	CHECK(ParseGoogleErrorReason(R"({"error":"invalid_grant"})") == "invalid_grant");
 }
 
 TEST_CASE("Google device request uses scope and includes the secret when polling")

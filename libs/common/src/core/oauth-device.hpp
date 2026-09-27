@@ -72,4 +72,10 @@ std::optional<DeviceCode> ParseDeviceCode(const std::string &json);
 PollResult ParseTokenResponse(long httpStatus, const std::string &json, int64_t now,
 			      const std::string &previousRefreshToken = {});
 
+constexpr const char *kTwitchValidateUrl = "https://id.twitch.tv/oauth2/validate";
+// The login from a Twitch validate response, or an empty string.
+std::string ParseTwitchLogin(const std::string &json);
+// The first "reason" of a Google API error, else its message or the OAuth error code.
+std::string ParseGoogleErrorReason(const std::string &json);
+
 } // namespace unified_chat::oauth

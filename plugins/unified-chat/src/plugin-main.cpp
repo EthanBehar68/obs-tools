@@ -17,12 +17,14 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
 #include "chat-dock.hpp"
+#include "ui/obs-tools-menu.hpp"
 
 #include <obs-frontend-api.h>
 #include <obs-module.h>
 #include <plugin-support.h>
 
 #include <QMainWindow>
+#include <QPointer>
 
 OBS_DECLARE_MODULE()
 OBS_MODULE_USE_DEFAULT_LOCALE("obs-unified-chat", "en-US")
@@ -60,12 +62,23 @@ bool obs_module_load(void)
 
 	s_dock = dock;
 	obs_frontend_add_event_callback(OnFrontendEvent, dock);
+
+	QPointer<unified_chat::ChatDock> guarded(dock);
+	unified_chat::AddObsToolsMenuEntry(QString::fromUtf8(obs_module_text("Tools.UnifiedChat")), [guarded]() {
+		if (guarded)
+			guarded->OpenSettings();
+	});
+	unified_chat::SetAccountsChangedHandler([guarded](bool twitch, bool google) {
+		if (guarded)
+			guarded->OnAccountsChanged(twitch, google);
+	});
 	obs_log(LOG_INFO, "plugin loaded successfully (version %s)", PLUGIN_VERSION);
 	return true;
 }
 
 void obs_module_unload(void)
 {
+	unified_chat::ClearAccountsChangedHandler();
 	if (s_dock)
 		obs_frontend_remove_event_callback(OnFrontendEvent, s_dock);
 	s_dock = nullptr;

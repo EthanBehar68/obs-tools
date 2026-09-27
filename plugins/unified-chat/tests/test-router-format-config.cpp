@@ -230,30 +230,20 @@ TEST_CASE("Config round trips through JSON")
 {
 	ChatConfig config;
 	config.twitchChannel = "streamer";
-	config.twitchClientId = "tc";
-	config.twitchLogin = "me";
-	config.twitchToken = {"ta", "tr", 123};
-	config.youtubeClientId = "yc";
-	config.youtubeClientSecret = "ys";
 	config.youtubeVideo = "dQw4w9WgXcQ";
-	config.youtubeToken = {"ya", "yr", 456};
 	config.youtubePollSeconds = 12;
 	config.youtubeStream = false;
 	config.youtubeConnectOnStream = false;
 	config.sendTarget = SendTarget::YouTube;
 	config.maxMessages = 800;
 
-	ChatConfig loaded = ParseConfig(SerializeConfig(config));
+	const std::string text = SerializeConfig(config);
+	CHECK(text.find("token") == std::string::npos); // sign-ins live in the shared accounts file
+	CHECK(text.find("client_id") == std::string::npos);
+
+	ChatConfig loaded = ParseConfig(text);
 	CHECK(loaded.twitchChannel == "streamer");
-	CHECK(loaded.twitchClientId == "tc");
-	CHECK(loaded.twitchLogin == "me");
-	CHECK(loaded.twitchToken.accessToken == "ta");
-	CHECK(loaded.twitchToken.refreshToken == "tr");
-	CHECK(loaded.twitchToken.expiresAt == 123);
-	CHECK(loaded.youtubeClientId == "yc");
-	CHECK(loaded.youtubeClientSecret == "ys");
 	CHECK(loaded.youtubeVideo == "dQw4w9WgXcQ");
-	CHECK(loaded.youtubeToken.expiresAt == 456);
 	CHECK(loaded.youtubePollSeconds == 12);
 	CHECK_FALSE(loaded.youtubeStream);
 	CHECK(ParseConfig("{}").youtubeStream); // streaming is the default
@@ -279,80 +269,55 @@ SecretCodec FakeCodec()
 		}};
 }
 
-ChatConfig SignedIn()
+// A 1.2.0 config.json, with its sign-ins encrypted by codec.
+std::string LegacyConfig(const SecretCodec *codec)
 {
-	ChatConfig config;
-	config.twitchClientId = "public-twitch-id";
-	config.twitchToken = {"twitch-access", "twitch-refresh", 123};
-	config.youtubeClientId = "public-google-id";
-	config.youtubeClientSecret = "google-secret";
-	config.youtubeToken = {"yt-access", "yt-refresh", 456};
-	return config;
+	auto seal = [codec](const char *secret) {
+		return "\"" + SealSecret(secret, codec) + "\"";
+	};
+	return R"({"twitch":{"channel":"streamer","client_id":"public-twitch-id","login":"me",
+		"token":{"access_token":)" +
+	       seal("twitch-access") + R"(,"refresh_token":)" + seal("twitch-refresh") + R"(,"expires_at":123}},
+		"youtube":{"client_id":"public-google-id","client_secret":)" +
+	       seal("google-secret") + R"(,"video":"v","token":{"access_token":)" + seal("yt-access") +
+	       R"(,"refresh_token":)" + seal("yt-refresh") + R"(,"expires_at":456}}})";
 }
 
 } // namespace
 
-TEST_CASE("Secrets are stored encrypted and read back")
+TEST_CASE("A 1.2.0 config's sign-ins are read for moving to the shared accounts")
 {
 	const SecretCodec codec = FakeCodec();
-	const std::string text = SerializeConfig(SignedIn(), &codec);
-	for (const char *secret : {"twitch-access", "twitch-refresh", "google-secret", "yt-access", "yt-refresh"}) {
-		CAPTURE(secret);
-		CHECK(text.find(secret) == std::string::npos);
-	}
-	CHECK(text.find("enc:v1:") != std::string::npos);
-	CHECK(text.find("public-twitch-id") != std::string::npos); // client IDs aren't secret
-
-	ParseReport report;
-	ChatConfig loaded = ParseConfig(text, &codec, &report);
-	CHECK(loaded.twitchToken.accessToken == "twitch-access");
-	CHECK(loaded.twitchToken.refreshToken == "twitch-refresh");
-	CHECK(loaded.youtubeClientSecret == "google-secret");
-	CHECK(loaded.youtubeToken.refreshToken == "yt-refresh");
-	CHECK(loaded.youtubeToken.expiresAt == 456);
+	Accounts legacy;
+	SecretReport report;
+	ChatConfig loaded = ParseConfig(LegacyConfig(&codec), &legacy, &codec, &report);
+	CHECK(loaded.twitchChannel == "streamer");
+	CHECK(loaded.youtubeVideo == "v");
+	CHECK(legacy.twitch.clientId == "public-twitch-id");
+	CHECK(legacy.twitch.login == "me");
+	CHECK(legacy.twitch.token.accessToken == "twitch-access");
+	CHECK(legacy.twitch.token.refreshToken == "twitch-refresh");
+	CHECK(legacy.twitch.token.expiresAt == 123);
+	CHECK(legacy.google.clientId == "public-google-id");
+	CHECK(legacy.google.clientSecret == "google-secret");
+	CHECK(legacy.google.token.refreshToken == "yt-refresh");
+	CHECK(legacy.google.token.expiresAt == 456);
 	CHECK_FALSE(report.plaintextSecrets);
 	CHECK_FALSE(report.unreadableSecrets);
-}
 
-TEST_CASE("An older plain-text config still loads and is reported for re-saving")
-{
-	const SecretCodec codec = FakeCodec();
-	ParseReport report;
-	ChatConfig loaded = ParseConfig(SerializeConfig(SignedIn()), &codec, &report);
-	CHECK(loaded.twitchToken.accessToken == "twitch-access");
-	CHECK(report.plaintextSecrets);
-	CHECK_FALSE(report.unreadableSecrets);
-}
+	// Plain text from before encryption, and sign-ins another Windows account encrypted.
+	SecretReport plain;
+	Accounts fromPlain;
+	ParseConfig(LegacyConfig(nullptr), &fromPlain, &codec, &plain);
+	CHECK(fromPlain.twitch.token.accessToken == "twitch-access");
+	CHECK(plain.plaintextSecrets);
 
-TEST_CASE("Secrets that can't be decrypted come back empty instead of failing")
-{
-	const SecretCodec codec = FakeCodec();
-	std::string text = SerializeConfig(SignedIn(), &codec);
-
-	ParseReport noCodec;
-	ChatConfig withoutCodec = ParseConfig(text, nullptr, &noCodec);
-	CHECK(withoutCodec.twitchToken.accessToken.empty());
-	CHECK(withoutCodec.youtubeClientSecret.empty());
-	CHECK(withoutCodec.twitchClientId == "public-twitch-id"); // everything else still loads
-	CHECK(noCodec.unreadableSecrets);
-
-	SecretCodec otherAccount = codec;
-	otherAccount.unprotect = [](const std::string &) -> std::optional<std::string> {
-		return std::nullopt;
-	};
-	ParseReport report;
-	CHECK_FALSE(ParseConfig(text, &otherAccount, &report).twitchToken.IsValid());
-	CHECK(report.unreadableSecrets);
-}
-
-TEST_CASE("If encryption fails, secrets are kept rather than lost")
-{
-	SecretCodec broken = FakeCodec();
-	broken.protect = [](const std::string &) -> std::optional<std::string> {
-		return std::nullopt;
-	};
-	ChatConfig loaded = ParseConfig(SerializeConfig(SignedIn(), &broken), &broken);
-	CHECK(loaded.twitchToken.accessToken == "twitch-access");
+	SecretReport unreadable;
+	Accounts fromOther;
+	ParseConfig(LegacyConfig(&codec), &fromOther, nullptr, &unreadable);
+	CHECK_FALSE(fromOther.twitch.token.IsValid());
+	CHECK(fromOther.twitch.clientId == "public-twitch-id");
+	CHECK(unreadable.unreadableSecrets);
 }
 
 TEST_CASE("Config falls back to defaults for damaged input")

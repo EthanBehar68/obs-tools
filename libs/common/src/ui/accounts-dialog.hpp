@@ -1,5 +1,5 @@
 /*
-obs-unified-chat
+obs-tools
 Copyright (C) 2026 ebehar
 
 This program is free software; you can redistribute it and/or modify
@@ -18,44 +18,12 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #pragma once
 
-#include "core/chat-config.hpp"
-
-#include <QDialog>
-
-class QComboBox;
-class QLayout;
-class QLabel;
-class QLineEdit;
-class QSpinBox;
+class QWidget;
 
 namespace unified_chat {
 
-class SettingsDialog : public QDialog {
-	Q_OBJECT
-
-public:
-	SettingsDialog(const ChatConfig &config, QWidget *parent = nullptr);
-
-	ChatConfig Result() const;
-
-private:
-	QLayout *AccountRow(QLabel *label, QWidget *parent);
-	void OpenAccounts();
-	void UpdateAccountLabels();
-
-	ChatConfig config_;
-
-	QLineEdit *twitchChannel_;
-	QLabel *twitchAccount_;
-
-	QLineEdit *youtubeVideo_;
-	QComboBox *youtubeConnect_;
-	QComboBox *youtubeMethod_;
-	QSpinBox *youtubePoll_;
-	QLabel *youtubeAccount_;
-
-	QSpinBox *maxMessages_;
-	QLineEdit *mergeBots_;
-};
+// The shared Twitch and Google sign-ins (Tools > OBS Tools > Accounts...). Modal; saves as it goes and, on
+// closing, tells every plugin which accounts changed. Opening it again while it's open just raises it.
+void OpenAccountsDialog(QWidget *parent);
 
 } // namespace unified_chat

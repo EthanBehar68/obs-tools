@@ -27,42 +27,6 @@ using json = nlohmann::json;
 
 namespace unified_chat {
 
-static constexpr std::string_view kSecretPrefix = "enc:v1:";
-
-// Writes a secret encrypted when a codec is available. If encryption fails the value is written as is, since
-// losing a sign-in is worse than an unencrypted file.
-static std::string SealSecret(const std::string &value, const SecretCodec *codec)
-{
-	if (value.empty() || !codec || !codec->protect)
-		return value;
-	auto sealed = codec->protect(value);
-	return sealed ? std::string(kSecretPrefix) + Base64Encode(*sealed) : value;
-}
-
-static std::string OpenSecret(const std::string &stored, const SecretCodec *codec, ParseReport *report)
-{
-	if (stored.rfind(kSecretPrefix, 0) != 0) {
-		if (!stored.empty() && report)
-			report->plaintextSecrets = true;
-		return stored;
-	}
-	std::optional<std::string> opened;
-	if (codec && codec->unprotect) {
-		if (auto bytes = Base64Decode(std::string_view(stored).substr(kSecretPrefix.size())))
-			opened = codec->unprotect(*bytes);
-	}
-	if (!opened && report)
-		report->unreadableSecrets = true;
-	return opened.value_or(std::string()); // unreadable: sign in again rather than fail
-}
-
-static json TokenToJson(const oauth::Token &token, const SecretCodec *codec)
-{
-	return {{"access_token", SealSecret(token.accessToken, codec)},
-		{"refresh_token", SealSecret(token.refreshToken, codec)},
-		{"expires_at", token.expiresAt}};
-}
-
 template<typename T> static T Get(const json &obj, const char *key, T fallback)
 {
 	auto it = obj.find(key);
@@ -75,7 +39,7 @@ template<typename T> static T Get(const json &obj, const char *key, T fallback)
 	}
 }
 
-static oauth::Token TokenFromJson(const json &obj, const char *key, const SecretCodec *codec, ParseReport *report)
+static oauth::Token TokenFromJson(const json &obj, const char *key, const SecretCodec *codec, SecretReport *report)
 {
 	oauth::Token token;
 	auto it = obj.find(key);
@@ -111,22 +75,15 @@ std::string JoinNameList(const std::vector<std::string> &names)
 	return text;
 }
 
-std::string SerializeConfig(const ChatConfig &config, const SecretCodec *codec)
+std::string SerializeConfig(const ChatConfig &config)
 {
 	json obj = {
-		{"twitch",
-		 {{"channel", config.twitchChannel},
-		  {"client_id", config.twitchClientId},
-		  {"login", config.twitchLogin},
-		  {"token", TokenToJson(config.twitchToken, codec)}}},
+		{"twitch", {{"channel", config.twitchChannel}}},
 		{"youtube",
-		 {{"client_id", config.youtubeClientId},
-		  {"client_secret", SealSecret(config.youtubeClientSecret, codec)},
-		  {"video", config.youtubeVideo},
+		 {{"video", config.youtubeVideo},
 		  {"poll_seconds", config.youtubePollSeconds},
 		  {"chat_method", config.youtubeStream ? "stream" : "poll"},
-		  {"connect", config.youtubeConnectOnStream ? "on_stream" : "always"},
-		  {"token", TokenToJson(config.youtubeToken, codec)}}},
+		  {"connect", config.youtubeConnectOnStream ? "on_stream" : "always"}}},
 		{"send_target", std::string(SendTargetToString(config.sendTarget))},
 		{"max_messages", config.maxMessages},
 		{"merge_bots", config.mergeBots},
@@ -134,7 +91,7 @@ std::string SerializeConfig(const ChatConfig &config, const SecretCodec *codec)
 	return obj.dump(4);
 }
 
-ChatConfig ParseConfig(const std::string &text, const SecretCodec *codec, ParseReport *report)
+ChatConfig ParseConfig(const std::string &text, Accounts *legacy, const SecretCodec *codec, SecretReport *report)
 {
 	ChatConfig config;
 	json obj = json::parse(text, nullptr, false);
@@ -144,20 +101,25 @@ ChatConfig ParseConfig(const std::string &text, const SecretCodec *codec, ParseR
 	auto twitch = obj.find("twitch");
 	if (twitch != obj.end() && twitch->is_object()) {
 		config.twitchChannel = Get<std::string>(*twitch, "channel", {});
-		config.twitchClientId = Get<std::string>(*twitch, "client_id", {});
-		config.twitchLogin = Get<std::string>(*twitch, "login", {});
-		config.twitchToken = TokenFromJson(*twitch, "token", codec, report);
+		if (legacy) {
+			legacy->twitch.clientId = Get<std::string>(*twitch, "client_id", {});
+			legacy->twitch.login = Get<std::string>(*twitch, "login", {});
+			legacy->twitch.token = TokenFromJson(*twitch, "token", codec, report);
+		}
 	}
 
 	auto youtube = obj.find("youtube");
 	if (youtube != obj.end() && youtube->is_object()) {
-		config.youtubeClientId = Get<std::string>(*youtube, "client_id", {});
-		config.youtubeClientSecret = OpenSecret(Get<std::string>(*youtube, "client_secret", {}), codec, report);
 		config.youtubeVideo = Get<std::string>(*youtube, "video", {});
 		config.youtubePollSeconds = std::clamp(Get<int>(*youtube, "poll_seconds", 8), 1, 120);
 		config.youtubeStream = Get<std::string>(*youtube, "chat_method", "stream") != "poll";
 		config.youtubeConnectOnStream = Get<std::string>(*youtube, "connect", "on_stream") != "always";
-		config.youtubeToken = TokenFromJson(*youtube, "token", codec, report);
+		if (legacy) {
+			legacy->google.clientId = Get<std::string>(*youtube, "client_id", {});
+			legacy->google.clientSecret =
+				OpenSecret(Get<std::string>(*youtube, "client_secret", {}), codec, report);
+			legacy->google.token = TokenFromJson(*youtube, "token", codec, report);
+		}
 	}
 
 	config.sendTarget = SendTargetFromString(Get<std::string>(obj, "send_target", "both"));

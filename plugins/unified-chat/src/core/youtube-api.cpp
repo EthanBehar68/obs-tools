@@ -240,23 +240,7 @@ std::optional<OwnChannel> ParseOwnChannel(const std::string &body)
 
 std::string ParseErrorReason(const std::string &body)
 {
-	json obj = json::parse(body, nullptr, false);
-	if (!obj.is_object())
-		return {};
-	auto error = obj.find("error");
-	if (error == obj.end())
-		return {};
-	if (error->is_string())
-		return error->get<std::string>();
-	if (!error->is_object())
-		return {};
-	auto errors = error->find("errors");
-	if (errors != error->end() && errors->is_array() && !errors->empty()) {
-		std::string reason = StringAt((*errors)[0], {"reason"});
-		if (!reason.empty())
-			return reason;
-	}
-	return StringAt(*error, {"message"});
+	return oauth::ParseGoogleErrorReason(body);
 }
 
 std::string BuildInsertBody(const std::string &liveChatId, std::string_view text)
@@ -389,7 +373,7 @@ int ChatSession::HandleError(const HttpResponse &res, StepResult &out)
 		return kNetworkRetryMs;
 	}
 	if (state_ == State::SignedOut) {
-		out.notices.push_back("YouTube: sign-in expired, sign in again from the chat settings");
+		out.notices.push_back("YouTube: sign-in expired, sign in again in Tools → OBS Tools → Accounts");
 		return kErrorRetryMs;
 	}
 

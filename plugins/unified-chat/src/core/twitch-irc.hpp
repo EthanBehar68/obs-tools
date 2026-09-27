@@ -19,6 +19,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #pragma once
 
 #include "chat-message.hpp"
+#include "core/oauth-device.hpp"
 
 #include <map>
 #include <optional>
@@ -30,7 +31,7 @@ namespace unified_chat::twitch {
 
 constexpr const char *kIrcUrl = "https://irc.chat.twitch.tv:6697";
 constexpr size_t kMaxMessageLength = 500;
-constexpr const char *kValidateUrl = "https://id.twitch.tv/oauth2/validate";
+constexpr const char *kValidateUrl = oauth::kTwitchValidateUrl;
 
 struct IrcMessage {
 	std::map<std::string, std::string, std::less<>> tags;

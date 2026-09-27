@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Accounts shared by all OBS Tools plugins
+- **Sign in once for every OBS Tools plugin.** Twitch and YouTube sign-ins and client IDs moved to **Tools → OBS Tools → Accounts…** (the Twitch and YouTube settings tabs have an **Accounts…** button). The plugin's own settings are also under **Tools → OBS Tools → Unified Chat…**.
+- **Nothing to redo:** the first start moves your existing sign-ins out of `config.json` into the shared, encrypted `plugin_config\obs-tools\accounts.json`.
+- The Twitch sign-in also asks for follower access (`moderator:read:followers`) for the upcoming Stream Alerts plugin. Sign in to Twitch again once to grant it, together with the moderation permissions below.
+
+### Chat
+- **Moderate from the dock:** right-click a line to delete it, time out, ban or unban (every action asks first).
+- **Viewer counts** on the status buttons while live, checked every 5 minutes.
+
 ## 1.2.0 (2026-09-26)
 
 ### Emotes and badges (Twitch)

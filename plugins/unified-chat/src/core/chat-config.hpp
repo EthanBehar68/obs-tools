@@ -19,8 +19,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #pragma once
 
 #include "chat-router.hpp"
-#include "core/oauth-device.hpp"
-#include "core/secret-codec.hpp"
+#include "core/accounts.hpp"
 
 #include <functional>
 #include <optional>
@@ -31,15 +30,10 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 namespace unified_chat {
 
 struct ChatConfig {
+	// Sign-ins and client IDs are shared by all plugins (core/accounts.hpp), not stored here.
 	std::string twitchChannel;
-	std::string twitchClientId;
-	std::string twitchLogin;
-	oauth::Token twitchToken;
 
-	std::string youtubeClientId;
-	std::string youtubeClientSecret;
 	std::string youtubeVideo;
-	oauth::Token youtubeToken;
 	int youtubePollSeconds = 8; // polling interval, also used when streaming falls back
 	bool youtubeStream = true;  // server-pushed chat (streamList) instead of polling
 	// Connect YouTube chat only while OBS's main output is streaming (no quota used while offline), rather than
@@ -56,14 +50,12 @@ struct ChatConfig {
 std::vector<std::string> SplitNameList(std::string_view text);
 std::string JoinNameList(const std::vector<std::string> &names);
 
-// Tokens and the Google client secret are written as "enc:v1:<base64>" when a codec is given.
-std::string SerializeConfig(const ChatConfig &config, const SecretCodec *codec = nullptr);
+std::string SerializeConfig(const ChatConfig &config);
 
-struct ParseReport {
-	bool plaintextSecrets = false;  // at least one secret was stored unencrypted (an older config)
-	bool unreadableSecrets = false; // at least one encrypted secret couldn't be decrypted (it's left empty)
-};
 // Missing or malformed fields fall back to defaults, so a damaged file never blocks OBS startup.
-ChatConfig ParseConfig(const std::string &json, const SecretCodec *codec = nullptr, ParseReport *report = nullptr);
+// Configs from before the shared accounts (1.2.0 and older) also hold sign-ins: those go to legacy, decrypted
+// with codec.
+ChatConfig ParseConfig(const std::string &json, Accounts *legacy = nullptr, const SecretCodec *codec = nullptr,
+		       SecretReport *report = nullptr);
 
 } // namespace unified_chat

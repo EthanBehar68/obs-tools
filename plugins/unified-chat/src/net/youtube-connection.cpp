@@ -17,6 +17,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
 #include "youtube-connection.hpp"
+#include "net/account-store.hpp"
 #include "net/curl-http-client.hpp"
 #include "core/youtube-api.hpp"
 
@@ -96,7 +97,7 @@ void YouTubeConnection::Run()
 	};
 
 	if (!token_.IsValid()) {
-		notice("YouTube: not signed in, open the chat settings to sign in");
+		notice("YouTube: not signed in, sign in in Tools → OBS Tools → Accounts");
 		if (callbacks_.onState)
 			callbacks_.onState(LinkState::Disconnected);
 		return;
@@ -105,6 +106,13 @@ void YouTubeConnection::Run()
 	CurlHttpClient http(&stop_);
 	youtube::ChatSession session(http, oauth::GoogleProvider(clientId_, clientSecret_), token_, video_,
 				     pollSeconds_ * 1000, [this](const oauth::Token &token) {
+					     // Google refresh tokens are reusable, so the session refreshes by itself; the store
+					     // keeps the result unless another plugin has saved a newer token.
+					     if (token.IsValid())
+						     SharedAccounts().Replace(Service::Google, token_, token);
+					     else
+						     SharedAccounts().Invalidate(Service::Google, token_);
+					     token_ = token;
 					     if (callbacks_.onTokenChanged)
 						     callbacks_.onTokenChanged(token, {});
 				     });

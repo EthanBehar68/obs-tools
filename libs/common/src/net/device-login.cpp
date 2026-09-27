@@ -18,8 +18,6 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include "device-login.hpp"
 #include "net/curl-http-client.hpp"
-#include "core/twitch-irc.hpp"
-#include "core/youtube-api.hpp"
 
 #include <chrono>
 #include <ctime>
@@ -60,7 +58,7 @@ void DeviceLogin::Run()
 	auto res = http.Post(provider_.deviceUrl, {}, oauth::BuildDeviceRequestBody(provider_), kFormType);
 	auto code = res.Ok() ? oauth::ParseDeviceCode(res.body) : std::nullopt;
 	if (!code) {
-		std::string reason = youtube::ParseErrorReason(res.body);
+		std::string reason = oauth::ParseGoogleErrorReason(res.body);
 		if (reason.empty())
 			reason = res.status == 0 ? res.error : "HTTP " + std::to_string(res.status);
 		finish({}, {}, "could not start sign-in (" + reason + "). Check the client ID");
@@ -94,9 +92,9 @@ void DeviceLogin::Run()
 		case oauth::PollStatus::Granted: {
 			std::string login;
 			if (provider_.tokenUrl.find("twitch.tv") != std::string::npos) {
-				auto validate = http.Get(twitch::kValidateUrl,
+				auto validate = http.Get(oauth::kTwitchValidateUrl,
 							 {"Authorization: OAuth " + poll.token.accessToken});
-				login = twitch::ParseValidateLogin(validate.body);
+				login = oauth::ParseTwitchLogin(validate.body);
 				if (login.empty()) {
 					finish({}, {}, "signed in, but Twitch did not return the account name");
 					return;

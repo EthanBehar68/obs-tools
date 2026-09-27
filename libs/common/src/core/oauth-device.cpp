@@ -29,12 +29,14 @@ static constexpr const char *kDeviceGrant = "urn:ietf:params:oauth:grant-type:de
 
 Provider TwitchProvider(const std::string &clientId)
 {
-	// The moderation scopes let the dock delete messages, time out and ban (see moderation.hpp).
+	// One sign-in serves every plugin, so it asks for all of their scopes: chat and moderating from the chat
+	// dock (unified-chat), follower alerts (stream-alerts).
 	return {"https://id.twitch.tv/oauth2/device",
 		"https://id.twitch.tv/oauth2/token",
 		Trim(clientId),
 		{},
-		"chat:read chat:edit moderator:manage:banned_users moderator:manage:chat_messages"};
+		"chat:read chat:edit moderator:manage:banned_users moderator:manage:chat_messages "
+		"moderator:read:followers"};
 }
 
 Provider GoogleProvider(const std::string &clientId, const std::string &clientSecret)
@@ -158,6 +160,33 @@ PollResult ParseTokenResponse(long httpStatus, const std::string &body, int64_t 
 	else
 		result.status = PollStatus::Error;
 	return result;
+}
+
+std::string ParseTwitchLogin(const std::string &body)
+{
+	json obj = json::parse(body, nullptr, false);
+	return obj.is_object() ? StringField(obj, "login") : std::string();
+}
+
+std::string ParseGoogleErrorReason(const std::string &body)
+{
+	json obj = json::parse(body, nullptr, false);
+	if (!obj.is_object())
+		return {};
+	auto error = obj.find("error");
+	if (error == obj.end())
+		return {};
+	if (error->is_string())
+		return error->get<std::string>();
+	if (!error->is_object())
+		return {};
+	auto errors = error->find("errors");
+	if (errors != error->end() && errors->is_array() && !errors->empty() && (*errors)[0].is_object()) {
+		std::string reason = StringField((*errors)[0], "reason");
+		if (!reason.empty())
+			return reason;
+	}
+	return StringField(*error, "message");
 }
 
 } // namespace unified_chat::oauth

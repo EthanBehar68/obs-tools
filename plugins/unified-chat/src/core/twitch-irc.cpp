@@ -154,11 +154,7 @@ std::string NormalizeChannel(std::string_view input)
 
 std::string ParseValidateLogin(const std::string &body)
 {
-	auto obj = nlohmann::json::parse(body, nullptr, false);
-	if (!obj.is_object())
-		return {};
-	auto login = obj.find("login");
-	return login != obj.end() && login->is_string() ? login->get<std::string>() : std::string();
+	return oauth::ParseTwitchLogin(body);
 }
 
 std::optional<int64_t> ParseStreamViewerCount(const std::string &body)

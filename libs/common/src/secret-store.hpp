@@ -22,8 +22,14 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 namespace unified_chat {
 
-// Encrypts config secrets for the current Windows user (DPAPI), so a copied config.json can't be read on another
-// account or PC. Returns nullptr where no platform store is available; secrets are then stored as is.
-const SecretCodec *PlatformSecretCodec();
+enum class SecretPurpose {
+	Accounts,         // plugin_config/obs-tools/accounts.json
+	LegacyChatConfig, // sign-ins in obs-unified-chat's config.json up to 1.2.0 (read once, to move them)
+};
+
+// Encrypts secrets for the current Windows user (DPAPI), so a copied file can't be read on another account or PC.
+// Each purpose has its own entropy, so blobs can't be swapped between files. Returns nullptr where no platform
+// store is available; secrets are then stored as is.
+const SecretCodec *PlatformSecretCodec(SecretPurpose purpose);
 
 } // namespace unified_chat

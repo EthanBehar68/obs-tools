@@ -83,13 +83,23 @@ buildspec.json       OBS / obs-deps / Qt pins for the whole repository
 libs\
 ├── common\src\      shared by every plugin (namespace unified_chat for now)
 │   ├── core\        no libobs, no Qt, no I/O  -> static library obs-tools-core (tested)
-│   │   ├── oauth-device.*       RFC 8628 device flow for Twitch and Google
+│   │   ├── accounts.*           the shared sign-ins: accounts.json format, which plugin may refresh, 1.2.0 migration
+│   │   ├── oauth-device.*       RFC 8628 device flow for Twitch and Google; the Twitch scopes of every plugin
 │   │   ├── json-array-reader.*  splits a chunked JSON array into complete objects
 │   │   ├── text-util.*          UTF-8, escaping, URL encoding
 │   │   ├── http-client.hpp      the HttpClient interface the cores are tested against
-│   │   └── secret-codec.hpp     the SecretCodec interface
-│   ├── net\curl-http-client.*  HttpClient over the libcurl that ships with OBS  -> obs-tools-net
-│   └── secret-store.*          DPAPI SecretCodec                                -> obs-tools-net
+│   │   └── secret-codec.*       the SecretCodec interface, "enc:v1:" sealing
+│   ├── net\          -> obs-tools-net (libcurl, libobs file helpers)
+│   │   ├── account-store.*      plugin_config\obs-tools\accounts.json behind system-wide named locks;
+│   │   │                        Refresh() lets only one plugin spend a Twitch refresh token
+│   │   ├── curl-http-client.*   HttpClient over the libcurl that ships with OBS
+│   │   └── device-login.*       sign-in flow
+│   ├── secret-store.*  DPAPI SecretCodec, one entropy per file                -> obs-tools-net
+│   └── ui\           -> obs-tools-ui (Qt, obs-frontend-api)
+│       ├── obs-tools-menu.*     Tools > OBS Tools: the first plugin loaded creates it and publishes it through the
+│       │                        libobs proc handler; the accounts-changed signal
+│       └── accounts-dialog.*    the shared Accounts window
+├── common\data\locale\  the shared UI's strings, appended to each plugin's locale (plugin_merge_data)
 └── obs-support\     plugin-support.c.in / .h: each plugin gets its own obs_log prefix and version
 plugins\unified-chat\
 ├── plugin.json      name (= DLL, install folder and config folder) and version
@@ -110,8 +120,7 @@ plugins\unified-chat\
 │   ├── net\         worker threads
 │   │   ├── twitch-connection.*   TLS IRC to irc.chat.twitch.tv:6697 via CURLOPT_CONNECT_ONLY
 │   │   ├── asset-loader.*        one background thread downloading emote/badge lists and images
-│   │   ├── youtube-connection.*  YouTube poll/send loop
-│   │   └── device-login.*        sign-in flow
+│   │   └── youtube-connection.*  YouTube poll/send loop
 │   ├── chat-dock.*        the dock widget
 │   ├── settings-dialog.*
 │   ├── target-switch.*    the Twitch / YouTube / Both switch
@@ -123,7 +132,9 @@ plugins\unified-chat\
 
 ### Adding a plugin
 
-Create `plugins\<name>\` with a `plugin.json` (`name`, `version`) and a `CMakeLists.txt` that starts with `plugin_project()` and calls `set_target_properties_plugin(${PROJECT_NAME} ...)`, then add it to the root `CMakeLists.txt`. `plugin_project()` makes the plugin's name and version the ones used for its DLL, version resource and `obs_log` prefix. Plugins must not share a Twitch sign-in: Twitch refresh tokens are single-use, so two plugins refreshing one token would sign each other out.
+Create `plugins\<name>\` with a `plugin.json` (`name`, `version`) and a `CMakeLists.txt` that starts with `plugin_project()` and calls `set_target_properties_plugin(${PROJECT_NAME} ...)`, then add it to the root `CMakeLists.txt`. `plugin_project()` makes the plugin's name and version the ones used for its DLL, version resource and `obs_log` prefix. Call `plugin_merge_data()` before `set_target_properties_plugin` when the plugin links `obs-tools-ui`, so the shared strings reach its locale file.
+
+Sign-ins come from `SharedAccounts()`. Twitch refresh tokens are single-use, so never refresh a token yourself: call `AccountStore::Refresh(service, staleToken)`, which either returns the token another plugin already refreshed or refreshes it under a system-wide lock and saves it before returning. Add the plugin's Twitch scopes to `oauth::TwitchProvider`, and handle `SetAccountsChangedHandler` to reconnect when the user signs in or out.
 
 ### Design notes
 

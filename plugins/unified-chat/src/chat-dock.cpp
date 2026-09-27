@@ -24,6 +24,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "core/chat-format.hpp"
 #include "core/moderation.hpp"
 #include "core/text-util.hpp"
+#include "net/account-store.hpp"
 
 #include <obs-frontend-api.h>
 #include <obs-module.h>
@@ -263,10 +264,25 @@ void ChatDock::LoadConfig()
 {
 	char *path = obs_module_config_path("config.json");
 	char *text = path ? os_quick_read_utf8_file(path) : nullptr;
-	ParseReport report;
-	config_ = ParseConfig(text ? text : "", PlatformSecretCodec(), &report);
+	Accounts legacy;
+	SecretReport legacyReport;
+	config_ = ParseConfig(text ? text : "", &legacy, PlatformSecretCodec(SecretPurpose::LegacyChatConfig),
+			      &legacyReport);
 	bfree(text);
 	bfree(path);
+
+	// Up to 1.2.0 the sign-ins lived in config.json: move them to the shared accounts once, then save
+	// config.json without them (and drop its .bak, which still has them).
+	if (!legacy.twitch.Empty() || !legacy.google.Empty()) {
+		bool adopted = false;
+		SharedAccounts().Update([&](Accounts &shared) { adopted = AdoptLegacyAccounts(shared, legacy); });
+		if (adopted)
+			obs_log(LOG_INFO, "moved the chat sign-ins to the shared OBS Tools accounts");
+		dropBackup_ = true;
+		SaveConfig();
+	}
+	SecretReport report;
+	accounts_ = SharedAccounts().Load(&report);
 
 	target_->SetTarget(config_.sendTarget);
 	view_->document()->setMaximumBlockCount(config_.maxMessages);
@@ -274,15 +290,10 @@ void ChatDock::LoadConfig()
 	UpdateMentionNames();
 	UpdatePlaceholder();
 
-	if (report.unreadableSecrets) {
+	if (report.unreadableSecrets || legacyReport.unreadableSecrets) {
 		obs_log(LOG_WARNING,
-			"saved sign-ins could not be decrypted (config from another Windows account or PC?)");
+			"saved sign-ins could not be decrypted (settings from another Windows account or PC?)");
 		AppendNotice(Text("Notice.SecretsUnreadable"));
-	}
-	// An older config kept tokens in plain text: re-save encrypted now, and drop the plain-text backup.
-	if (report.plaintextSecrets && PlatformSecretCodec()) {
-		plaintextBackup_ = true;
-		SaveConfig();
 	}
 }
 
@@ -292,15 +303,14 @@ void ChatDock::SaveConfig()
 	char *path = obs_module_config_path("config.json");
 	if (dir && path) {
 		os_mkdirs(dir);
-		std::string text = SerializeConfig(config_, PlatformSecretCodec());
+		std::string text = SerializeConfig(config_);
 		if (!os_quick_write_utf8_file_safe(path, text.c_str(), text.size(), false, "tmp", "bak")) {
 			obs_log(LOG_WARNING, "failed to save %s", path);
-		} else if (plaintextBackup_) {
-			// The safe write keeps the previous file as config.json.bak: the old plain-text one this once.
+		} else if (dropBackup_) {
+			// The safe write keeps the previous file as config.json.bak: the one with sign-ins, this once.
 			std::string backup = std::string(path) + ".bak";
 			os_unlink(backup.c_str());
-			plaintextBackup_ = false;
-			obs_log(LOG_INFO, "saved sign-ins are now encrypted for this Windows account");
+			dropBackup_ = false;
 		}
 	}
 	bfree(path);
@@ -342,16 +352,20 @@ ConnectionCallbacks ChatDock::MakeCallbacks(Platform platform)
 		QMetaObject::invokeMethod(
 			this,
 			[this, platform, token, login]() {
+				// The connection has already saved the token to the shared store.
 				if (platform == Platform::Twitch) {
-					config_.twitchToken = token;
-					if (!login.empty() && login != config_.twitchLogin) {
-						config_.twitchLogin = login;
+					accounts_.twitch.token = token;
+					if (!login.empty() && login != accounts_.twitch.login) {
+						accounts_.twitch.login = login;
+						SharedAccounts().Update([&](Accounts &shared) {
+							if (SameToken(shared.twitch.token, token))
+								shared.twitch.login = login;
+						});
 						UpdateMentionNames();
 					}
 				} else {
-					config_.youtubeToken = token;
+					accounts_.google.token = token;
 				}
-				SaveConfig();
 			},
 			Qt::QueuedConnection);
 	};
@@ -366,12 +380,19 @@ ConnectionCallbacks ChatDock::MakeCallbacks(Platform platform)
 void ChatDock::Connect()
 {
 	Disconnect();
+	ConnectTwitch();
+	ConnectYouTube();
+}
+
+void ChatDock::ConnectTwitch()
+{
+	twitch_.reset();
 	// Reload channel emotes and badges when the connection comes back (a sign-in may enable badges; the channel
 	// may have changed). Global emote lists stay loaded.
 	assetChannelId_.clear();
-	twitch_ = std::make_unique<TwitchConnection>(config_.twitchChannel, config_.twitchClientId, config_.twitchLogin,
-						     config_.twitchToken, MakeCallbacks(Platform::Twitch));
-	ConnectYouTube();
+	twitch_ = std::make_unique<TwitchConnection>(config_.twitchChannel, accounts_.twitch.clientId,
+						     accounts_.twitch.login, accounts_.twitch.token,
+						     MakeCallbacks(Platform::Twitch));
 }
 
 void ChatDock::ConnectYouTube()
@@ -379,15 +400,15 @@ void ChatDock::ConnectYouTube()
 	youtube_.reset();
 	// Waiting for OBS's Start Streaming uses no quota. Signed out, the connection is still created so it can
 	// say so; it makes no requests.
-	if (config_.youtubeConnectOnStream && !obsStreaming_ && config_.youtubeToken.IsValid()) {
+	if (config_.youtubeConnectOnStream && !obsStreaming_ && accounts_.google.token.IsValid()) {
 		AppendNotice(Text("Notice.YouTubeStandby"));
 		// Queued, so it lands after any state the old connection had already posted.
 		QMetaObject::invokeMethod(
 			this, [this]() { SetLinkState(Platform::YouTube, LinkState::Standby); }, Qt::QueuedConnection);
 		return;
 	}
-	youtube_ = std::make_unique<YouTubeConnection>(config_.youtubeClientId, config_.youtubeClientSecret,
-						       config_.youtubeToken, config_.youtubeVideo,
+	youtube_ = std::make_unique<YouTubeConnection>(accounts_.google.clientId, accounts_.google.clientSecret,
+						       accounts_.google.token, config_.youtubeVideo,
 						       config_.youtubePollSeconds, config_.youtubeStream,
 						       config_.youtubeConnectOnStream, historyCutoff_,
 						       MakeCallbacks(Platform::YouTube));
@@ -405,6 +426,27 @@ void ChatDock::OnStreamingChanged(bool streaming)
 		ConnectYouTube();
 }
 
+void ChatDock::OnAccountsChanged(bool twitch, bool google)
+{
+	accounts_ = SharedAccounts().Load();
+	// Signed in without a channel set: your own channel is the likely one.
+	if (twitch && config_.twitchChannel.empty() && !accounts_.twitch.login.empty()) {
+		config_.twitchChannel = accounts_.twitch.login;
+		SaveConfig();
+	}
+	UpdateMentionNames();
+	if (!started_)
+		return;
+	if (twitch)
+		ConnectTwitch();
+	if (google) {
+		if (youtube_)
+			historyCutoff_ =
+				(int64_t)std::time(nullptr); // already shown; a new connection shouldn't replay it
+		ConnectYouTube();
+	}
+}
+
 void ChatDock::Disconnect()
 {
 	twitch_.reset();
@@ -415,21 +457,11 @@ void ChatDock::Disconnect()
 
 void ChatDock::OpenSettings()
 {
-	const ChatConfig before = config_;
 	SettingsDialog dialog(config_, this);
 	if (dialog.exec() != QDialog::Accepted)
 		return;
 
-	// Tokens may have been refreshed in the background while the dialog was open. Twitch refresh
-	// tokens are single-use, so keep the live ones unless the user signed in or out in the dialog.
-	ChatConfig result = dialog.Result();
-	if (result.twitchToken.accessToken == before.twitchToken.accessToken) {
-		result.twitchToken = config_.twitchToken;
-		result.twitchLogin = config_.twitchLogin;
-	}
-	if (result.youtubeToken.accessToken == before.youtubeToken.accessToken)
-		result.youtubeToken = config_.youtubeToken;
-	config_ = result;
+	config_ = dialog.Result();
 	view_->document()->setMaximumBlockCount(config_.maxMessages);
 	botMerger_.SetBots(config_.mergeBots);
 	UpdateMentionNames();
@@ -592,9 +624,10 @@ static const QImage &PlaceholderImage()
 
 std::vector<std::string> ChatDock::HelixHeaders() const
 {
-	if (!config_.twitchToken.IsValid() || config_.twitchClientId.empty())
+	if (!accounts_.twitch.token.IsValid() || accounts_.twitch.clientId.empty())
 		return {};
-	return {"Authorization: Bearer " + config_.twitchToken.accessToken, "Client-Id: " + config_.twitchClientId};
+	return {"Authorization: Bearer " + accounts_.twitch.token.accessToken,
+		"Client-Id: " + accounts_.twitch.clientId};
 }
 
 void ChatDock::LoadChannelAssets(const std::string &channelId)
@@ -1025,8 +1058,8 @@ void ChatDock::LearnOwnName(const ChatMessage &message)
 void ChatDock::UpdateMentionNames()
 {
 	std::vector<std::string> names = ownYouTubeNames_;
-	if (!config_.twitchLogin.empty())
-		names.push_back(config_.twitchLogin);
+	if (!accounts_.twitch.login.empty())
+		names.push_back(accounts_.twitch.login);
 	mentions_.SetNames(names);
 }
 

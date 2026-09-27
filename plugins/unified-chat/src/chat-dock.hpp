@@ -64,6 +64,9 @@ public:
 	void Shutdown();
 	// OBS's main output started or stopped streaming (the Start Streaming button).
 	void OnStreamingChanged(bool streaming);
+	// The shared Accounts window changed these sign-ins or client IDs.
+	void OnAccountsChanged(bool twitch, bool google);
+	void OpenSettings();
 
 protected:
 	void changeEvent(QEvent *event) override;
@@ -103,9 +106,9 @@ private:
 	void LoadConfig();
 	void SaveConfig();
 	void Connect();
+	void ConnectTwitch();
 	void ConnectYouTube();
 	void Disconnect();
-	void OpenSettings();
 	void SendCurrent();
 
 	void AppendMessages(const std::vector<ChatMessage> &messages);
@@ -156,6 +159,7 @@ private:
 	ConnectionCallbacks MakeCallbacks(Platform platform);
 
 	ChatConfig config_;
+	Accounts accounts_; // a copy of the shared sign-ins; connections refresh tokens through the store
 	std::unique_ptr<TwitchConnection> twitch_;
 	std::unique_ptr<YouTubeConnection> youtube_;
 	LinkState twitchState_ = LinkState::Disconnected;
@@ -163,7 +167,7 @@ private:
 	int64_t twitchViewers_ = -1; // checked every 5 minutes while live; -1 = not shown
 	int64_t youtubeViewers_ = -1;
 	bool started_ = false;
-	bool plaintextBackup_ = false; // config.json.bak still holds unencrypted secrets until the next save
+	bool dropBackup_ = false; // config.json.bak still holds sign-ins until the next save
 	bool obsStreaming_ = false;
 	int64_t historyCutoff_ = 0; // YouTube messages posted before this (unix seconds) aren't shown
 	bool empty_ = true;

@@ -17,6 +17,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
 #include "twitch-connection.hpp"
+#include "net/account-store.hpp"
 #include "net/curl-http-client.hpp"
 #include "core/text-util.hpp"
 #include "core/twitch-irc.hpp"
@@ -199,7 +200,7 @@ void TwitchConnection::Moderate(const ModerationAction &action, const std::strin
 	}
 	const TwitchIdentity &identity = identity_; // set by ValidateToken on this same thread
 	if (!identity.CanModerate()) {
-		Notice("sign in to Twitch again (Settings → Twitch → Sign in) to allow moderating from the dock");
+		Notice("sign in to Twitch again (Tools → OBS Tools → Accounts) to allow moderating from the dock");
 		return;
 	}
 	auto request = BuildTwitchModeration(action, channelId, identity.userId);
@@ -264,18 +265,13 @@ void TwitchConnection::WaitFor(int ms)
 
 bool TwitchConnection::RefreshToken()
 {
-	if (token_.refreshToken.empty() || clientId_.empty())
+	// Through the shared store: another plugin may already have spent this single-use refresh token, and then
+	// its new token is the one to use.
+	auto fresh = SharedAccounts().Refresh(Service::Twitch, token_, &stop_);
+	if (!fresh)
 		return false;
 
-	CurlHttpClient http(&stop_);
-	auto provider = oauth::TwitchProvider(clientId_);
-	auto res = http.Post(provider.tokenUrl, {}, oauth::BuildRefreshBody(provider, token_.refreshToken),
-			     "application/x-www-form-urlencoded");
-	auto parsed = oauth::ParseTokenResponse(res.status, res.body, UnixNow(), token_.refreshToken);
-	if (parsed.status != oauth::PollStatus::Granted)
-		return false;
-
-	token_ = parsed.token;
+	token_ = *fresh;
 	if (callbacks_.onTokenChanged)
 		callbacks_.onTokenChanged(token_, login_);
 	return true;
@@ -307,10 +303,12 @@ bool TwitchConnection::ValidateToken(bool allowRefresh)
 	if (res.status == 401 && allowRefresh && RefreshToken())
 		return ValidateToken(false);
 
+	SharedAccounts().Invalidate(Service::Twitch, token_);
 	token_ = {};
 	if (callbacks_.onTokenChanged)
 		callbacks_.onTokenChanged(token_, login_);
-	Notice("sign-in expired, reading chat anonymously. Sign in again from the chat settings to send messages");
+	Notice("sign-in expired, reading chat anonymously. Sign in again in Tools → OBS Tools → Accounts to send "
+	       "messages");
 	return false;
 }
 
@@ -422,6 +420,7 @@ void TwitchConnection::RunSession(void *handle)
 					Notice(notice);
 				if (out.authFailed) {
 					if (!RefreshToken()) {
+						SharedAccounts().Invalidate(Service::Twitch, token_);
 						token_ = {};
 						if (callbacks_.onTokenChanged)
 							callbacks_.onTokenChanged(token_, login_);
