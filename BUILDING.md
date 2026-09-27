@@ -71,9 +71,12 @@ Each library and plugin keeps its unit tests in its own `tests\` folder. They us
 | **plugins\unified-chat** (`unified-chat-tests.exe`) | |
 | Twitch IRC parsing, tag unescaping, login/PING/RECONNECT state machine, `/me`, CRLF injection | `test-twitch-irc.cpp` |
 | YouTube response parsing, video URL parsing, dedupe, and the full `ChatSession` against a scripted fake HTTP server (broadcast discovery, paging, token refresh, 401 retry, quota backoff, chat end, send + echo) | `test-youtube.cpp` |
-| Send routing (targets, length limits, partial delivery), HTML escaping of chat lines, config round trip | `test-router-format-config.cpp` |
+| Send routing (targets, length limits, partial delivery), HTML escaping of chat lines, config round trip, 1.2.0 sign-in migration | `test-router-format-config.cpp` |
+| **plugins\stream-alerts** (`stream-alerts-tests.exe`) | |
+| Alert queue (order, once per person per stream, combining past 10), message formatting, config round trip | `test-alert-queue.cpp` |
+| EventSub welcome / keepalive / reconnect / notification / revocation (Twitch's own examples), the follow subscription body, validate scopes, recent-subscriber baseline and new-subscriber detection | `test-platform-events.cpp` |
 
-Run them with `ctest --preset windows-x64`, or run `build_x64\libs\common\RelWithDebInfo\common-tests.exe` or `build_x64\plugins\unified-chat\RelWithDebInfo\unified-chat-tests.exe` directly (both accept doctest options such as `-tc="*YouTube*"`). The tests need no network, OBS or Qt.
+Run them with `ctest --preset windows-x64`, or run a test exe directly, e.g. `build_x64\plugins\unified-chat\RelWithDebInfo\unified-chat-tests.exe` (each accepts doctest options such as `-tc="*YouTube*"`). The tests need no network, OBS or Qt.
 
 ## Project layout
 
@@ -126,6 +129,20 @@ plugins\unified-chat\
 │   ├── target-switch.*    the Twitch / YouTube / Both switch
 │   ├── platform-icons.*   icons painted with QPainter (no image assets)
 │   └── plugin-main.cpp    module entry, dock registration (obs_frontend_add_dock_by_id)
+├── data\locale\en-US.ini
+└── tests\
+plugins\stream-alerts\
+├── plugin.json
+├── src\
+│   ├── core\        no libobs, no Qt, no I/O  -> static library stream-alerts-core
+│   │   ├── alert-queue.*      one at a time, once per person per stream, "+N more" past 10; message formatting
+│   │   ├── platform-events.*  EventSub messages, follow subscription, validate; recent subscribers + SubscriberWatch
+│   │   └── alerts-config.*    config.json
+│   ├── net\listeners.*   FollowListener (EventSub channel.follow over curl's WebSocket, CONNECT_ONLY 2) and
+│   │                     SubscriberPoller (every 2 minutes); both only while OBS streams
+│   ├── alerts-controller.*   plays alerts: text source "text", scene item visibility in every scene and group
+│   ├── alerts-dialog.*       Tools > OBS Tools > Stream Alerts...
+│   └── plugin-main.cpp
 ├── data\locale\en-US.ini
 └── tests\
 ```

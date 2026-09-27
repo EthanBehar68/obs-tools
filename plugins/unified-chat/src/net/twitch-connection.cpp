@@ -19,6 +19,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "twitch-connection.hpp"
 #include "net/account-store.hpp"
 #include "net/curl-http-client.hpp"
+#include "net/socket-wait.hpp"
 #include "core/text-util.hpp"
 #include "core/twitch-irc.hpp"
 
@@ -55,71 +56,6 @@ static int AbortOnStop(void *userdata, curl_off_t, curl_off_t, curl_off_t, curl_
 	return static_cast<const std::atomic<bool> *>(userdata)->load() ? 1 : 0;
 }
 
-static bool WaitSocket(curl_socket_t sock, bool forRead, int timeoutMs)
-{
-	fd_set set;
-	fd_set errors;
-	FD_ZERO(&set);
-	FD_ZERO(&errors);
-	FD_SET(sock, &set);
-	FD_SET(sock, &errors);
-	timeval tv{timeoutMs / 1000, (timeoutMs % 1000) * 1000};
-	int rc = select((int)sock + 1, forRead ? &set : nullptr, forRead ? nullptr : &set, &errors, &tv);
-	return rc > 0;
-}
-
-#ifdef _WIN32
-// Signals when the socket has data or is closed. The association is cancelled when the session ends.
-class SocketEvent {
-public:
-	explicit SocketEvent(curl_socket_t sock) : sock_(sock), event_(WSACreateEvent())
-	{
-		ok_ = event_ != WSA_INVALID_EVENT && WSAEventSelect(sock_, event_, FD_READ | FD_CLOSE) == 0;
-	}
-	~SocketEvent()
-	{
-		if (event_ == WSA_INVALID_EVENT)
-			return;
-		WSAEventSelect(sock_, event_, 0);
-		WSACloseEvent(event_);
-	}
-	SocketEvent(const SocketEvent &) = delete;
-	SocketEvent &operator=(const SocketEvent &) = delete;
-
-	bool Ok() const { return ok_; }
-	WSAEVENT Handle() const { return event_; }
-
-private:
-	curl_socket_t sock_;
-	WSAEVENT event_;
-	bool ok_ = false;
-};
-#else
-class SocketEvent {
-public:
-	explicit SocketEvent(curl_socket_t) {}
-	bool Ok() const { return true; }
-};
-#endif
-
-// Blocks until the socket has data, wakeEvent is set, or timeoutMs passes.
-static void WaitForActivity(const SocketEvent &socketEvent, void *wakeEvent, curl_socket_t sock, int timeoutMs)
-{
-#ifdef _WIN32
-	(void)sock;
-	HANDLE handles[] = {socketEvent.Handle(), wakeEvent};
-	if (wakeEvent)
-		WaitForMultipleObjects(2, handles, FALSE, (DWORD)timeoutMs);
-	else // no wake event: fall back to noticing sends and shutdown by timeout
-		WaitForSingleObject(handles[0], (DWORD)(std::min)(timeoutMs, 250));
-	WSAResetEvent(socketEvent.Handle());
-#else
-	(void)socketEvent;
-	(void)wakeEvent;
-	WaitSocket(sock, true, (std::min)(timeoutMs, 250));
-#endif
-}
-
 static bool SendLine(CURL *curl, curl_socket_t sock, const std::string &line)
 {
 	std::string data = line + "\r\n";
@@ -146,9 +82,7 @@ TwitchConnection::TwitchConnection(std::string channel, std::string clientId, st
 	  token_(std::move(token)),
 	  callbacks_(std::move(callbacks))
 {
-#ifdef _WIN32
-	wakeEvent_ = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-#endif
+	wakeEvent_ = CreateWakeEvent();
 	thread_ = std::thread(&TwitchConnection::Run, this);
 }
 
@@ -158,19 +92,13 @@ TwitchConnection::~TwitchConnection()
 	Wake();
 	if (thread_.joinable())
 		thread_.join();
-#ifdef _WIN32
-	if (wakeEvent_)
-		CloseHandle(wakeEvent_);
-#endif
+	CloseWakeEvent(wakeEvent_);
 }
 
 void TwitchConnection::Wake()
 {
 	cv_.notify_all();
-#ifdef _WIN32
-	if (wakeEvent_)
-		SetEvent(wakeEvent_);
-#endif
+	SetWakeEvent(wakeEvent_);
 }
 
 void TwitchConnection::Send(std::string text, uint64_t sendId, std::string replyParentId, std::string replyTo)

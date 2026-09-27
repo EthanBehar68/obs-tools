@@ -59,3 +59,4 @@ endif()
 
 add_subdirectory(libs/common)
 add_subdirectory(plugins/unified-chat)
+add_subdirectory(plugins/stream-alerts)

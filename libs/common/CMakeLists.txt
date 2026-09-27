@@ -30,6 +30,8 @@ target_sources(
     src/net/curl-http-client.hpp
     src/net/device-login.cpp
     src/net/device-login.hpp
+    src/net/socket-wait.cpp
+    src/net/socket-wait.hpp
     src/secret-store.cpp
     src/secret-store.hpp
 )
