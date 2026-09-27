@@ -1308,7 +1308,7 @@ void ChatDock::UpdateStatusButtons()
 		const int64_t viewers = platform == Platform::Twitch ? twitchViewers_ : youtubeViewers_;
 		QString text = Text(StateKey(state));
 		if (viewers >= 0)
-			text += QStringLiteral("  \U0001F441 ") + QLocale().toString((qlonglong)viewers);
+			text += QStringLiteral("  \U0001F464 ") + QLocale().toString((qlonglong)viewers);
 		button->setText(text);
 
 		QString tip = QString::fromUtf8(PlatformName(platform).data(), (int)PlatformName(platform).size()) +

@@ -84,7 +84,7 @@ If YouTube goes live some other way (another app, or a multistream output with a
 ## 4. Using the dock
 
 - **Status buttons** (top left) show each platform's state: *Connected*, *Read-only* (Twitch without sign-in), *Connecting…*, *Waiting for stream*, or *Offline*. Click one to open Settings.
-  - While you're live they also show the **viewer count** (👁 23), checked every 5 minutes. Hover for the total across both platforms. Twitch needs a sign-in for this; on YouTube each check uses 1 quota unit (about 12 an hour).
+  - While you're live they also show the **viewer count** (👤 23), checked every 5 minutes. Hover for the total across both platforms. Twitch needs a sign-in for this; on YouTube each check uses 1 quota unit (about 12 an hour).
 - **Target switch** (bottom right): Twitch, YouTube, or both. The choice is saved.
 - Press **Enter** to send. A message sent to both platforms shows as **one line with both icons** once both have accepted it (about a second).
   If your Twitch and YouTube names differ it shows `TwitchName / YouTubeName`. If one platform rejects the message, only the other icon is shown.

@@ -29,7 +29,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLabel>
-#include <QLineEdit>
+#include <QPlainTextEdit>
 #include <QPushButton>
 #include <QSpinBox>
 #include <QStringList>
@@ -78,6 +78,15 @@ static SourceNames ListSources()
 		list->sort(Qt::CaseInsensitive);
 	}
 	return names;
+}
+
+// A few lines tall: Enter starts a new line of the alert text, Tab moves on.
+static QPlainTextEdit *MakeMessageEdit(const std::string &text, QWidget *parent)
+{
+	auto edit = new QPlainTextEdit(QString::fromStdString(text), parent);
+	edit->setTabChangesFocus(true);
+	edit->setFixedHeight(edit->fontMetrics().lineSpacing() * 3 + 12);
+	return edit;
 }
 
 // Editable, so a source added later (or renamed) can still be typed in.
@@ -153,11 +162,11 @@ QGroupBox *AlertsDialog::MakeGroup(AlertKind kind, const char *titleKey, const Q
 	row.textSource->setToolTip(Text("Alerts.TextSourceHint"));
 	form->addRow(Text("Alerts.TextSource"), row.textSource);
 
-	row.message = new QLineEdit(QString::fromStdString(settings.message), group);
+	row.message = MakeMessageEdit(settings.message, group);
 	row.message->setToolTip(Text("Alerts.MessageHint"));
 	form->addRow(Text("Alerts.Message"), row.message);
 
-	row.overflow = new QLineEdit(QString::fromStdString(settings.overflowMessage), group);
+	row.overflow = MakeMessageEdit(settings.overflowMessage, group);
 	row.overflow->setToolTip(Text("Alerts.OverflowHint"));
 	form->addRow(Text("Alerts.Overflow"), row.overflow);
 
@@ -185,8 +194,8 @@ AlertsConfig AlertsDialog::Current() const
 		settings.enabled = row.enabled->isChecked();
 		settings.source = ToStd(row.source->currentText());
 		settings.textSource = ToStd(row.textSource->currentText());
-		settings.message = ToStd(row.message->text());
-		settings.overflowMessage = ToStd(row.overflow->text());
+		settings.message = ToStd(row.message->toPlainText());
+		settings.overflowMessage = ToStd(row.overflow->toPlainText());
 	}
 	config.durationSeconds = duration_->value();
 	return config;

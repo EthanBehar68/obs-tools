@@ -27,7 +27,7 @@ class QCheckBox;
 class QComboBox;
 class QGroupBox;
 class QLabel;
-class QLineEdit;
+class QPlainTextEdit;
 class QSpinBox;
 
 namespace stream_alerts {
@@ -48,8 +48,8 @@ private:
 		QCheckBox *enabled = nullptr;
 		QComboBox *source = nullptr;
 		QComboBox *textSource = nullptr;
-		QLineEdit *message = nullptr;
-		QLineEdit *overflow = nullptr;
+		QPlainTextEdit *message = nullptr;
+		QPlainTextEdit *overflow = nullptr;
 		QLabel *status = nullptr;
 	};
 

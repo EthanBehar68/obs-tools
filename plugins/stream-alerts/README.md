@@ -29,7 +29,7 @@ Close OBS and extract `obs-stream-alerts-<version>-windows-x64.zip` into `C:\Pro
 2. Open **Tools → OBS Tools → Stream Alerts…**. For Twitch follows and YouTube subscribers:
    - **Show source:** the group (or any source or nested scene) to show.
    - **Text source:** the text source that gets the message. Optional.
-   - **Message:** `{name}` is replaced by the person's name.
+   - **Message:** `{name}` is replaced by the person's name. Press Enter for a new line (Text (GDI+) shows it as typed).
    - **When more than 10 wait:** `{count}` is replaced by how many more.
    - **Test alert** plays one straight away with the values as entered, so you can try the look without a real follow. Cancel puts the previous settings back.
 3. **Show each alert for:** 5 seconds by default.
