@@ -2,8 +2,6 @@
 /*
 
 # Except for default project files
-!/.github
-!/build-aux
 !/cmake
 !/dep
 !/libs

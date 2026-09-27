@@ -163,7 +163,7 @@ Sign-ins come from `SharedAccounts()`. Twitch refresh tokens are single-use, so 
 
 ### Conventions followed
 
-- Build system: [obs-plugintemplate](https://github.com/obsproject/obs-plugintemplate), i.e. `buildspec.json`, `CMakePresets.json`, `cmake/`, `.github/` CI workflows, and each plugin's `data/locale/en-US.ini` with `obs_module_text`. The template's single-plugin helpers were changed to work per target (version resource, `plugin-support`).
+- Build system: [obs-plugintemplate](https://github.com/obsproject/obs-plugintemplate), i.e. `buildspec.json`, `CMakePresets.json`, `cmake/`, and each plugin's `data/locale/en-US.ini` with `obs_module_text`. The template's single-plugin helpers were changed to work per target (version resource, `plugin-support`). Its GitHub Actions workflows and `build-aux` format scripts were removed: they were built for one plugin on three OSes, and `scripts\Build.ps1` does all building, testing and packaging here.
 - C++20 with Qt 6 Widgets, as in obs-multi-rtmp: kebab-case file names, PascalCase types and methods, `member_` fields, `obs_frontend_add_dock_by_id`, config saved on `OBS_FRONTEND_EVENT_EXIT`.
 - Formatting: the template's `.clang-format` (OBS style: tabs, 120 columns). Run the clang-format 19 that ships with VS Build Tools:
   ```powershell
