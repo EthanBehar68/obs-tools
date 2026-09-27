@@ -6,9 +6,9 @@ Requires OBS Studio **32.2 or newer** (64-bit Windows). Check with **Help → Ab
 
 1. Close OBS.
 2. Install it with either option:
-   - **From the release zip:** extract `obs-unified-chat-1.2.0-windows-x64.zip` into `C:\ProgramData\obs-studio\plugins\`. You should end up with
+   - **From the release zip:** extract `obs-unified-chat-1.3.0-windows-x64.zip` into `C:\ProgramData\obs-studio\plugins\`. You should end up with
      `C:\ProgramData\obs-studio\plugins\obs-unified-chat\bin\64bit\obs-unified-chat.dll`.
-   - **From source:** run `scripts\Build.ps1 -Install` (see [BUILDING.md](BUILDING.md)).
+   - **From source:** run `scripts\Build.ps1 -Install` (see [BUILDING.md](../../BUILDING.md)).
 3. Start OBS and open **Docks → Unified Chat**. Drag the dock wherever you like; OBS remembers its position.
 
 This is the same plugin folder obs-multi-rtmp uses, so the two sit side by side.

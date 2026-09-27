@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.3.0 (2026-09-27)
 
 ### Accounts shared by all OBS Tools plugins
 - **Sign in once for every OBS Tools plugin.** Twitch and YouTube sign-ins and client IDs moved to **Tools → OBS Tools → Accounts…** (the Twitch and YouTube settings tabs have an **Accounts…** button). The plugin's own settings are also under **Tools → OBS Tools → Unified Chat…**.
