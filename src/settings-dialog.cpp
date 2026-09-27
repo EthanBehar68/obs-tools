@@ -31,7 +31,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QDialogButtonBox>
 #include <QFormLayout>
 #include <QGridLayout>
-#include <QGroupBox>
+#include <QTabWidget>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
@@ -64,9 +64,9 @@ static QPushButton *MakeButton(const char *key, QWidget *parent)
 }
 
 // What the marks in the chat view mean: one row per mark, a sample on the left and its meaning on the right.
-static QGroupBox *MakeLegend(QWidget *parent)
+static QWidget *MakeLegend(QWidget *parent)
 {
-	auto box = new QGroupBox(Text("Legend.Title"), parent);
+	auto box = new QWidget(parent);
 	auto grid = new QGridLayout(box);
 	grid->setColumnStretch(1, 1);
 	grid->setHorizontalSpacing(12);
@@ -129,9 +129,12 @@ SettingsDialog::SettingsDialog(const ChatConfig &config, QWidget *parent) : QDia
 	setMinimumWidth(460);
 
 	auto layout = new QVBoxLayout(this);
+	// One page per area keeps the dialog short.
+	auto tabs = new QTabWidget(this);
+	layout->addWidget(tabs);
 
 	// Twitch
-	auto twitchBox = new QGroupBox(Text("Settings.Twitch"), this);
+	auto twitchBox = new QWidget(tabs);
 	auto twitchForm = new QFormLayout(twitchBox);
 	twitchChannel_ = new QLineEdit(FromStd(config.twitchChannel), twitchBox);
 	twitchChannel_->setPlaceholderText(Text("Settings.Twitch.ChannelHint"));
@@ -151,10 +154,10 @@ SettingsDialog::SettingsDialog(const ChatConfig &config, QWidget *parent) : QDia
 	twitchForm->addRow(Text("Settings.ClientId"), twitchClientId_);
 	twitchForm->addRow(Text("Settings.Account"), twitchAccount_);
 	twitchForm->addRow(QString(), twitchButtons);
-	layout->addWidget(twitchBox);
+	tabs->addTab(twitchBox, PlatformIcon(Platform::Twitch), Text("Settings.Twitch"));
 
 	// YouTube
-	auto youtubeBox = new QGroupBox(Text("Settings.YouTube"), this);
+	auto youtubeBox = new QWidget(tabs);
 	auto youtubeForm = new QFormLayout(youtubeBox);
 	youtubeClientId_ = new QLineEdit(FromStd(config.youtubeClientId), youtubeBox);
 	youtubeClientId_->setPlaceholderText(Text("Settings.ClientIdHint"));
@@ -195,10 +198,10 @@ SettingsDialog::SettingsDialog(const ChatConfig &config, QWidget *parent) : QDia
 	youtubeForm->addRow(Text("Settings.YouTube.Poll"), youtubePoll_);
 	youtubeForm->addRow(Text("Settings.Account"), youtubeAccount_);
 	youtubeForm->addRow(QString(), youtubeButtons);
-	layout->addWidget(youtubeBox);
+	tabs->addTab(youtubeBox, PlatformIcon(Platform::YouTube), Text("Settings.YouTube"));
 
 	// General
-	auto generalBox = new QGroupBox(Text("Settings.General"), this);
+	auto generalBox = new QWidget(tabs);
 	auto generalForm = new QFormLayout(generalBox);
 	maxMessages_ = new QSpinBox(generalBox);
 	maxMessages_->setRange(50, 10000);
@@ -209,9 +212,9 @@ SettingsDialog::SettingsDialog(const ChatConfig &config, QWidget *parent) : QDia
 	mergeBots_->setPlaceholderText(Text("Settings.MergeBotsHint"));
 	mergeBots_->setToolTip(Text("Settings.MergeBotsTip"));
 	generalForm->addRow(Text("Settings.MergeBots"), mergeBots_);
-	layout->addWidget(generalBox);
+	tabs->addTab(generalBox, Text("Settings.General"));
 
-	layout->addWidget(MakeLegend(this));
+	tabs->addTab(MakeLegend(tabs), Text("Legend.Title"));
 
 	auto buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
 	layout->addWidget(buttons);
