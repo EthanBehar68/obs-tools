@@ -179,6 +179,58 @@ void TwitchConnection::Send(std::string text, uint64_t sendId, std::string reply
 	Wake();
 }
 
+void TwitchConnection::Moderate(ModerationAction action)
+{
+	{
+		std::lock_guard lock(mutex_);
+		moderation_.push_back(std::move(action));
+	}
+	Wake();
+}
+
+void TwitchConnection::Moderate(const ModerationAction &action, const std::string &channelId)
+{
+	// Runs on the IRC thread; a Helix call takes a fraction of a second and moderation is rare.
+	if (!token_.IsValid()) {
+		Notice("sign in to moderate from the dock");
+		return;
+	}
+	const TwitchIdentity &identity = identity_; // set by ValidateToken on this same thread
+	if (!identity.CanModerate()) {
+		Notice("sign in to Twitch again (Settings → Twitch → Sign in) to allow moderating from the dock");
+		return;
+	}
+	auto request = BuildTwitchModeration(action, channelId, identity.userId);
+	if (!request) {
+		Notice("can't moderate yet: the channel isn't joined");
+		return;
+	}
+
+	CurlHttpClient http(&stop_);
+	auto perform = [&]() {
+		std::vector<std::string> headers{"Authorization: Bearer " + token_.accessToken,
+						 "Client-Id: " + clientId_};
+		return request->method == HttpRequest::Method::Delete
+			       ? http.Delete(request->url, headers)
+			       : http.Post(request->url, headers, request->body, "application/json");
+	};
+	HttpResponse res = perform();
+	if (res.status == 401 && RefreshToken())
+		res = perform();
+	if (!res.Ok()) {
+		const std::string reason = ModerationErrorMessage(res.body);
+		Notice("couldn't moderate " + action.userName + " (" +
+		       (res.status == 0
+				? res.error
+				: "HTTP " + std::to_string(res.status) + (reason.empty() ? "" : ", " + reason)) +
+		       ")");
+		return;
+	}
+	// Deletions, timeouts and bans come back through chat (CLEARMSG / CLEARCHAT); an unban doesn't.
+	if (action.kind == ModerationAction::Kind::Unban)
+		Notice(action.userName + " was unbanned");
+}
+
 void TwitchConnection::Notice(const std::string &text)
 {
 	if (callbacks_.onNotice)
@@ -229,6 +281,9 @@ bool TwitchConnection::ValidateToken(bool allowRefresh)
 		return true; // offline; the IRC login will report a bad token
 	if (res.Ok()) {
 		std::string login = twitch::ParseValidateLogin(res.body);
+		// Keeps the user id and granted scopes too: moderation needs both.
+		if (auto identity = ParseTwitchIdentity(res.body))
+			identity_ = std::move(*identity);
 		if (!login.empty() && login != login_) {
 			login_ = login;
 			if (callbacks_.onTokenChanged)
@@ -274,10 +329,14 @@ void TwitchConnection::RunSession(void *handle)
 
 	while (!stop_) {
 		std::deque<OutgoingMessage> pending;
+		std::deque<ModerationAction> actions;
 		{
 			std::lock_guard lock(mutex_);
 			pending.swap(outgoing_);
+			actions.swap(moderation_);
 		}
+		for (const auto &action : actions)
+			Moderate(action, session.ChannelId());
 		for (const auto &outgoing : pending) {
 			auto failed = [&]() {
 				if (callbacks_.onSendFailed)

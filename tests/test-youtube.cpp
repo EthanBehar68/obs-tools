@@ -33,6 +33,14 @@ public:
 		return Next({true, url, headers, body});
 	}
 
+	HttpResponse Delete(const std::string &url, const std::vector<std::string> &headers) override
+	{
+		deletes.push_back(url);
+		return Next({false, url, headers, {}});
+	}
+
+	std::vector<std::string> deletes;
+
 	// Streamed responses: a 2xx body is delivered chunk by chunk; other statuses return the chunks as the body.
 	struct Streamed {
 		long status;
@@ -688,6 +696,58 @@ TEST_CASE("Broadcast search is fast right after the stream starts, then slows do
 	idle.SetBroadcastSearch(120000);
 	http.Queue(200, R"({"items":[]})");
 	CHECK(idle.Step(0).nextDelayMs == 120000);
+}
+
+TEST_CASE("YouTube moderation: delete strikes locally, bans can be lifted only when made here")
+{
+	FakeHttp http;
+	ChatSession session(http, oauth::GoogleProvider("id", "sec"), FreshToken(), "", 5000, nullptr);
+
+	ModerationAction del;
+	del.platform = Platform::YouTube;
+	del.kind = ModerationAction::Kind::DeleteMessage;
+	del.messageId = "LCC.abc";
+	CHECK(session.Moderate(del, 0).error == "YouTube chat is not connected");
+
+	http.Queue(200, kBroadcastLive);
+	http.Queue(200, kChannel);
+	session.Step(0);
+
+	http.Queue(204, "");
+	auto deleted = session.Moderate(del, 1);
+	CHECK(deleted.ok);
+	REQUIRE(deleted.strike);
+	CHECK(deleted.strike->kind == ModerationEvent::Kind::DeleteMessage);
+	CHECK(deleted.strike->messageId == "LCC.abc");
+	CHECK(http.deletes.back() == "https://www.googleapis.com/youtube/v3/liveChat/messages?id=LCC.abc");
+	CHECK(http.requests.back().headers.at(0) == "Authorization: Bearer access");
+
+	ModerationAction unban;
+	unban.platform = Platform::YouTube;
+	unban.kind = ModerationAction::Kind::Unban;
+	unban.userId = "UCdazed";
+	unban.userName = "@dazed263";
+	CHECK_FALSE(session.Moderate(unban, 2).ok); // not banned from here
+
+	ModerationAction ban = unban;
+	ban.kind = ModerationAction::Kind::Ban;
+	http.Queue(200, R"({"kind":"youtube#liveChatBan","id":"ban-1"})");
+	auto banned = session.Moderate(ban, 3);
+	CHECK(banned.ok);
+	CHECK_FALSE(banned.strike); // the userBannedEvent that follows strikes the lines
+	CHECK(http.requests.back().post);
+	CHECK(http.requests.back().body.find("\"liveChatId\":\"CHAT1\"") != std::string::npos);
+
+	http.Queue(204, "");
+	auto lifted = session.Moderate(unban, 4);
+	CHECK(lifted.ok);
+	CHECK(lifted.notice == "YouTube: @dazed263 was unbanned");
+	CHECK(http.deletes.back() == "https://www.googleapis.com/youtube/v3/liveChat/bans?id=ban-1");
+
+	http.Queue(403, R"({"error":{"code":403,"message":"The caller is not a moderator."}})");
+	auto refused = session.Moderate(ban, 5);
+	CHECK_FALSE(refused.ok);
+	CHECK(refused.error == "HTTP 403, The caller is not a moderator.");
 }
 
 TEST_CASE("ChatSession without a token stays signed out and makes no requests")

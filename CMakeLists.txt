@@ -35,6 +35,8 @@ target_sources(
     src/core/json-array-reader.hpp
     src/core/mentions.cpp
     src/core/mentions.hpp
+    src/core/moderation.cpp
+    src/core/moderation.hpp
     src/core/name-color.cpp
     src/core/name-color.hpp
     src/core/oauth-device.cpp
@@ -133,6 +135,7 @@ if(ENABLE_TESTS)
       tests/test-json-array-reader.cpp
       tests/test-main.cpp
       tests/test-mentions.cpp
+      tests/test-moderation.cpp
       tests/test-name-color.cpp
       tests/test-oauth.cpp
       tests/test-router-format-config.cpp

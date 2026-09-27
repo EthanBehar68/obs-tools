@@ -78,6 +78,16 @@ void YouTubeConnection::Send(std::string text, uint64_t sendId)
 	cv_.notify_all();
 }
 
+void YouTubeConnection::Moderate(ModerationAction action)
+{
+	{
+		std::lock_guard lock(mutex_);
+		moderation_.push_back(std::move(action));
+		sendPending_ = true; // like a send: end an open stream so it happens right away
+	}
+	cv_.notify_all();
+}
+
 void YouTubeConnection::Run()
 {
 	auto notice = [this](const std::string &text) {
@@ -124,14 +134,27 @@ void YouTubeConnection::Run()
 
 	while (!stop_) {
 		std::deque<OutgoingMessage> pending;
+		std::deque<ModerationAction> actions;
 		{
 			std::unique_lock lock(mutex_);
-			cv_.wait_until(lock, nextStep, [this] { return stop_.load() || !outgoing_.empty(); });
+			cv_.wait_until(lock, nextStep,
+				       [this] { return stop_.load() || !outgoing_.empty() || !moderation_.empty(); });
 			pending.swap(outgoing_);
+			actions.swap(moderation_);
 			sendPending_ = false;
 		}
 		if (stop_)
 			break;
+
+		for (const auto &action : actions) {
+			auto outcome = session.Moderate(action, (int64_t)std::time(nullptr));
+			if (!outcome.ok)
+				notice("YouTube: couldn't moderate " + action.userName + " (" + outcome.error + ")");
+			if (outcome.strike && callbacks_.onModeration)
+				callbacks_.onModeration(std::move(*outcome.strike));
+			if (!outcome.notice.empty())
+				notice(outcome.notice);
+		}
 
 		for (const auto &outgoing : pending) {
 			auto result = session.Send(outgoing.text, (int64_t)std::time(nullptr));

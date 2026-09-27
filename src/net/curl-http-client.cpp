@@ -85,6 +85,11 @@ HttpResponse CurlHttpClient::Post(const std::string &url, const std::vector<std:
 	return Perform(url, headers, &body, contentType, nullptr, nullptr);
 }
 
+HttpResponse CurlHttpClient::Delete(const std::string &url, const std::vector<std::string> &headers)
+{
+	return Perform(url, headers, nullptr, {}, nullptr, nullptr, true);
+}
+
 HttpResponse CurlHttpClient::GetStream(const std::string &url, const std::vector<std::string> &headers,
 				       const std::function<bool(std::string_view)> &onData,
 				       const std::function<bool()> &interrupt)
@@ -95,7 +100,7 @@ HttpResponse CurlHttpClient::GetStream(const std::string &url, const std::vector
 HttpResponse CurlHttpClient::Perform(const std::string &url, const std::vector<std::string> &headers,
 				     const std::string *body, const std::string &contentType,
 				     const std::function<bool(std::string_view)> *onData,
-				     const std::function<bool()> *interrupt)
+				     const std::function<bool()> *interrupt, bool deleteMethod)
 {
 	HttpResponse response;
 	if (!curl_)
@@ -131,6 +136,8 @@ HttpResponse CurlHttpClient::Perform(const std::string &url, const std::vector<s
 #ifdef _WIN32
 	curl_easy_setopt(curl, CURLOPT_SSL_OPTIONS, (long)CURLSSLOPT_REVOKE_BEST_EFFORT);
 #endif
+	if (deleteMethod)
+		curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "DELETE");
 	if (body) {
 		curl_easy_setopt(curl, CURLOPT_POST, 1L);
 		curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body->c_str());

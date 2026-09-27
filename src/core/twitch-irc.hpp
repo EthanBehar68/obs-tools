@@ -84,6 +84,7 @@ public:
 	bool IsJoined() const { return joined_; }
 	bool CanSend() const { return IsAuthenticated() && joined_; }
 	const std::string &Channel() const { return channel_; }
+	const std::string &ChannelId() const { return channelId_; } // numeric, once ROOMSTATE arrived
 
 	// With replyParentId (the id tag of a received message), sends a threaded Twitch reply to it.
 	std::optional<std::string> BuildPrivmsg(std::string_view text, std::string_view replyParentId = {}) const;

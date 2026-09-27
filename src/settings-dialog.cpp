@@ -115,6 +115,7 @@ static QWidget *MakeLegend(QWidget *parent)
 	mention->setPalette(palette);
 	addRow(mention, "Legend.Mention");
 
+	addRow(html(grey(QStringLiteral("right-click"))), "Legend.Moderate");
 	addRow(html(struck(kTagGreyColor, QStringLiteral("(deleted)"))), "Legend.Deleted");
 	addRow(html(struck(kTagTimeoutColor, QStringLiteral("(timed out …)"))), "Legend.TimedOut");
 	addRow(html(struck(kTagBanColor, QStringLiteral("(banned)"))), "Legend.Banned");

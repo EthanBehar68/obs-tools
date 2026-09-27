@@ -41,6 +41,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 class QLabel;
 class QLineEdit;
 class QListWidget;
+class QPoint;
 class QTextBlock;
 class QTextBrowser;
 class QTimer;
@@ -73,8 +74,10 @@ private:
 	struct LineInfo {
 		bool twitch = false;
 		bool youtube = false;
-		std::string messageId; // of the message's own platform
-		std::string login;     // lower case, Twitch
+		Platform platform = Platform::Twitch; // of the message itself (what moderation acts on)
+		bool self = false;                    // your own line: no moderation menu
+		std::string messageId;                // of the message's own platform
+		std::string login;                    // lower case, Twitch
 		std::string authorId;
 		std::string author; // display name, for notices
 		int textLength = 0; // UTF-16 length of the message text, which ends the line
@@ -125,6 +128,11 @@ private:
 	// Strikes the matching lines through, tags them and, for timeouts, bans and clears, adds a notice.
 	void ApplyModeration(const ModerationEvent &event);
 	static void StrikeLine(const QTextBlock &block, LineInfo &info, const ModerationTag &tag);
+
+	// Moderation from the dock (right-click on someone's line)
+	void ShowLineMenu(const QPoint &pos);
+	bool ConfirmModeration(ModerationAction &action, bool customTimeout); // every action asks first
+	void RunModeration(const ModerationAction &action);
 	void SetLinkState(Platform platform, LinkState state);
 	void UpdatePlaceholder();
 
@@ -183,6 +191,9 @@ private:
 	bool globalAssetsRequested_ = false;
 	int emoteHeight_ = 24;
 	bool hiDpi_ = false;
+
+	std::unordered_set<std::string>
+		youtubeDockBans_; // channel ids banned from the dock (YouTube can only lift those)
 
 	MentionMatcher mentions_;
 	std::vector<std::string> ownYouTubeNames_; // learned from your own YouTube messages

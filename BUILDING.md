@@ -89,6 +89,7 @@ src\
 │   ├── bot-merger.*      a bot's identical Twitch + YouTube lines folded into one (line shown first, icon added later)
 │   ├── mentions.*        clickable-name links, "mentions you" matching, recent chatters for @ + Tab completion
 │   ├── emotes.*          Twitch emote/badge tags, BTTV/FFZ/7TV lists, emote index, message splitting, image URLs
+│   ├── moderation.*      Helix and YouTube moderation requests (delete, timeout, ban, unban), token identity/scopes
 │   └── chat-config.*     config.json (de)serialization
 ├── net\           worker threads on the libcurl that ships with OBS
 │   ├── twitch-connection.*   TLS IRC to irc.chat.twitch.tv:6697 via CURLOPT_CONNECT_ONLY

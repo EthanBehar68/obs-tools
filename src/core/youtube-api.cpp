@@ -327,6 +327,11 @@ bool ChatSession::Refresh(int64_t now)
 
 HttpResponse ChatSession::Authorized(bool post, const std::string &url, const std::string &body, int64_t now)
 {
+	return Authorized(HttpRequest{post ? HttpRequest::Method::Post : HttpRequest::Method::Get, url, body}, now);
+}
+
+HttpResponse ChatSession::Authorized(const HttpRequest &request, int64_t now)
+{
 	if (token_.NeedsRefresh(now))
 		Refresh(now);
 	if (!token_.IsValid())
@@ -334,7 +339,14 @@ HttpResponse ChatSession::Authorized(bool post, const std::string &url, const st
 
 	auto send = [&]() {
 		std::vector<std::string> headers{"Authorization: Bearer " + token_.accessToken};
-		return post ? http_.Post(url, headers, body, "application/json") : http_.Get(url, headers);
+		switch (request.method) {
+		case HttpRequest::Method::Post:
+			return http_.Post(request.url, headers, request.body, "application/json");
+		case HttpRequest::Method::Delete:
+			return http_.Delete(request.url, headers);
+		default:
+			return http_.Get(request.url, headers);
+		}
 	};
 
 	HttpResponse res = send();
@@ -608,6 +620,62 @@ StepResult ChatSession::Step(int64_t now)
 	else
 		Poll(now, out);
 	return out;
+}
+
+ModerationOutcome ChatSession::Moderate(const ModerationAction &action, int64_t now)
+{
+	ModerationOutcome outcome;
+	if (!CanSend()) {
+		outcome.error = "YouTube chat is not connected";
+		return outcome;
+	}
+
+	std::string banId;
+	if (action.kind == ModerationAction::Kind::Unban) {
+		auto ban = bans_.find(action.userId);
+		if (ban == bans_.end()) {
+			outcome.error = "only bans made from the dock can be lifted here; use YouTube Studio";
+			return outcome;
+		}
+		banId = ban->second;
+	}
+	auto request = BuildYouTubeModeration(action, liveChatId_, banId);
+	if (!request) {
+		outcome.error = "nothing to do";
+		return outcome;
+	}
+
+	HttpResponse res = Authorized(*request, now); // 50 quota units each
+	if (!res.Ok()) {
+		const std::string reason = ModerationErrorMessage(res.body);
+		outcome.error = res.status == 0
+					? res.error
+					: "HTTP " + std::to_string(res.status) + (reason.empty() ? "" : ", " + reason);
+		return outcome;
+	}
+
+	outcome.ok = true;
+	switch (action.kind) {
+	case ModerationAction::Kind::DeleteMessage: {
+		// YouTube no longer reports deletions, so mark the line here.
+		ModerationEvent strike;
+		strike.platform = Platform::YouTube;
+		strike.kind = ModerationEvent::Kind::DeleteMessage;
+		strike.messageId = action.messageId;
+		outcome.strike = std::move(strike);
+		break;
+	}
+	case ModerationAction::Kind::Timeout:
+	case ModerationAction::Kind::Ban:
+		// The userBannedEvent that follows strikes the lines; keep the id so the ban can be lifted.
+		bans_[action.userId] = ParseYouTubeBanId(res.body);
+		break;
+	case ModerationAction::Kind::Unban:
+		bans_.erase(action.userId);
+		outcome.notice = "YouTube: " + action.userName + " was unbanned";
+		break;
+	}
+	return outcome;
 }
 
 SendResult ChatSession::Send(std::string_view text, int64_t now)

@@ -8,10 +8,12 @@ TEST_CASE("Twitch device request uses scopes and no secret")
 {
 	auto provider = TwitchProvider(" abc ");
 	CHECK(provider.clientId == "abc");
-	CHECK(BuildDeviceRequestBody(provider) == "client_id=abc&scopes=chat%3Aread%20chat%3Aedit");
+	const std::string scopes = "chat%3Aread%20chat%3Aedit%20moderator%3Amanage%3Abanned_users"
+				   "%20moderator%3Amanage%3Achat_messages";
+	CHECK(BuildDeviceRequestBody(provider) == "client_id=abc&scopes=" + scopes);
 	CHECK(BuildDevicePollBody(provider, "dc") ==
-	      "client_id=abc&scopes=chat%3Aread%20chat%3Aedit&device_code=dc"
-	      "&grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Adevice_code");
+	      "client_id=abc&scopes=" + scopes + "&device_code=dc" +
+		      "&grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Adevice_code");
 	CHECK(BuildRefreshBody(provider, "r1") == "client_id=abc&grant_type=refresh_token&refresh_token=r1");
 }
 

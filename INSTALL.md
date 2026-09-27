@@ -102,6 +102,9 @@ If YouTube goes live some other way (another app, or a multistream output with a
   - Role badges (broadcaster, moderator, VIP, subscriber/founder) appear before the name. They need a Twitch sign-in; read-only chat shows none.
   - Images download once per session in the background. A line appears at once with the right spacing and the picture fills in a moment later.
   - Emotes in your own sent messages: BTTV/FFZ/7TV ones show as pictures, but Twitch's own emotes stay as words, because Twitch doesn't send your message back with emote positions.
+- **Moderate from the dock:** right-click someone's line for **Delete message**, **Timeout** (1 minute, 10 minutes, 1 hour, 24 hours or Custom…), **Ban…** (with an optional reason on Twitch) and, on lines already marked timed out or banned, **Unban**. Every action asks first. You must be the broadcaster or a moderator of that chat.
+  - **Twitch:** after updating to this version, **sign in to Twitch again once** (Settings → Twitch → Sign in). The new sign-in adds the moderation permissions. Until then the dock tells you when you try.
+  - **YouTube:** each action uses **50 quota units** (the confirmation says so). YouTube can only lift bans made from the dock during this session; use YouTube Studio for older ones.
 - **Moderation stays visible.** Nothing a moderator removes disappears from the dock. The message text is struck through and dimmed, but you can still read it, and a coloured tag says why:
   - *(deleted)*, grey: a single message was deleted (Twitch only; YouTube no longer reports single deletions).
   - *(timed out 10 minutes)*, amber: the author was timed out, and all their lines get the tag.

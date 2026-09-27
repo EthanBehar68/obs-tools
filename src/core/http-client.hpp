@@ -41,6 +41,12 @@ public:
 	virtual HttpResponse Get(const std::string &url, const std::vector<std::string> &headers) = 0;
 	virtual HttpResponse Post(const std::string &url, const std::vector<std::string> &headers,
 				  const std::string &body, const std::string &contentType) = 0;
+	virtual HttpResponse Delete(const std::string &url, const std::vector<std::string> &headers)
+	{
+		(void)url;
+		(void)headers;
+		return {0, {}, "DELETE is not supported by this client"};
+	}
 
 	// A GET whose 2xx body is handed to onData as it arrives instead of being collected (error bodies are still
 	// collected in body). Returning false from onData, or true from interrupt (checked about once a second),

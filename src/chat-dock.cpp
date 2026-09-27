@@ -22,6 +22,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "settings-dialog.hpp"
 #include "target-switch.hpp"
 #include "core/chat-format.hpp"
+#include "core/moderation.hpp"
 #include "core/text-util.hpp"
 
 #include <obs-frontend-api.h>
@@ -30,11 +31,16 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <util/platform.h>
 
 #include <QDateTime>
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QHBoxLayout>
+#include <QInputDialog>
 #include <QKeyEvent>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QMenu>
+#include <QMessageBox>
 #include <QScrollBar>
 #include <QTextBlock>
 #include <QTextBlockFormat>
@@ -174,6 +180,8 @@ ChatDock::ChatDock(QWidget *parent) : QWidget(parent)
 	connect(input_, &QLineEdit::returnPressed, this, &ChatDock::SendCurrent);
 	input_->installEventFilter(this); // "@" + Tab completion
 	connect(view_, &QTextBrowser::anchorClicked, this, &ChatDock::OnLinkClicked);
+	view_->setContextMenuPolicy(Qt::CustomContextMenu);
+	connect(view_, &QWidget::customContextMenuRequested, this, &ChatDock::ShowLineMenu);
 	connect(target_, &TargetSwitch::TargetChanged, this, [this]() {
 		// Picked by hand: this is the target now, even in the middle of a mention.
 		mentionTarget_.Forget();
@@ -524,6 +532,8 @@ ChatDock::LineInfo ChatDock::MakeLineInfo(const DisplayLine &line, int textLengt
 	for (Platform platform : line.platforms)
 		(platform == Platform::Twitch ? info.twitch : info.youtube) = true;
 	const ChatMessage &message = line.message;
+	info.platform = message.platform;
+	info.self = message.isSelf;
 	info.messageId = message.id;
 	info.login = ToLower(message.mention);
 	info.authorId = message.authorId;
@@ -737,6 +747,133 @@ void ChatDock::RegisterLoadedImages()
 		view_->document()->addResource(QTextDocument::ImageResource, QUrl(QString::fromStdString(key)),
 					       image != images_.end() ? image->second : PlaceholderImage());
 	}
+}
+
+void ChatDock::ShowLineMenu(const QPoint &pos)
+{
+	std::unique_ptr<QMenu> menu(view_->createStandardContextMenu(pos)); // Copy, Select All
+	const QTextBlock block = view_->cursorForPosition(pos).block();
+	const auto data = static_cast<const LineData *>(block.userData());
+
+	// Someone else's chat line: add moderation. The info is copied because new chat may trim the line while
+	// the menu (and later the confirmation) is open.
+	if (data && !data->info.self && !data->info.authorId.empty()) {
+		const LineInfo info = data->info;
+		auto action = [info](ModerationAction::Kind kind, int64_t seconds = 0) {
+			ModerationAction a;
+			a.platform = info.platform;
+			a.kind = kind;
+			a.messageId = info.messageId;
+			a.userId = info.authorId;
+			a.userName = info.author;
+			a.durationSeconds = seconds;
+			return a;
+		};
+		auto add = [this](QMenu *target, const QString &label, ModerationAction a, bool customTimeout = false) {
+			QAction *item = target->addAction(label);
+			connect(item, &QAction::triggered, this, [this, a, customTimeout]() mutable {
+				if (ConfirmModeration(a, customTimeout))
+					RunModeration(a);
+			});
+			return item;
+		};
+
+		menu->addSeparator();
+		const QString platform = QString::fromUtf8(PlatformName(info.platform).data());
+		menu->addAction(QString::fromStdString(info.author) + " (" + platform + ")")->setEnabled(false);
+		add(menu.get(), Text("Mod.Delete"), action(ModerationAction::Kind::DeleteMessage))
+			->setEnabled(!info.messageId.empty());
+		QMenu *timeout = menu->addMenu(Text("Mod.Timeout"));
+		add(timeout, Text("Mod.Timeout1m"), action(ModerationAction::Kind::Timeout, 60));
+		add(timeout, Text("Mod.Timeout10m"), action(ModerationAction::Kind::Timeout, 600));
+		add(timeout, Text("Mod.Timeout1h"), action(ModerationAction::Kind::Timeout, 3600));
+		add(timeout, Text("Mod.Timeout24h"), action(ModerationAction::Kind::Timeout, 86400));
+		timeout->addSeparator();
+		add(timeout, Text("Mod.TimeoutCustom"), action(ModerationAction::Kind::Timeout), true);
+		add(menu.get(), Text("Mod.Ban"), action(ModerationAction::Kind::Ban));
+		// Offered on lines already marked timed out or banned. YouTube can only lift bans made here.
+		const bool liftable = info.platform == Platform::Twitch || youtubeDockBans_.count(info.authorId) > 0;
+		if (info.severity >= 2 && liftable)
+			add(menu.get(), Text("Mod.Unban"), action(ModerationAction::Kind::Unban));
+	}
+	menu->exec(view_->viewport()->mapToGlobal(pos));
+}
+
+bool ChatDock::ConfirmModeration(ModerationAction &action, bool customTimeout)
+{
+	const QString name = QString::fromStdString(action.userName);
+	const QString platform = QString::fromUtf8(PlatformName(action.platform).data());
+	const QString quota = action.platform == Platform::YouTube ? QStringLiteral("\n\n") + Text("Mod.Quota")
+								   : QString();
+	auto ask = [&](const QString &question) {
+		return QMessageBox::question(this, Text("Mod.Title"), question + quota) == QMessageBox::Yes;
+	};
+
+	switch (action.kind) {
+	case ModerationAction::Kind::DeleteMessage:
+		return ask(Text("Mod.ConfirmDelete").arg(name, platform));
+	case ModerationAction::Kind::Timeout: {
+		if (customTimeout) {
+			// The input dialog is the confirmation: OK times out, Cancel doesn't.
+			bool ok = false;
+			const int minutes = QInputDialog::getInt(this, Text("Mod.Title"),
+								 Text("Mod.AskMinutes").arg(name, platform) + quota, 10,
+								 1, (int)(kTwitchMaxTimeoutSeconds / 60), 1, &ok);
+			if (!ok)
+				return false;
+			action.durationSeconds = (int64_t)minutes * 60;
+			return true;
+		}
+		return ask(
+			Text("Mod.ConfirmTimeout")
+				.arg(name, platform, QString::fromStdString(FormatDuration(action.durationSeconds))));
+	}
+	case ModerationAction::Kind::Ban: {
+		// A permanent ban asks with an optional reason (Twitch keeps it; YouTube's API has no reason field).
+		QDialog dialog(this);
+		dialog.setWindowTitle(Text("Mod.Title"));
+		auto layout = new QVBoxLayout(&dialog);
+		auto question = new QLabel(Text("Mod.ConfirmBan").arg(name, platform) + quota, &dialog);
+		question->setWordWrap(true);
+		layout->addWidget(question);
+		QLineEdit *reason = nullptr;
+		if (action.platform == Platform::Twitch) {
+			reason = new QLineEdit(&dialog);
+			reason->setPlaceholderText(Text("Mod.Reason"));
+			reason->setMaxLength(500);
+			layout->addWidget(reason);
+		}
+		auto buttons = new QDialogButtonBox(QDialogButtonBox::Yes | QDialogButtonBox::No, &dialog);
+		connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+		connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+		layout->addWidget(buttons);
+		if (dialog.exec() != QDialog::Accepted)
+			return false;
+		if (reason)
+			action.reason = reason->text().trimmed().toStdString();
+		return true;
+	}
+	case ModerationAction::Kind::Unban:
+		return ask(Text("Mod.ConfirmUnban").arg(name, platform));
+	}
+	return false;
+}
+
+void ChatDock::RunModeration(const ModerationAction &action)
+{
+	if (action.platform == Platform::Twitch && twitch_) {
+		twitch_->Moderate(action);
+		return;
+	}
+	if (action.platform == Platform::YouTube && youtube_) {
+		if (action.kind == ModerationAction::Kind::Ban || action.kind == ModerationAction::Kind::Timeout)
+			youtubeDockBans_.insert(action.userId);
+		else if (action.kind == ModerationAction::Kind::Unban)
+			youtubeDockBans_.erase(action.userId);
+		youtube_->Moderate(action);
+		return;
+	}
+	AppendNotice(QString::fromUtf8(PlatformName(action.platform).data()) + ": " + Text("Mod.NotConnected"));
 }
 
 void ChatDock::ApplyModeration(const ModerationEvent &event)

@@ -19,6 +19,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #pragma once
 
 #include "core/chat-message.hpp"
+#include "core/moderation.hpp"
 #include "core/oauth-device.hpp"
 
 #include <atomic>
@@ -70,6 +71,8 @@ public:
 	// sendId is copied onto the local echo so the dock can match it up. With replyParentId the message is sent
 	// as a threaded reply to that message.
 	void Send(std::string text, uint64_t sendId = 0, std::string replyParentId = {}, std::string replyTo = {});
+	// Delete / timeout / ban / unban from the dock (Helix). Results arrive through chat events and notices.
+	void Moderate(ModerationAction action);
 
 private:
 	void Run();
@@ -78,6 +81,7 @@ private:
 	void RunSession(void *curl);
 	void WaitFor(int ms);
 	void Wake();
+	void Moderate(const ModerationAction &action, const std::string &channelId);
 	void Notice(const std::string &text);
 	void SetState(LinkState state);
 
@@ -91,6 +95,8 @@ private:
 	std::mutex mutex_;
 	std::condition_variable cv_;
 	std::deque<OutgoingMessage> outgoing_;
+	std::deque<ModerationAction> moderation_;
+	TwitchIdentity identity_;   // from the token check (worker thread only): user id and granted scopes
 	void *wakeEvent_ = nullptr; // Windows auto-reset event, set by Send() and on shutdown
 	std::thread thread_;
 };

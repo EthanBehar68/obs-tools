@@ -20,6 +20,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include "chat-message.hpp"
 #include "http-client.hpp"
+#include "moderation.hpp"
 #include "oauth-device.hpp"
 
 #include <cstdint>
@@ -28,6 +29,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -93,6 +95,13 @@ struct SendResult {
 	std::string error;
 };
 
+struct ModerationOutcome {
+	bool ok = false;
+	std::string error;
+	std::optional<ModerationEvent> strike; // a deleted message the view should mark (YouTube doesn't report it)
+	std::string notice;                    // e.g. "YouTube: x was unbanned"
+};
+
 // One YouTube live chat connection. All methods are called from a single worker thread;
 // time is passed in so tests control it.
 class ChatSession {
@@ -129,6 +138,8 @@ public:
 
 	StepResult Step(int64_t now);
 	SendResult Send(std::string_view text, int64_t now);
+	// Deletes a message, times out, bans or (for bans made here) unbans. Needs the live chat.
+	ModerationOutcome Moderate(const ModerationAction &action, int64_t now);
 
 	State GetState() const { return state_; }
 	bool CanSend() const { return state_ == State::Polling && !liveChatId_.empty(); }
@@ -136,6 +147,7 @@ public:
 
 private:
 	HttpResponse Authorized(bool post, const std::string &url, const std::string &body, int64_t now);
+	HttpResponse Authorized(const HttpRequest &request, int64_t now);
 	bool Refresh(int64_t now);
 	void FindLiveChat(int64_t now, StepResult &out);
 	void Poll(int64_t now, StepResult &out);
@@ -174,6 +186,7 @@ private:
 	bool streamFailed_ = false;
 	MessageSink liveSink_;
 	std::function<void(ModerationEvent)> moderationSink_;
+	std::unordered_map<std::string, std::string> bans_; // banned channel id -> ban id, for bans made here
 	std::function<bool()> interrupt_;
 };
 

@@ -29,11 +29,12 @@ static constexpr const char *kDeviceGrant = "urn:ietf:params:oauth:grant-type:de
 
 Provider TwitchProvider(const std::string &clientId)
 {
+	// The moderation scopes let the dock delete messages, time out and ban (see moderation.hpp).
 	return {"https://id.twitch.tv/oauth2/device",
 		"https://id.twitch.tv/oauth2/token",
 		Trim(clientId),
 		{},
-		"chat:read chat:edit"};
+		"chat:read chat:edit moderator:manage:banned_users moderator:manage:chat_messages"};
 }
 
 Provider GoogleProvider(const std::string &clientId, const std::string &clientSecret)

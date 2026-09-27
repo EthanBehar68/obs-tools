@@ -39,6 +39,7 @@ public:
 	HttpResponse Get(const std::string &url, const std::vector<std::string> &headers) override;
 	HttpResponse Post(const std::string &url, const std::vector<std::string> &headers, const std::string &body,
 			  const std::string &contentType) override;
+	HttpResponse Delete(const std::string &url, const std::vector<std::string> &headers) override;
 	HttpResponse GetStream(const std::string &url, const std::vector<std::string> &headers,
 			       const std::function<bool(std::string_view)> &onData,
 			       const std::function<bool()> &interrupt) override;
@@ -46,7 +47,7 @@ public:
 private:
 	HttpResponse Perform(const std::string &url, const std::vector<std::string> &headers, const std::string *body,
 			     const std::string &contentType, const std::function<bool(std::string_view)> *onData,
-			     const std::function<bool()> *interrupt);
+			     const std::function<bool()> *interrupt, bool deleteMethod = false);
 
 	const std::atomic<bool> *cancel_;
 	void *curl_ = nullptr; // CURL *

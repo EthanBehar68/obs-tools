@@ -43,6 +43,8 @@ public:
 
 	// sendId is copied onto the local echo so the dock can match it up.
 	void Send(std::string text, uint64_t sendId = 0);
+	// Delete / timeout / ban / unban from the dock; the outcome arrives as notices and moderation events.
+	void Moderate(ModerationAction action);
 
 private:
 	void Run();
@@ -62,6 +64,7 @@ private:
 	std::mutex mutex_;
 	std::condition_variable cv_;
 	std::deque<OutgoingMessage> outgoing_;
+	std::deque<ModerationAction> moderation_;
 	std::thread thread_;
 };
 

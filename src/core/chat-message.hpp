@@ -77,6 +77,18 @@ struct ModerationEvent {
 	int64_t postedAt = 0; // YouTube: unix seconds (history cutoff); 0 = unknown
 };
 
+// A moderation action the streamer takes from the dock (right-click on a line).
+struct ModerationAction {
+	enum class Kind { DeleteMessage, Timeout, Ban, Unban };
+	Platform platform = Platform::Twitch;
+	Kind kind = Kind::DeleteMessage;
+	std::string messageId;       // DeleteMessage
+	std::string userId;          // Twitch user id / YouTube channel id
+	std::string userName;        // for notices
+	int64_t durationSeconds = 0; // Timeout
+	std::string reason;          // Ban (optional; Twitch shows it to moderators)
+};
+
 inline std::string_view PlatformName(Platform platform)
 {
 	return platform == Platform::Twitch ? "Twitch" : "YouTube";
