@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.2.0 (2026-09-26)
+
+### Emotes and badges (Twitch)
+- **Emotes show as pictures:** Twitch's own emotes, plus your channel's and the global **BTTV, FFZ and 7TV** emotes. Animated emotes show their first frame, which keeps the dock light during streams. Emotes are a little taller than the text and keep their real shape.
+- **Role badges** (broadcaster, moderator, VIP, subscriber/founder) appear before names. They need a Twitch sign-in.
+- Images download once per session in the background. Lines appear at once with the right spacing and the picture fills in, so the chat doesn't jump.
+- In your own sent messages, BTTV/FFZ/7TV emotes show as pictures; Twitch's own emotes stay as words (Twitch doesn't send the positions back).
+
+### Settings
+- **Settings is on tabs** (Twitch, YouTube, General, Legend), so the dialog is no longer very tall. The Legend explains badges and emotes too.
+
 ## 1.1.0 (2026-09-26)
 
 ### Chat
