@@ -109,6 +109,8 @@ ModerationTag TagFor(const ModerationEvent &event)
 {
 	switch (event.kind) {
 	case ModerationEvent::Kind::RemoveUser:
+		if (event.durationSeconds == kRemovalUnknown)
+			return {2, "(removed)", kTagTimeoutColor};
 		if (event.durationSeconds > 0)
 			return {2, "(timed out " + FormatDuration(event.durationSeconds) + ")", kTagTimeoutColor};
 		return {3, "(banned)", kTagBanColor};
@@ -124,6 +126,8 @@ std::string ModerationNotice(const ModerationEvent &event, std::string_view name
 	const std::string platform(PlatformName(event.platform));
 	switch (event.kind) {
 	case ModerationEvent::Kind::RemoveUser:
+		if (event.durationSeconds == kRemovalUnknown)
+			return platform + ": " + std::string(name) + " was timed out or banned";
 		if (event.durationSeconds > 0)
 			return platform + ": " + std::string(name) + " was timed out for " +
 			       FormatDuration(event.durationSeconds);

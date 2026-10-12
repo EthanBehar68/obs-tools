@@ -218,8 +218,7 @@ std::vector<std::string> IrcSession::Start()
 	return lines;
 }
 
-// Replies often start with "@parent "; the reply marker already names them, so don't repeat it.
-static void DropLeadingMention(std::string &text, std::string_view login, std::string_view displayName)
+void DropLeadingMention(std::string &text, std::string_view login, std::string_view displayName)
 {
 	for (std::string_view name : {login, displayName}) {
 		if (name.empty() || text.size() < name.size() + 2 || text[0] != '@')
@@ -347,14 +346,15 @@ std::optional<std::string> IrcSession::BuildPrivmsg(std::string_view text, std::
 	return tags + "PRIVMSG #" + channel_ + " :" + body;
 }
 
-ChatMessage IrcSession::LocalEcho(std::string_view text, std::string_view replyTo) const
+ChatMessage MakeLocalEcho(std::string_view text, std::string_view replyTo, std::string_view author,
+			  std::string_view login, std::string_view color, const std::vector<Badge> &badges)
 {
 	ChatMessage chat;
 	chat.platform = Platform::Twitch;
-	chat.author = displayName_.empty() ? login_ : displayName_;
-	chat.mention = login_;
-	chat.color = color_;
-	chat.badges = badges_;
+	chat.author = std::string(author.empty() ? login : author);
+	chat.mention = std::string(login);
+	chat.color = std::string(color);
+	chat.badges = badges;
 	chat.isSelf = true;
 	chat.text = Trim(StripLineBreaks(text));
 	if (chat.text.rfind("/me ", 0) == 0) {
@@ -366,6 +366,11 @@ ChatMessage IrcSession::LocalEcho(std::string_view text, std::string_view replyT
 		DropLeadingMention(chat.text, replyTo, {});
 	}
 	return chat;
+}
+
+ChatMessage IrcSession::LocalEcho(std::string_view text, std::string_view replyTo) const
+{
+	return MakeLocalEcho(text, replyTo, displayName_, login_, color_, badges_);
 }
 
 } // namespace unified_chat::twitch

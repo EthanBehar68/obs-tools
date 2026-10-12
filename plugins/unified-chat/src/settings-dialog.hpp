@@ -47,6 +47,7 @@ private:
 	ChatConfig config_;
 
 	QLineEdit *twitchChannel_;
+	QComboBox *twitchMethod_;
 	QLabel *twitchAccount_;
 
 	QLineEdit *youtubeVideo_;

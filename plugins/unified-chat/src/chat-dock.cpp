@@ -369,6 +369,10 @@ ConnectionCallbacks ChatDock::MakeCallbacks(Platform platform)
 			},
 			Qt::QueuedConnection);
 	};
+	callbacks.onEchoUpdate = [this](ChatMessage copy) {
+		QMetaObject::invokeMethod(
+			this, [this, copy = std::move(copy)]() { UpdateOwnLine(copy); }, Qt::QueuedConnection);
+	};
 	callbacks.onSendFailed = [this, platform](uint64_t sendId) {
 		QMetaObject::invokeMethod(
 			this, [this, platform, sendId]() { AppendLines(merger_.Fail(sendId, platform)); },
@@ -392,7 +396,7 @@ void ChatDock::ConnectTwitch()
 	assetChannelId_.clear();
 	twitch_ = std::make_unique<TwitchConnection>(config_.twitchChannel, accounts_.twitch.clientId,
 						     accounts_.twitch.login, accounts_.twitch.token,
-						     MakeCallbacks(Platform::Twitch));
+						     config_.twitchEventSub, MakeCallbacks(Platform::Twitch));
 }
 
 void ChatDock::ConnectYouTube()
@@ -548,9 +552,35 @@ void ChatDock::AppendHtml(const std::vector<HtmlLine> &lines)
 		bar->setValue(bar->maximum());
 }
 
+int ChatDock::NextLineId()
+{
+	int id = nextLineId_;
+	nextLineId_ = nextLineId_ == (std::numeric_limits<int>::max)() ? 1 : nextLineId_ + 1;
+	return id;
+}
+
+void ChatDock::UpdateOwnLine(const ChatMessage &copy)
+{
+	if (merger_.Update(copy))
+		return; // not drawn yet: the line waits for the other platform's echo
+	auto it = std::find_if(ownLines_.begin(), ownLines_.end(),
+			       [&](const OwnLine &own) { return own.messageId == copy.id; });
+	if (it == ownLines_.end())
+		return;
+	DisplayLine line = it->line;
+	const int lineId = it->lineId;
+	ownLines_.erase(it);
+	ApplyPlatformCopy(line.message, copy, line.platforms.size() > 1);
+	EnsureLineImages(line.message);
+	int textLength = 0;
+	QString html = QString::fromStdString(FormatMessageHtml(line.message, iconSize_, line.platforms, &nameColors_,
+								&emotes_, emoteHeight_, &textLength));
+	ReplaceLine(lineId, html, line, textLength);
+}
+
 bool ChatDock::ReplaceLine(int lineId, const QString &html, const DisplayLine &line, int textLength)
 {
-	// Only runs when a bot's twin arrives; the line is normally among the last few.
+	// Runs when a bot's twin or Twitch's copy of your message arrives; the line is normally among the last few.
 	for (QTextBlock block = view_->document()->lastBlock(); block.isValid(); block = block.previous()) {
 		if (block.userState() != lineId)
 			continue;
@@ -1019,7 +1049,13 @@ void ChatDock::AppendLines(const std::vector<DisplayLine> &lines)
 		const bool highlight = !message.isSelf && !mentions_.Empty() && mentions_.Matches(message.text);
 
 		int lineId = -1;
-		if (line.platforms.size() == 1 && botMerger_.IsBot(message.author)) {
+		if (message.isSelf && message.platform == Platform::Twitch && !message.id.empty()) {
+			// Twitch's copy of it follows (EventSub) and redraws it.
+			lineId = NextLineId();
+			ownLines_.push_back({message.id, lineId, line});
+			if (ownLines_.size() > 16)
+				ownLines_.pop_front();
+		} else if (line.platforms.size() == 1 && botMerger_.IsBot(message.author)) {
 			// A bot's copy of a line already shown for the other platform: add the icon to that line.
 			if (auto merged = botMerger_.Match(message, now)) {
 				int mergedLength = 0;
@@ -1029,8 +1065,7 @@ void ChatDock::AppendLines(const std::vector<DisplayLine> &lines)
 						{mergedHtml, -1, highlight, MakeLineInfo(merged->line, mergedLength)});
 				continue;
 			}
-			lineId = nextLineId_;
-			nextLineId_ = nextLineId_ == (std::numeric_limits<int>::max)() ? 1 : nextLineId_ + 1;
+			lineId = NextLineId();
 			botMerger_.Remember(message, lineId, now);
 		}
 		int textLength = 0;

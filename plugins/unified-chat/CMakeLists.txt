@@ -24,6 +24,8 @@ target_sources(
     src/core/moderation.hpp
     src/core/name-color.cpp
     src/core/name-color.hpp
+    src/core/twitch-eventsub.cpp
+    src/core/twitch-eventsub.hpp
     src/core/twitch-irc.cpp
     src/core/twitch-irc.hpp
     src/core/youtube-api.cpp
@@ -98,6 +100,7 @@ if(ENABLE_TESTS)
       tests/test-moderation.cpp
       tests/test-name-color.cpp
       tests/test-router-format-config.cpp
+      tests/test-twitch-eventsub.cpp
       tests/test-twitch-irc.cpp
       tests/test-youtube.cpp
   )

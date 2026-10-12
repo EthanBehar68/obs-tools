@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Internal: the EventSub WebSocket code is shared with Unified Chat (no change in behaviour).
+
 ## 0.1.0 (2026-09-27)
 
 - First version: Twitch follower alerts (EventSub `channel.follow` v2 over a WebSocket) and YouTube subscriber alerts (`myRecentSubscribers`, every 2 minutes), only while OBS is streaming.

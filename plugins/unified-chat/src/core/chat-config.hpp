@@ -32,6 +32,7 @@ namespace unified_chat {
 struct ChatConfig {
 	// Sign-ins and client IDs are shared by all plugins (core/accounts.hpp), not stored here.
 	std::string twitchChannel;
+	bool twitchEventSub = true; // EventSub + Helix API when the sign-in allows it, instead of IRC
 
 	std::string youtubeVideo;
 	int youtubePollSeconds = 8; // polling interval, also used when streaming falls back

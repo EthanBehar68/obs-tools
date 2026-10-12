@@ -56,7 +56,7 @@ std::string FormatAlertHtml(Platform platform, std::string_view name, bool test,
 // How a line removed by a moderator is marked. A line keeps its most severe tag: banned > timed out >
 // deleted / chat cleared.
 struct ModerationTag {
-	int severity;      // 1 deleted or chat cleared, 2 timed out, 3 banned
+	int severity;      // 1 deleted or chat cleared, 2 timed out or removed, 3 banned
 	std::string label; // "(deleted)", "(timed out 10 minutes)", ...
 	std::string color; // "#rrggbb"
 };

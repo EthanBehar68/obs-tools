@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Twitch chat over EventSub
+- **Twitch chat now uses EventSub and the Twitch API**, the connection Twitch recommends over IRC. Sign in to Twitch again once (Tools → OBS Tools → Accounts… → Sign in) to allow it; until then, and whenever you're signed out, chat keeps using IRC. Settings → Twitch → Chat connection switches back to IRC if ever needed.
+- **Twitch's own emotes now show in your sent messages too:** your line appears at once and fills in emotes, badges and colour when Twitch's copy arrives.
+- **A message Twitch refuses says why** (e.g. a duplicate message, or follower-only mode) instead of quietly not appearing.
+- **In your own channel, timeouts and bans keep their tags** (*(timed out 10 minutes)*, *(banned)*). In someone else's channel Twitch doesn't say which, so those lines get *(removed)*.
+
 ## 1.3.0 (2026-09-27)
 
 ### Accounts shared by all OBS Tools plugins

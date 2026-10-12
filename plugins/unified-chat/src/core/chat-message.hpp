@@ -58,6 +58,10 @@ struct ChatMessage {
 	std::vector<Badge> badges;      // role badges to show, in display order
 };
 
+// ModerationEvent::durationSeconds when a user's messages were cleared without saying whether it was a timeout or
+// a ban (Twitch EventSub without the broadcaster's channel.ban).
+constexpr int64_t kRemovalUnknown = -1;
+
 // A moderator removed something from chat. The view strikes the affected lines through and, except for a
 // single deleted message, adds a notice.
 struct ModerationEvent {
@@ -69,12 +73,12 @@ struct ModerationEvent {
 	Platform platform = Platform::Twitch;
 	Kind kind = Kind::DeleteMessage;
 	std::string messageId;
-	std::string userLogin; // Twitch login (matches ChatMessage::mention)
-	std::string userId;    // matches ChatMessage::authorId
-	std::string userName;  // for the notice
-	int64_t durationSeconds = 0;
-	std::string eventId;  // YouTube: the event's own id (dedup)
-	int64_t postedAt = 0; // YouTube: unix seconds (history cutoff); 0 = unknown
+	std::string userLogin;       // Twitch login (matches ChatMessage::mention)
+	std::string userId;          // matches ChatMessage::authorId
+	std::string userName;        // for the notice
+	int64_t durationSeconds = 0; // RemoveUser: > 0 timeout, 0 ban, kRemovalUnknown
+	std::string eventId;         // YouTube: the event's own id (dedup)
+	int64_t postedAt = 0;        // YouTube: unix seconds (history cutoff); 0 = unknown
 };
 
 // A moderation action the streamer takes from the dock (right-click on a line).

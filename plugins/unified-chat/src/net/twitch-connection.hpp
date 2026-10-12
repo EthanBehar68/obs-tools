@@ -50,6 +50,9 @@ struct ConnectionCallbacks {
 	std::function<void(const oauth::Token &, const std::string &login)> onTokenChanged;
 	// A message queued with Send() could not be delivered (the reason is reported via onNotice).
 	std::function<void(uint64_t sendId)> onSendFailed;
+	// Twitch EventSub: Twitch's own copy of a message you sent, after its echo and with the same id. It has the
+	// emotes, badges and colour the echo may lack.
+	std::function<void(ChatMessage)> onEchoUpdate;
 };
 
 struct OutgoingMessage {
@@ -59,12 +62,19 @@ struct OutgoingMessage {
 	std::string replyTo;       // its author's display name, for the local echo
 };
 
-// Owns a worker thread holding one Twitch IRC connection (TLS via libcurl CONNECT_ONLY).
-// Callbacks run on the worker thread.
+class HttpClient;
+class EventSubSocket;
+namespace eventsub {
+struct Message;
+}
+
+// Owns a worker thread holding one Twitch chat connection. With useEventSub and a sign-in that allows it, chat is
+// read over EventSub (a WebSocket) and sent with the Helix API, as Twitch recommends; otherwise over IRC (TLS via
+// libcurl CONNECT_ONLY), which also reads chat without a sign-in. Callbacks run on the worker thread.
 class TwitchConnection {
 public:
 	TwitchConnection(std::string channel, std::string clientId, std::string login, oauth::Token token,
-			 ConnectionCallbacks callbacks);
+			 bool useEventSub, ConnectionCallbacks callbacks);
 	~TwitchConnection();
 
 	TwitchConnection(const TwitchConnection &) = delete;
@@ -80,7 +90,15 @@ private:
 	void Run();
 	bool ValidateToken(bool allowRefresh);
 	bool RefreshToken();
+	bool EventSubReady();
+	bool RunIrc();
 	void RunSession(void *curl);
+	bool RunEventSub();
+	bool LookUpUsers(HttpClient &http);
+	bool SubscribeChat(HttpClient &http, const std::string &sessionId);
+	void HandleNotification(const eventsub::Message &message, std::vector<ChatMessage> &batch);
+	void SendViaApi(HttpClient &http, const OutgoingMessage &outgoing);
+	std::vector<std::string> HelixHeaders() const;
 	void WaitFor(int ms);
 	void Wake();
 	void Moderate(const ModerationAction &action, const std::string &channelId);
@@ -99,7 +117,15 @@ private:
 	std::condition_variable cv_;
 	std::deque<OutgoingMessage> outgoing_;
 	std::deque<ModerationAction> moderation_;
-	TwitchIdentity identity_;   // from the token check (worker thread only): user id and granted scopes
+	bool useEventSub_ = true;
+	bool scopeNoticeShown_ = false;
+	TwitchIdentity identity_; // from the token check (worker thread only): user id and granted scopes
+	// EventSub only (worker thread): the channel's id, how your sent lines look, ids of sent messages whose
+	// copy hasn't come back yet.
+	std::string broadcasterId_;
+	std::string ownName_, ownColor_;
+	std::vector<Badge> ownBadges_;
+	std::deque<std::string> sentIds_;
 	void *wakeEvent_ = nullptr; // Windows auto-reset event, set by Send() and on shutdown
 	std::thread thread_;
 };

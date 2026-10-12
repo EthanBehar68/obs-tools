@@ -78,7 +78,8 @@ std::string JoinNameList(const std::vector<std::string> &names)
 std::string SerializeConfig(const ChatConfig &config)
 {
 	json obj = {
-		{"twitch", {{"channel", config.twitchChannel}}},
+		{"twitch",
+		 {{"channel", config.twitchChannel}, {"chat_method", config.twitchEventSub ? "eventsub" : "irc"}}},
 		{"youtube",
 		 {{"video", config.youtubeVideo},
 		  {"poll_seconds", config.youtubePollSeconds},
@@ -102,6 +103,7 @@ ChatConfig ParseConfig(const std::string &text, Accounts *legacy, const SecretCo
 	auto twitch = obj.find("twitch");
 	if (twitch != obj.end() && twitch->is_object()) {
 		config.twitchChannel = Get<std::string>(*twitch, "channel", {});
+		config.twitchEventSub = Get<std::string>(*twitch, "chat_method", "eventsub") != "irc";
 		if (legacy) {
 			legacy->twitch.clientId = Get<std::string>(*twitch, "client_id", {});
 			legacy->twitch.login = Get<std::string>(*twitch, "login", {});

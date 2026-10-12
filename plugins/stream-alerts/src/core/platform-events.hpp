@@ -18,34 +18,23 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #pragma once
 
+#include "core/alert-queue.hpp"
+
+#include <json.hpp>
 #include <optional>
 #include <string>
 #include <unordered_set>
 #include <vector>
 
-// Twitch EventSub over WebSocket (channel.follow v2) and YouTube's recent subscribers feed.
+// Twitch follows (EventSub channel.follow v2, see core/eventsub.hpp) and YouTube's recent subscribers feed.
 namespace stream_alerts {
 
-// Twitch sends a keepalive when nothing else happened for this long; no message for longer means the connection is
-// gone. 10..600 are allowed: a minute keeps the thread asleep yet notices a silent drop quickly.
-constexpr int kKeepaliveSeconds = 60;
-constexpr const char *kEventSubUrl = "wss://eventsub.wss.twitch.tv/ws?keepalive_timeout_seconds=60";
-constexpr const char *kSubscriptionsUrl = "https://api.twitch.tv/helix/eventsub/subscriptions";
 constexpr const char *kFollowScope = "moderator:read:followers";
 
-struct EventSubMessage {
-	enum class Type { Welcome, Keepalive, Notification, Reconnect, Revocation, Other };
-	Type type = Type::Other;
-	std::string sessionId;        // welcome
-	int keepaliveSeconds = 0;     // welcome
-	std::string reconnectUrl;     // reconnect
-	std::string subscriptionType; // notification, revocation
-	std::string status;           // revocation: why, e.g. "authorization_revoked"
-	std::string userId, userName; // channel.follow: who followed
-};
-std::optional<EventSubMessage> ParseEventSubMessage(const std::string &json);
-// Follows of the signed-in account's own channel (it is its own moderator).
+// Follows of the signed-in account's own channel (it is its own moderator): channel.follow v2.
 std::string BuildFollowSubscription(const std::string &sessionId, const std::string &userId);
+// A channel.follow event: who followed. nullopt without a user id.
+std::optional<AlertEvent> FollowFromEvent(const nlohmann::json &event);
 
 struct TwitchUser {
 	std::string id;

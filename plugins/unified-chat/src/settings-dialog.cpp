@@ -112,6 +112,7 @@ static QWidget *MakeLegend(QWidget *parent)
 	addRow(html(grey(QStringLiteral("right-click"))), "Legend.Moderate");
 	addRow(html(struck(kTagGreyColor, QStringLiteral("(deleted)"))), "Legend.Deleted");
 	addRow(html(struck(kTagTimeoutColor, QStringLiteral("(timed out …)"))), "Legend.TimedOut");
+	addRow(html(struck(kTagTimeoutColor, QStringLiteral("(removed)"))), "Legend.Removed");
 	addRow(html(struck(kTagBanColor, QStringLiteral("(banned)"))), "Legend.Banned");
 	addRow(html(struck(kTagGreyColor, QStringLiteral("(chat cleared)"))), "Legend.Cleared");
 	addRow(html(QStringLiteral("<i>") + grey(QStringLiteral("notice")) + "</i>"), "Legend.Notice");
@@ -133,9 +134,15 @@ SettingsDialog::SettingsDialog(const ChatConfig &config, QWidget *parent) : QDia
 	auto twitchForm = new QFormLayout(twitchBox);
 	twitchChannel_ = new QLineEdit(FromStd(config.twitchChannel), twitchBox);
 	twitchChannel_->setPlaceholderText(Text("Settings.Twitch.ChannelHint"));
+	twitchMethod_ = new QComboBox(twitchBox);
+	twitchMethod_->addItem(Text("Settings.Twitch.Method.EventSub"), true);
+	twitchMethod_->addItem(Text("Settings.Twitch.Method.Irc"), false);
+	twitchMethod_->setCurrentIndex(config.twitchEventSub ? 0 : 1);
+	twitchMethod_->setToolTip(Text("Settings.Twitch.MethodHint"));
 	twitchAccount_ = new QLabel(twitchBox);
 	twitchAccount_->setWordWrap(true);
 	twitchForm->addRow(Text("Settings.Twitch.Channel"), twitchChannel_);
+	twitchForm->addRow(Text("Settings.Twitch.Method"), twitchMethod_);
 	twitchForm->addRow(Text("Settings.Account"), AccountRow(twitchAccount_, twitchBox));
 	tabs->addTab(twitchBox, PlatformIcon(Platform::Twitch), Text("Settings.Twitch"));
 
@@ -209,6 +216,7 @@ ChatConfig SettingsDialog::Result() const
 	ChatConfig result = config_;
 	std::string channel = twitch::NormalizeChannel(twitchChannel_->text().toStdString());
 	result.twitchChannel = channel.empty() ? ToStd(twitchChannel_->text()) : channel;
+	result.twitchEventSub = twitchMethod_->currentData().toBool();
 	result.youtubeVideo = ToStd(youtubeVideo_->text());
 	result.youtubePollSeconds = youtubePoll_->value();
 	result.youtubeStream = youtubeMethod_->currentData().toBool();

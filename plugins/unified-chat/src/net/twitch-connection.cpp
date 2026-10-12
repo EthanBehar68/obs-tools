@@ -19,8 +19,11 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "twitch-connection.hpp"
 #include "net/account-store.hpp"
 #include "net/curl-http-client.hpp"
+#include "net/eventsub-socket.hpp"
 #include "net/socket-wait.hpp"
+#include "core/eventsub.hpp"
 #include "core/text-util.hpp"
+#include "core/twitch-eventsub.hpp"
 #include "core/twitch-irc.hpp"
 
 #include <curl/curl.h>
@@ -45,6 +48,8 @@ static constexpr auto kValidateInterval = std::chrono::hours(1);
 static constexpr int kMaxBackoffMs = 60000;
 static constexpr auto kViewerCheckInterval = std::chrono::minutes(5);
 static constexpr int kMaxReadsPerDrain = 32; // 16 KB each; a flood can't hold up outgoing messages
+static constexpr auto kReconnectWindow = std::chrono::seconds(15); // for the new socket's welcome
+static constexpr size_t kMaxSentIds = 16;
 
 static int64_t UnixNow()
 {
@@ -75,12 +80,13 @@ static bool SendLine(CURL *curl, curl_socket_t sock, const std::string &line)
 }
 
 TwitchConnection::TwitchConnection(std::string channel, std::string clientId, std::string login, oauth::Token token,
-				   ConnectionCallbacks callbacks)
+				   bool useEventSub, ConnectionCallbacks callbacks)
 	: channel_(std::move(channel)),
 	  clientId_(std::move(clientId)),
 	  login_(std::move(login)),
 	  token_(std::move(token)),
-	  callbacks_(std::move(callbacks))
+	  callbacks_(std::move(callbacks)),
+	  useEventSub_(useEventSub)
 {
 	wakeEvent_ = CreateWakeEvent();
 	thread_ = std::thread(&TwitchConnection::Run, this);
@@ -121,7 +127,7 @@ void TwitchConnection::Moderate(ModerationAction action)
 
 void TwitchConnection::Moderate(const ModerationAction &action, const std::string &channelId)
 {
-	// Runs on the IRC thread; a Helix call takes a fraction of a second and moderation is rare.
+	// Runs on the connection thread; a Helix call takes a fraction of a second and moderation is rare.
 	if (!token_.IsValid()) {
 		Notice("sign in to moderate from the dock");
 		return;
@@ -157,7 +163,7 @@ void TwitchConnection::Moderate(const ModerationAction &action, const std::strin
 		       ")");
 		return;
 	}
-	// Deletions, timeouts and bans come back through chat (CLEARMSG / CLEARCHAT); an unban doesn't.
+	// Deletions, timeouts and bans come back through chat (IRC CLEARMSG / CLEARCHAT, or EventSub); an unban doesn't.
 	if (action.kind == ModerationAction::Kind::Unban)
 		Notice(action.userName + " was unbanned");
 }
@@ -402,6 +408,347 @@ void TwitchConnection::RunSession(void *handle)
 	}
 }
 
+static bool HasScope(const TwitchIdentity &identity, std::string_view scope)
+{
+	return std::find(identity.scopes.begin(), identity.scopes.end(), scope) != identity.scopes.end();
+}
+
+static std::string HttpError(const HttpResponse &res)
+{
+	if (res.status == 0)
+		return res.error;
+	const std::string reason = ModerationErrorMessage(res.body);
+	return "HTTP " + std::to_string(res.status) + (reason.empty() ? "" : ", " + reason);
+}
+
+bool TwitchConnection::EventSubReady()
+{
+	if (!useEventSub_ || !token_.IsValid() || identity_.userId.empty())
+		return false;
+	for (const char *scope : twitch::kEventSubChatScopes) {
+		if (!HasScope(identity_, scope)) {
+			if (!scopeNoticeShown_)
+				Notice("sign in to Twitch again (Tools → OBS Tools → Accounts) to move chat to EventSub; "
+				       "using IRC until then");
+			scopeNoticeShown_ = true;
+			return false;
+		}
+	}
+	return true;
+}
+
+std::vector<std::string> TwitchConnection::HelixHeaders() const
+{
+	return {"Authorization: Bearer " + token_.accessToken, "Client-Id: " + clientId_};
+}
+
+bool TwitchConnection::LookUpUsers(HttpClient &http)
+{
+	// One call for the channel's id and your own display name (for your sent lines until Twitch's copy arrives).
+	const std::string channel = twitch::NormalizeChannel(channel_);
+	HttpResponse res;
+	for (int attempt = 0; attempt < 2; ++attempt) {
+		res = http.Get(std::string(twitch::kUsersUrl) + "?login=" + UrlEncode(channel) +
+				       "&id=" + UrlEncode(identity_.userId),
+			       HelixHeaders());
+		if (res.status == 401 && attempt == 0 && RefreshToken())
+			continue;
+		break;
+	}
+	if (!res.Ok()) {
+		Notice("can't look up #" + channel + " (" + HttpError(res) + ")");
+		return false;
+	}
+	for (const auto &user : twitch::ParseUsers(res.body)) {
+		if (user.login == channel)
+			broadcasterId_ = user.id;
+		if (user.id == identity_.userId && ownName_.empty())
+			ownName_ = user.displayName;
+	}
+	if (broadcasterId_.empty()) {
+		Notice("channel #" + channel + " not found");
+		return false;
+	}
+	if (callbacks_.onChannelId)
+		callbacks_.onChannelId(broadcasterId_);
+	return true;
+}
+
+bool TwitchConnection::SubscribeChat(HttpClient &http, const std::string &sessionId)
+{
+	// Twitch closes the socket unless something is subscribed within 10 seconds of the welcome.
+	const bool banEvents = broadcasterId_ == identity_.userId && HasScope(identity_, twitch::kBanEventsScope);
+	bool first = true;
+	for (const auto &body :
+	     twitch::BuildChatSubscriptions(sessionId, broadcasterId_, identity_.userId, banEvents)) {
+		HttpResponse res;
+		for (int attempt = 0; attempt < 2; ++attempt) {
+			res = http.Post(eventsub::kSubscriptionsUrl, HelixHeaders(), body, "application/json");
+			if (res.status == 401 && attempt == 0 && RefreshToken())
+				continue;
+			break;
+		}
+		if (!res.Ok() && res.status != 409) { // 409: already subscribed on this session
+			// Messages are essential; a moderation event only costs the strike-through.
+			Notice(std::string(first ? "couldn't subscribe to chat"
+						 : "couldn't subscribe to a moderation event") +
+			       " (" + HttpError(res) + ")");
+			if (first)
+				return false;
+		}
+		first = false;
+	}
+	return true;
+}
+
+void TwitchConnection::HandleNotification(const eventsub::Message &message, std::vector<ChatMessage> &batch)
+{
+	auto flush = [&]() {
+		if (!batch.empty() && callbacks_.onMessages)
+			callbacks_.onMessages(std::move(batch));
+		batch.clear();
+	};
+	if (message.subscriptionType == "channel.chat.message") {
+		auto chat = twitch::ChatMessageFromEvent(message.event, identity_.userId);
+		if (!chat)
+			return;
+		if (chat->isSelf) {
+			ownName_ = chat->author;
+			ownColor_ = chat->color;
+			ownBadges_ = chat->badges;
+		}
+		auto sent = std::find(sentIds_.begin(), sentIds_.end(), chat->id);
+		if (sent == sentIds_.end()) {
+			batch.push_back(std::move(*chat));
+			return;
+		}
+		sentIds_.erase(sent);
+		flush(); // keeps order: the echo was delivered before anything in this batch
+		if (callbacks_.onEchoUpdate)
+			callbacks_.onEchoUpdate(std::move(*chat));
+		return;
+	}
+	if (auto moderation = twitch::ModerationFromEvent(message.subscriptionType, message.event)) {
+		flush();
+		if (callbacks_.onModeration)
+			callbacks_.onModeration(std::move(*moderation));
+	}
+}
+
+void TwitchConnection::SendViaApi(HttpClient &http, const OutgoingMessage &outgoing)
+{
+	auto failed = [&](const std::string &why) {
+		Notice("message not sent (" + why + ")");
+		if (callbacks_.onSendFailed)
+			callbacks_.onSendFailed(outgoing.sendId);
+	};
+	auto body = twitch::BuildSendChatBody(broadcasterId_, identity_.userId, outgoing.text, outgoing.replyParentId);
+	if (!body) {
+		if (callbacks_.onSendFailed)
+			callbacks_.onSendFailed(outgoing.sendId);
+		return;
+	}
+	HttpResponse res;
+	for (int attempt = 0; attempt < 2; ++attempt) {
+		res = http.Post(twitch::kSendChatUrl, HelixHeaders(), *body, "application/json");
+		if (res.status == 401 && attempt == 0 && RefreshToken())
+			continue;
+		break;
+	}
+	if (!res.Ok()) {
+		failed(res.status == 429 ? "sending too fast, try again in a moment" : HttpError(res));
+		return;
+	}
+	auto result = twitch::ParseSendChatResponse(res.body);
+	if (!result || !result->sent) {
+		failed(result && !result->dropReason.empty() ? result->dropReason : "Twitch dropped it");
+		return;
+	}
+	if (callbacks_.onMessages) {
+		ChatMessage echo =
+			twitch::MakeLocalEcho(outgoing.text, outgoing.replyTo, ownName_, login_, ownColor_, ownBadges_);
+		echo.id = result->messageId;
+		echo.sendId = outgoing.sendId;
+		callbacks_.onMessages({std::move(echo)});
+	}
+	if (!result->messageId.empty()) {
+		sentIds_.push_back(result->messageId);
+		if (sentIds_.size() > kMaxSentIds)
+			sentIds_.pop_front();
+	}
+}
+
+bool TwitchConnection::RunEventSub()
+{
+	SetState(LinkState::Connecting);
+	CurlHttpClient http(&stop_); // one handle, so the Helix calls reuse a connection
+	if (broadcasterId_.empty() && !LookUpUsers(http))
+		return false;
+
+	auto socket = std::make_unique<EventSubSocket>(&stop_);
+	std::string error;
+	if (!socket->Open(eventsub::kUrl, error)) {
+		if (!stop_)
+			Notice("connection failed: " + error);
+		return false;
+	}
+
+	// A server-requested reconnect: the new socket keeps the subscriptions, and the old one is read until the new
+	// one says welcome.
+	std::unique_ptr<EventSubSocket> successor;
+	bool successorWelcomed = false;
+	auto successorDeadline = Clock::now();
+
+	auto lastReceive = Clock::now();
+	auto keepalive = std::chrono::seconds(eventsub::kKeepaliveSeconds);
+	auto lastValidate = Clock::now();
+	auto nextViewerCheck = Clock::now();
+	bool subscribed = false;
+	bool revoked = false;
+
+	// Reads everything waiting on one socket; false when it closed (or must be given up).
+	std::vector<ChatMessage> batch;
+	auto drain = [&](EventSubSocket &from, bool isSuccessor) {
+		std::string text;
+		for (;;) {
+			auto read = from.Next(text);
+			if (read == EventSubSocket::Read::Again)
+				return true;
+			if (read == EventSubSocket::Read::Closed)
+				return false;
+			lastReceive = Clock::now();
+			auto message = eventsub::ParseMessage(text);
+			if (!message)
+				continue;
+			switch (message->type) {
+			case eventsub::Message::Type::Welcome:
+				if (message->keepaliveSeconds > 0)
+					keepalive = std::chrono::seconds(message->keepaliveSeconds);
+				if (isSuccessor) {
+					successorWelcomed = true;
+				} else if (!subscribed) {
+					if (!SubscribeChat(http, message->sessionId))
+						return false;
+					subscribed = true;
+					SetState(LinkState::Connected);
+					Notice("joined #" + twitch::NormalizeChannel(channel_) + " (EventSub)");
+				}
+				break;
+			case eventsub::Message::Type::Notification:
+				HandleNotification(*message, batch);
+				break;
+			case eventsub::Message::Type::Reconnect:
+				if (!isSuccessor && !successor && !message->reconnectUrl.empty()) {
+					successor = std::make_unique<EventSubSocket>(&stop_);
+					successorWelcomed = false;
+					successorDeadline = Clock::now() + kReconnectWindow;
+					if (!successor->Open(message->reconnectUrl, error))
+						successor.reset(); // the old socket closes soon; then a fresh start
+				}
+				break;
+			case eventsub::Message::Type::Revocation:
+				Notice("Twitch stopped sending " + message->subscriptionType + " (" + message->status +
+				       ")");
+				revoked = true;
+				return false;
+			default:
+				break;
+			}
+		}
+	};
+
+	while (!stop_) {
+		std::deque<OutgoingMessage> pending;
+		std::deque<ModerationAction> actions;
+		{
+			std::lock_guard lock(mutex_);
+			pending.swap(outgoing_);
+			actions.swap(moderation_);
+		}
+		for (const auto &action : actions)
+			Moderate(action, broadcasterId_);
+		for (const auto &outgoing : pending) {
+			if (!subscribed) {
+				Notice("not joined yet, message not sent");
+				if (callbacks_.onSendFailed)
+					callbacks_.onSendFailed(outgoing.sendId);
+				continue;
+			}
+			SendViaApi(http, outgoing);
+		}
+
+		const bool open = drain(*socket, false);
+		if (successor && !drain(*successor, true))
+			successor.reset();
+		if (!batch.empty() && callbacks_.onMessages)
+			callbacks_.onMessages(std::move(batch));
+		batch.clear();
+		if (successor && successorWelcomed) {
+			socket = std::move(successor); // the old one was read to the end above
+			successorWelcomed = false;
+		} else if (!open) {
+			if (revoked)
+				return false;
+			if (!stop_)
+				Notice(subscribed ? "disconnected" : "couldn't start chat");
+			return subscribed;
+		}
+
+		auto now = Clock::now();
+		if (successor && now > successorDeadline)
+			successor.reset();
+		// Twitch sends something at least every keepalive interval; silence past it means a dead connection.
+		if (now > lastReceive + keepalive + std::chrono::seconds(10)) {
+			Notice("connection timed out");
+			return subscribed;
+		}
+		if (subscribed && now >= nextViewerCheck) {
+			nextViewerCheck = now + kViewerCheckInterval;
+			CheckViewers(broadcasterId_);
+		}
+		if (now - lastValidate > kValidateInterval) {
+			lastValidate = now;
+			if (!ValidateToken(true) || !EventSubReady())
+				return true; // reconnects as whatever the sign-in now allows
+		}
+
+		auto due = (std::min)({lastReceive + keepalive + std::chrono::seconds(11),
+				       lastValidate + kValidateInterval,
+				       subscribed ? nextViewerCheck : (Clock::time_point::max)()});
+		auto waitMs = std::chrono::duration_cast<std::chrono::milliseconds>(due - Clock::now()).count() + 1;
+		if (successor)
+			waitMs = (std::min)(waitMs, 100LL); // two sockets for a few seconds: check both often
+		socket->Wait(wakeEvent_, (int)std::clamp<long long>(waitMs, 0, 60 * 60 * 1000));
+	}
+	return true;
+}
+
+bool TwitchConnection::RunIrc()
+{
+	CURL *curl = curl_easy_init();
+	char errorBuffer[CURL_ERROR_SIZE] = {};
+	curl_easy_setopt(curl, CURLOPT_URL, twitch::kIrcUrl);
+	curl_easy_setopt(curl, CURLOPT_CONNECT_ONLY, 1L);
+	curl_easy_setopt(curl, CURLOPT_SSL_ENABLE_ALPN, 0L);
+	curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L);
+	curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
+	curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, errorBuffer);
+	curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
+	curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, AbortOnStop);
+	curl_easy_setopt(curl, CURLOPT_XFERINFODATA, &stop_);
+#ifdef _WIN32
+	curl_easy_setopt(curl, CURLOPT_SSL_OPTIONS, (long)CURLSSLOPT_REVOKE_BEST_EFFORT);
+#endif
+
+	CURLcode rc = curl_easy_perform(curl);
+	if (rc == CURLE_OK)
+		RunSession(curl);
+	else
+		Notice(std::string("connection failed: ") + (errorBuffer[0] ? errorBuffer : curl_easy_strerror(rc)));
+	curl_easy_cleanup(curl);
+	return rc == CURLE_OK;
+}
+
 void TwitchConnection::Run()
 {
 	if (twitch::NormalizeChannel(channel_).empty()) {
@@ -416,36 +763,15 @@ void TwitchConnection::Run()
 			ValidateToken(true);
 
 		SetState(LinkState::Connecting);
-		CURL *curl = curl_easy_init();
-		char errorBuffer[CURL_ERROR_SIZE] = {};
-		curl_easy_setopt(curl, CURLOPT_URL, twitch::kIrcUrl);
-		curl_easy_setopt(curl, CURLOPT_CONNECT_ONLY, 1L);
-		curl_easy_setopt(curl, CURLOPT_SSL_ENABLE_ALPN, 0L);
-		curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L);
-		curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
-		curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, errorBuffer);
-		curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
-		curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, AbortOnStop);
-		curl_easy_setopt(curl, CURLOPT_XFERINFODATA, &stop_);
-#ifdef _WIN32
-		curl_easy_setopt(curl, CURLOPT_SSL_OPTIONS, (long)CURLSSLOPT_REVOKE_BEST_EFFORT);
-#endif
-
-		CURLcode rc = curl_easy_perform(curl);
 		auto started = Clock::now();
-		if (rc == CURLE_OK)
-			RunSession(curl);
-		else
-			Notice(std::string("connection failed: ") +
-			       (errorBuffer[0] ? errorBuffer : curl_easy_strerror(rc)));
-		curl_easy_cleanup(curl);
+		bool connected = EventSubReady() ? RunEventSub() : RunIrc();
 
 		SetState(LinkState::Disconnected);
 		if (stop_)
 			break;
 
 		// A session that stayed up for a while resets the backoff.
-		if (rc == CURLE_OK && Clock::now() - started > std::chrono::seconds(30))
+		if (connected && Clock::now() - started > std::chrono::seconds(30))
 			backoffMs = 1000;
 		WaitFor(backoffMs);
 		backoffMs = (std::min)(backoffMs * 2, kMaxBackoffMs);

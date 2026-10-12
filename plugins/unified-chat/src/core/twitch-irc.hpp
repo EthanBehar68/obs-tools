@@ -56,6 +56,13 @@ std::string ParseValidateLogin(const std::string &json);
 // Helix Get Streams: the live viewer count, -1 when the channel isn't live, nullopt for an unreadable response.
 std::optional<int64_t> ParseStreamViewerCount(const std::string &json);
 
+// Replies often start with "@parent "; the reply marker already names them, so this drops it from text.
+void DropLeadingMention(std::string &text, std::string_view login, std::string_view displayName);
+
+// Your own sent message as shown before (or instead of) Twitch's copy. "/me " makes it an action.
+ChatMessage MakeLocalEcho(std::string_view text, std::string_view replyTo, std::string_view author,
+			  std::string_view login, std::string_view color, const std::vector<Badge> &badges);
+
 // Splits a raw byte stream into complete IRC lines, keeping any partial line for the next call.
 class LineBuffer {
 public:

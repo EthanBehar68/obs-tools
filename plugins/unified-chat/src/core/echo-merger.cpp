@@ -89,6 +89,33 @@ std::vector<DisplayLine> EchoMerger::Fail(uint64_t sendId, Platform platform)
 	return ReleaseIfDone(sendId);
 }
 
+void ApplyPlatformCopy(ChatMessage &echo, const ChatMessage &copy, bool keepAuthor)
+{
+	if (!keepAuthor && !copy.author.empty())
+		echo.author = copy.author;
+	echo.text = copy.text;
+	echo.isAction = copy.isAction;
+	echo.emotes = copy.emotes;
+	echo.badges = copy.badges;
+	if (!copy.color.empty())
+		echo.color = copy.color;
+}
+
+bool EchoMerger::Update(const ChatMessage &copy)
+{
+	if (copy.id.empty())
+		return false;
+	for (auto &[id, pending] : pending_) {
+		for (auto &echo : pending.echoes) {
+			if (echo.platform == copy.platform && echo.id == copy.id) {
+				ApplyPlatformCopy(echo, copy, false); // merged later, which joins the names
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
 std::optional<int64_t> EchoMerger::NextDeadline() const
 {
 	std::optional<int64_t> next;

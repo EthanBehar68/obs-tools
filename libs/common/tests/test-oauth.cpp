@@ -8,7 +8,8 @@ TEST_CASE("Twitch device request uses scopes and no secret")
 {
 	auto provider = TwitchProvider(" abc ");
 	CHECK(provider.clientId == "abc");
-	const std::string scopes = "chat%3Aread%20chat%3Aedit%20moderator%3Amanage%3Abanned_users"
+	const std::string scopes = "chat%3Aread%20chat%3Aedit%20user%3Aread%3Achat%20user%3Awrite%3Achat"
+				   "%20channel%3Amoderate%20moderator%3Amanage%3Abanned_users"
 				   "%20moderator%3Amanage%3Achat_messages%20moderator%3Aread%3Afollowers";
 	CHECK(BuildDeviceRequestBody(provider) == "client_id=abc&scopes=" + scopes);
 	CHECK(BuildDevicePollBody(provider, "dc") ==

@@ -18,13 +18,13 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include "listeners.hpp"
 #include "core/alerts-config.hpp"
+#include "core/eventsub.hpp"
 #include "core/oauth-device.hpp"
 #include "core/platform-events.hpp"
 #include "net/account-store.hpp"
 #include "net/curl-http-client.hpp"
+#include "net/eventsub-socket.hpp"
 #include "net/socket-wait.hpp"
-
-#include <curl/curl.h>
 
 #include <algorithm>
 #include <chrono>
@@ -37,16 +37,10 @@ using Clock = std::chrono::steady_clock;
 
 static constexpr int kMaxBackoffMs = 60000;
 static constexpr int kQuotaPauseSeconds = 15 * 60;
-static constexpr size_t kMaxMessageBytes = 1 << 20;
 
 static int64_t UnixNow()
 {
 	return (int64_t)std::time(nullptr);
-}
-
-static int AbortOnStop(void *userdata, curl_off_t, curl_off_t, curl_off_t, curl_off_t)
-{
-	return static_cast<const std::atomic<bool> *>(userdata)->load() ? 1 : 0;
 }
 
 static std::string HttpError(const HttpResponse &res, const std::string &reason)
@@ -157,7 +151,7 @@ FollowListener::Outcome FollowListener::Subscribe(const std::string &sessionId, 
 {
 	CurlHttpClient http(&stop_);
 	for (int attempt = 0; attempt < 2; ++attempt) {
-		auto res = http.Post(kSubscriptionsUrl,
+		auto res = http.Post(eventsub::kSubscriptionsUrl,
 				     {"Authorization: Bearer " + account_.token.accessToken,
 				      "Client-Id: " + account_.clientId},
 				     BuildFollowSubscription(sessionId, userId), "application/json");
@@ -180,74 +174,34 @@ FollowListener::Outcome FollowListener::Subscribe(const std::string &sessionId, 
 FollowListener::Outcome FollowListener::Session(const std::string &url, bool resumed, const std::string &userId,
 						std::string &reconnectUrl)
 {
-	CURL *curl = curl_easy_init();
-	if (!curl)
-		return Outcome::Retry;
-	char errorBuffer[CURL_ERROR_SIZE] = {};
-	curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-	curl_easy_setopt(curl, CURLOPT_CONNECT_ONLY, 2L); // upgrade to a WebSocket, then hand the connection over
-	curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L);
-	curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
-	curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, errorBuffer);
-	curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
-	curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, AbortOnStop);
-	curl_easy_setopt(curl, CURLOPT_XFERINFODATA, &stop_);
-	struct Cleanup {
-		CURL *curl;
-		~Cleanup() { curl_easy_cleanup(curl); }
-	} cleanup{curl};
-
-	CURLcode rc = curl_easy_perform(curl);
-	if (rc != CURLE_OK) {
+	EventSubSocket socket(&stop_);
+	std::string error;
+	if (!socket.Open(url, error)) {
 		if (!stop_)
-			Status(std::string("can't connect to Twitch (") +
-			       (errorBuffer[0] ? errorBuffer : curl_easy_strerror(rc)) + "), retrying");
+			Status("can't connect to Twitch (" + error + "), retrying");
 		return Outcome::Retry;
 	}
-	curl_socket_t sock = CURL_SOCKET_BAD;
-	curl_easy_getinfo(curl, CURLINFO_ACTIVESOCKET, &sock);
-	if (sock == CURL_SOCKET_BAD)
-		return Outcome::Retry;
-	SocketEvent socketEvent(sock);
-	if (!socketEvent.Ok())
-		return Outcome::Retry;
 
 	auto lastReceive = Clock::now();
-	auto keepalive = std::chrono::seconds(kKeepaliveSeconds);
-	std::string message;
+	auto keepalive = std::chrono::seconds(eventsub::kKeepaliveSeconds);
+	std::string text;
 
 	while (!stop_) {
 		// Read everything curl has, including data it already decrypted, before sleeping.
 		for (;;) {
-			char buffer[16384];
-			size_t received = 0;
-			const curl_ws_frame *meta = nullptr;
-			rc = curl_ws_recv(curl, buffer, sizeof(buffer), &received, &meta);
-			if (rc == CURLE_AGAIN)
+			auto read = socket.Next(text);
+			if (read == EventSubSocket::Read::Again)
 				break;
-			if (rc != CURLE_OK || !meta) {
+			if (read == EventSubSocket::Read::Closed) {
 				Status("connection to Twitch lost, reconnecting");
 				return Outcome::Retry;
 			}
 			lastReceive = Clock::now();
-			if (meta->flags & CURLWS_CLOSE) {
-				Status("Twitch closed the connection, reconnecting");
-				return Outcome::Retry;
-			}
-			if (meta->flags & (CURLWS_PING | CURLWS_PONG))
-				continue; // curl answers pings itself
-			if (message.size() + received > kMaxMessageBytes)
-				return Outcome::Retry;
-			message.append(buffer, received);
-			if (meta->bytesleft > 0 || (meta->flags & CURLWS_CONT))
-				continue; // more of this message to come
-
-			auto parsed = ParseEventSubMessage(message);
-			message.clear();
+			auto parsed = eventsub::ParseMessage(text);
 			if (!parsed)
 				continue;
 			switch (parsed->type) {
-			case EventSubMessage::Type::Welcome: {
+			case eventsub::Message::Type::Welcome: {
 				if (parsed->keepaliveSeconds > 0)
 					keepalive = std::chrono::seconds(parsed->keepaliveSeconds);
 				// Must subscribe within 10 seconds of the welcome; a reconnect keeps the subscription.
@@ -259,15 +213,16 @@ FollowListener::Outcome FollowListener::Session(const std::string &url, bool res
 				Status("listening for follows");
 				break;
 			}
-			case EventSubMessage::Type::Notification:
-				if (parsed->subscriptionType == "channel.follow" && !parsed->userId.empty() &&
-				    callbacks_.onEvent)
-					callbacks_.onEvent({AlertKind::Follow, parsed->userId, parsed->userName});
+			case eventsub::Message::Type::Notification:
+				if (parsed->subscriptionType == "channel.follow" && callbacks_.onEvent) {
+					if (auto follow = FollowFromEvent(parsed->event))
+						callbacks_.onEvent(std::move(*follow));
+				}
 				break;
-			case EventSubMessage::Type::Reconnect:
+			case eventsub::Message::Type::Reconnect:
 				reconnectUrl = parsed->reconnectUrl;
 				return reconnectUrl.empty() ? Outcome::Retry : Outcome::Reconnect;
-			case EventSubMessage::Type::Revocation:
+			case eventsub::Message::Type::Revocation:
 				Status("Twitch ended follower alerts (" + parsed->status + ")");
 				return parsed->status == "authorization_revoked" || parsed->status == "user_removed"
 					       ? Outcome::Stop
@@ -285,7 +240,7 @@ FollowListener::Outcome FollowListener::Session(const std::string &url, bool res
 			return Outcome::Retry;
 		}
 		auto waitMs = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - now).count() + 1;
-		WaitForActivity(socketEvent, wakeEvent_, sock, (int)waitMs);
+		socket.Wait(wakeEvent_, (int)waitMs);
 	}
 	return Outcome::Stop;
 }
@@ -308,7 +263,7 @@ void FollowListener::Run()
 				continue;
 			}
 		}
-		const std::string url = resumed ? reconnectUrl : std::string(kEventSubUrl);
+		const std::string url = resumed ? reconnectUrl : std::string(eventsub::kUrl);
 		reconnectUrl.clear();
 		const auto started = Clock::now();
 		Outcome outcome = Session(url, resumed, userId, reconnectUrl);

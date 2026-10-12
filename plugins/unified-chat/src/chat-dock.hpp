@@ -33,6 +33,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QString>
 #include <QWidget>
 
+#include <deque>
 #include <memory>
 #include <optional>
 #include <unordered_map>
@@ -120,6 +121,9 @@ private:
 	// Inserts all lines in one edit block, so the view lays out and scrolls once per batch.
 	void AppendHtml(const std::vector<HtmlLine> &lines);
 	bool ReplaceLine(int lineId, const QString &html, const DisplayLine &line, int textLength);
+	// Twitch's copy of a message you sent: redraws its line with the copy's emotes, badges and colour.
+	void UpdateOwnLine(const ChatMessage &copy);
+	int NextLineId();
 	static LineInfo MakeLineInfo(const DisplayLine &line, int textLength);
 
 	// Emotes and badges
@@ -179,6 +183,13 @@ private:
 	NameColorResolver nameColors_;
 	BotMerger botMerger_;
 	int nextLineId_ = 1;
+	// Your last few Twitch lines, until Twitch's copy of each arrives (EventSub sends it within a second).
+	struct OwnLine {
+		std::string messageId;
+		int lineId;
+		DisplayLine line;
+	};
+	std::deque<OwnLine> ownLines_;
 	bool backgroundStale_ = true; // the theme's stylesheet sets the view's real background at polish time
 	QColor highlightColor_;
 

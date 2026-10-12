@@ -32,6 +32,10 @@ struct DisplayLine {
 	std::vector<Platform> platforms; // icons to show, in order
 };
 
+// Gives an echo (your sent message as shown at once) the content of the platform's own copy of it: text,
+// emotes, badges, colour. The author is replaced only when keepAuthor is false (a merged line lists several).
+void ApplyPlatformCopy(ChatMessage &echo, const ChatMessage &copy, bool keepAuthor);
+
 // Collapses the local echoes of one message sent to several platforms into a single line.
 // A line is released once every platform has either echoed or failed, or after the timeout.
 class EchoMerger {
@@ -44,6 +48,9 @@ public:
 	// Messages that aren't pending echoes pass straight through as a single-platform line.
 	std::vector<DisplayLine> Offer(const ChatMessage &message);
 	std::vector<DisplayLine> Fail(uint64_t sendId, Platform platform);
+	// The platform's own copy of an echo still waiting here (same platform and id): the echo takes its content.
+	// False when no pending echo matches, e.g. the line is already shown.
+	bool Update(const ChatMessage &copy);
 	std::vector<DisplayLine> Expire(int64_t nowMs);
 
 	bool HasPending() const { return !pending_.empty(); }

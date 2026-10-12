@@ -17,6 +17,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
 #include "platform-events.hpp"
+#include "core/eventsub.hpp"
 
 #include <algorithm>
 #include <json.hpp>
@@ -25,70 +26,22 @@ using json = nlohmann::json;
 
 namespace stream_alerts {
 
-static std::string StringAt(const json &obj, std::initializer_list<const char *> path)
-{
-	const json *node = &obj;
-	for (const char *key : path) {
-		if (!node->is_object())
-			return {};
-		auto it = node->find(key);
-		if (it == node->end())
-			return {};
-		node = &*it;
-	}
-	return node->is_string() ? node->get<std::string>() : std::string();
-}
-
-std::optional<EventSubMessage> ParseEventSubMessage(const std::string &text)
-{
-	json obj = json::parse(text, nullptr, false);
-	if (!obj.is_object())
-		return std::nullopt;
-
-	EventSubMessage message;
-	const std::string type = StringAt(obj, {"metadata", "message_type"});
-	if (type.empty())
-		return std::nullopt;
-	if (type == "session_welcome") {
-		message.type = EventSubMessage::Type::Welcome;
-		message.sessionId = StringAt(obj, {"payload", "session", "id"});
-		auto payload = obj.find("payload");
-		if (payload != obj.end() && payload->is_object() && payload->contains("session") &&
-		    (*payload)["session"].is_object()) {
-			const json &session = (*payload)["session"];
-			auto keepalive = session.find("keepalive_timeout_seconds");
-			if (keepalive != session.end() && keepalive->is_number_integer())
-				message.keepaliveSeconds = keepalive->get<int>();
-		}
-		if (message.sessionId.empty())
-			return std::nullopt;
-	} else if (type == "session_keepalive") {
-		message.type = EventSubMessage::Type::Keepalive;
-	} else if (type == "session_reconnect") {
-		message.type = EventSubMessage::Type::Reconnect;
-		message.reconnectUrl = StringAt(obj, {"payload", "session", "reconnect_url"});
-	} else if (type == "notification") {
-		message.type = EventSubMessage::Type::Notification;
-		message.subscriptionType = StringAt(obj, {"metadata", "subscription_type"});
-		message.userId = StringAt(obj, {"payload", "event", "user_id"});
-		message.userName = StringAt(obj, {"payload", "event", "user_name"});
-		if (message.userName.empty())
-			message.userName = StringAt(obj, {"payload", "event", "user_login"});
-	} else if (type == "revocation") {
-		message.type = EventSubMessage::Type::Revocation;
-		message.subscriptionType = StringAt(obj, {"metadata", "subscription_type"});
-		message.status = StringAt(obj, {"payload", "subscription", "status"});
-	}
-	return message;
-}
+using unified_chat::eventsub::StringAt;
 
 std::string BuildFollowSubscription(const std::string &sessionId, const std::string &userId)
 {
-	json body = {{"type", "channel.follow"},
-		     {"version", "2"},
-		     {"condition", {{"broadcaster_user_id", userId}, {"moderator_user_id", userId}}},
-		     {"transport", {{"method", "websocket"}, {"session_id", sessionId}}}};
-	return body.dump();
+	return unified_chat::eventsub::BuildSubscription(
+		"channel.follow", "2", {{"broadcaster_user_id", userId}, {"moderator_user_id", userId}}, sessionId);
+}
+
+std::optional<AlertEvent> FollowFromEvent(const json &event)
+{
+	AlertEvent follow{AlertKind::Follow, StringAt(event, {"user_id"}), StringAt(event, {"user_name"})};
+	if (follow.name.empty())
+		follow.name = StringAt(event, {"user_login"});
+	if (follow.id.empty())
+		return std::nullopt;
+	return follow;
 }
 
 bool TwitchUser::HasScope(const std::string &scope) const

@@ -32,7 +32,13 @@ Reading Twitch chat only needs a channel name. Sending messages needs a sign-in,
    - The window shows **Signed in as ...**. Click **Close**.
 5. In the dock's **Settings → Twitch**, set **Channel** to your channel name or a `twitch.tv/...` URL. If it's empty when you sign in, your own channel is filled in.
 
-Sign-ins are shared by every OBS Tools plugin, so you only sign in once. The sign-in also allows follower alerts for the upcoming Stream Alerts plugin. It's refreshed automatically and validated hourly, as Twitch requires. If you sign in with a different account than the channel (e.g. a bot account), messages are sent from that account.
+Sign-ins are shared by every OBS Tools plugin, so you only sign in once. The sign-in also allows follower alerts for the Stream Alerts plugin. It's refreshed automatically and validated hourly, as Twitch requires. If you sign in with a different account than the channel (e.g. a bot account), messages are sent from that account.
+
+### How Twitch chat connects
+
+Signed in, chat uses **EventSub** to read and the **Twitch API** to send, which is what Twitch recommends. Signed out, it reads over **IRC** (read-only). Updating from 1.3.0 or older: **sign in to Twitch again once** to allow EventSub; until then the dock says so and keeps using IRC. **Settings → Twitch → Chat connection: IRC** forces IRC if EventSub ever misbehaves.
+
+EventSub uses one of the 3 WebSocket connections Twitch allows per account and application; Stream Alerts uses another.
 
 ## 3. YouTube setup (one time)
 
@@ -102,13 +108,14 @@ If YouTube goes live some other way (another app, or a multistream output with a
   - Emotes show as pictures: Twitch's own emotes, plus your channel's and the global **BTTV, FFZ and 7TV** emotes. Animated emotes show their first frame, which keeps the dock light during streams.
   - Role badges (broadcaster, moderator, VIP, subscriber/founder) appear before the name. They need a Twitch sign-in; read-only chat shows none.
   - Images download once per session in the background. A line appears at once with the right spacing and the picture fills in a moment later.
-  - Emotes in your own sent messages: BTTV/FFZ/7TV ones show as pictures, but Twitch's own emotes stay as words, because Twitch doesn't send your message back with emote positions.
+  - Your own sent messages show at once and fill in Twitch's emotes, your badges and colour a moment later, when Twitch's copy arrives (EventSub). Over IRC, Twitch's own emotes in your messages stay as words, because IRC doesn't send your message back.
 - **Moderate from the dock:** right-click someone's line for **Delete message**, **Timeout** (1 minute, 10 minutes, 1 hour, 24 hours or Custom…), **Ban…** (with an optional reason on Twitch) and, on lines already marked timed out or banned, **Unban**. Every action asks first. You must be the broadcaster or a moderator of that chat.
   - **Twitch:** after updating to this version, **sign in to Twitch again once** (Tools → OBS Tools → Accounts… → Sign in). The new sign-in adds the moderation permissions. Until then the dock tells you when you try.
   - **YouTube:** each action uses **50 quota units** (the confirmation says so). YouTube can only lift bans made from the dock during this session; use YouTube Studio for older ones.
 - **Moderation stays visible.** Nothing a moderator removes disappears from the dock. The message text is struck through and dimmed, but you can still read it, and a coloured tag says why:
   - *(deleted)*, grey: a single message was deleted (Twitch only; YouTube no longer reports single deletions).
   - *(timed out 10 minutes)*, amber: the author was timed out, and all their lines get the tag.
+  - *(removed)*, amber: the author was timed out or banned in someone else's Twitch channel (over EventSub, Twitch only says which in your own channel).
   - *(banned)*, red: the author was banned (Twitch or YouTube).
   - *(chat cleared)*, grey: a moderator cleared the Twitch chat.
 
@@ -134,6 +141,8 @@ Every plugin log line starts with `[obs-unified-chat]`. Check **Help → Log Fil
 |---------|-----|
 | No **Unified Chat** entry under Docks | Look in the log for `compiled with newer libobs`: update OBS to 32.2 or newer. Otherwise check the DLL path from step 1. |
 | `Twitch: no channel configured` | Enter a channel in Settings. |
+| `Twitch: sign in to Twitch again … to move chat to EventSub` | Sign in to Twitch once more in **Tools → OBS Tools → Accounts…**. Chat works over IRC meanwhile. |
+| `Twitch: message not sent (…)` | Twitch's reason follows, e.g. a duplicate message or a chat mode such as followers-only. |
 | `Twitch: login rejected` / `sign-in expired` | Sign in again in **Tools → OBS Tools → Accounts…**. Chat keeps working read-only in the meantime. |
 | `could not start sign-in (invalid client)` | Wrong client ID, or for Twitch the app's client type isn't **Public**. |
 | YouTube sign-in fails with `invalid_client` or `unauthorized_client` | The Google client type must be **TVs and Limited Input devices**, and the secret must belong to that client. |

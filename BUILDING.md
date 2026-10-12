@@ -65,16 +65,18 @@ Each library and plugin keeps its unit tests in its own `tests\` folder. They us
 | Area | File |
 |------|------|
 | **libs\common** (`common-tests.exe`) | |
+| EventSub welcome / keepalive / reconnect / notification / revocation (Twitch's own examples), subscription bodies | `test-eventsub.cpp` |
 | Chunked JSON array splitting for the YouTube chat stream | `test-json-array-reader.cpp` |
 | OAuth device flow request bodies and Twitch/Google response mapping | `test-oauth.cpp` |
 | Text helpers (UTF-8 length, escaping, URL encoding) | `test-text-util.cpp` |
 | **plugins\unified-chat** (`unified-chat-tests.exe`) | |
 | Twitch IRC parsing, tag unescaping, login/PING/RECONNECT state machine, `/me`, CRLF injection | `test-twitch-irc.cpp` |
+| Twitch EventSub chat events (messages, emote fragments, replies, deletions, clears, bans), chat subscriptions, Send Chat Message, echo updates | `test-twitch-eventsub.cpp` |
 | YouTube response parsing, video URL parsing, dedupe, and the full `ChatSession` against a scripted fake HTTP server (broadcast discovery, paging, token refresh, 401 retry, quota backoff, chat end, send + echo) | `test-youtube.cpp` |
 | Send routing (targets, length limits, partial delivery), HTML escaping of chat lines, config round trip, 1.2.0 sign-in migration | `test-router-format-config.cpp` |
 | **plugins\stream-alerts** (`stream-alerts-tests.exe`) | |
 | Alert queue (order, once per person per stream, combining past 10), message formatting, config round trip | `test-alert-queue.cpp` |
-| EventSub welcome / keepalive / reconnect / notification / revocation (Twitch's own examples), the follow subscription body, validate scopes, recent-subscriber baseline and new-subscriber detection | `test-platform-events.cpp` |
+| The follow subscription body and event, validate scopes, recent-subscriber baseline and new-subscriber detection | `test-platform-events.cpp` |
 
 Run them with `ctest --preset windows-x64`, or run a test exe directly, e.g. `build_x64\plugins\unified-chat\RelWithDebInfo\unified-chat-tests.exe` (each accepts doctest options such as `-tc="*YouTube*"`). The tests need no network, OBS or Qt.
 
@@ -87,6 +89,7 @@ libs\
 ├── common\src\      shared by every plugin (namespace unified_chat for now)
 │   ├── core\        no libobs, no Qt, no I/O  -> static library obs-tools-core (tested)
 │   │   ├── accounts.*           the shared sign-ins: accounts.json format, which plugin may refresh, 1.2.0 migration
+│   │   ├── eventsub.*           Twitch EventSub WebSocket messages and subscription requests
 │   │   ├── oauth-device.*       RFC 8628 device flow for Twitch and Google; the Twitch scopes of every plugin
 │   │   ├── json-array-reader.*  splits a chunked JSON array into complete objects
 │   │   ├── text-util.*          UTF-8, escaping, URL encoding
@@ -96,6 +99,7 @@ libs\
 │   │   ├── account-store.*      plugin_config\obs-tools\accounts.json behind system-wide named locks;
 │   │   │                        Refresh() lets only one plugin spend a Twitch refresh token
 │   │   ├── curl-http-client.*   HttpClient over the libcurl that ships with OBS
+│   │   ├── eventsub-socket.*    one EventSub WebSocket (curl CONNECT_ONLY 2): whole messages, sleep until data
 │   │   └── device-login.*       sign-in flow
 │   ├── secret-store.*  DPAPI SecretCodec, one entropy per file                -> obs-tools-net
 │   └── ui\           -> obs-tools-ui (Qt, obs-frontend-api)
@@ -109,6 +113,7 @@ plugins\unified-chat\
 ├── src\
 │   ├── core\        chat logic: no libobs, no Qt, no I/O  -> static library unified-chat-core
 │   │   ├── twitch-irc.*      IRC parser + IrcSession state machine
+│   │   ├── twitch-eventsub.* EventSub chat events -> chat lines and moderation; Send Chat Message; Get Users
 │   │   ├── youtube-api.*     Data API v3 parsing + ChatSession (drives an injected HttpClient); streams chat
 │   │   │                     via liveChat/messages/stream by default, falls back to polling
 │   │   ├── chat-router.*     Twitch / YouTube / Both routing and length rules
@@ -121,7 +126,8 @@ plugins\unified-chat\
 │   │   ├── moderation.*      Helix and YouTube moderation requests (delete, timeout, ban, unban), token identity/scopes
 │   │   └── chat-config.*     config.json (de)serialization
 │   ├── net\         worker threads
-│   │   ├── twitch-connection.*   TLS IRC to irc.chat.twitch.tv:6697 via CURLOPT_CONNECT_ONLY
+│   │   ├── twitch-connection.*   Twitch chat: EventSub + Helix when signed in with its scopes, else TLS IRC to
+│   │   │                         irc.chat.twitch.tv:6697 via CURLOPT_CONNECT_ONLY
 │   │   ├── asset-loader.*        one background thread downloading emote/badge lists and images
 │   │   └── youtube-connection.*  YouTube poll/send loop
 │   ├── chat-dock.*        the dock widget

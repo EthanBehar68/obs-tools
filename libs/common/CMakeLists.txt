@@ -5,6 +5,8 @@ target_sources(
   PRIVATE
     src/core/accounts.cpp
     src/core/accounts.hpp
+    src/core/eventsub.cpp
+    src/core/eventsub.hpp
     src/core/http-client.hpp
     src/core/json-array-reader.cpp
     src/core/json-array-reader.hpp
@@ -30,6 +32,8 @@ target_sources(
     src/net/curl-http-client.hpp
     src/net/device-login.cpp
     src/net/device-login.hpp
+    src/net/eventsub-socket.cpp
+    src/net/eventsub-socket.hpp
     src/net/socket-wait.cpp
     src/net/socket-wait.hpp
     src/secret-store.cpp
@@ -62,7 +66,12 @@ if(ENABLE_TESTS)
   add_executable(common-tests)
   target_sources(
     common-tests
-    PRIVATE tests/test-accounts.cpp tests/test-json-array-reader.cpp tests/test-oauth.cpp tests/test-text-util.cpp
+    PRIVATE
+      tests/test-accounts.cpp
+      tests/test-eventsub.cpp
+      tests/test-json-array-reader.cpp
+      tests/test-oauth.cpp
+      tests/test-text-util.cpp
   )
   target_link_libraries(common-tests PRIVATE obs-tools-core obs-tools-test-main)
   _remove_output_before_link(common-tests)
