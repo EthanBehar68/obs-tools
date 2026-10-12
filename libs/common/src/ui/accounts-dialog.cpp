@@ -105,6 +105,11 @@ AccountsDialog::AccountsDialog(QWidget *parent) : QDialog(parent)
 	auto intro = new QLabel(Text("Accounts.Intro"), this);
 	intro->setWordWrap(true);
 	layout->addWidget(intro);
+	if (const std::string mismatch = ObsToolsVersionWarning(); !mismatch.empty()) {
+		auto warning = new QLabel(QString::fromStdString(mismatch), this);
+		warning->setWordWrap(true);
+		layout->addWidget(warning);
+	}
 	if (report.unreadableSecrets) {
 		auto warning = new QLabel(Text("Accounts.Unreadable"), this);
 		warning->setWordWrap(true);
@@ -211,6 +216,7 @@ void AccountsDialog::StartLogin(Service service)
 	oauth::Provider provider;
 	if (service == Service::Twitch) {
 		provider = oauth::TwitchProvider(accounts_.twitch.clientId);
+		provider.scope = AllTwitchScopes(provider.scope); // what every loaded OBS Tools plugin needs
 	} else {
 		provider = oauth::GoogleProvider(accounts_.google.clientId, accounts_.google.clientSecret);
 		if (provider.clientSecret.empty()) {

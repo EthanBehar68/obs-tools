@@ -20,11 +20,27 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include <functional>
 #include <string>
+#include <vector>
 
 class QMenu;
 class QString;
 
 namespace unified_chat {
+
+// What OBS Tools plugins exchange: the accounts file, the Twitch scopes, the signals below and their JSON. Bump it
+// when any of that changes in a way an older plugin would get wrong, and release both plugins together.
+constexpr long long kObsToolsProtocol = 2;
+
+// Call from obs_module_load. Publishes this plugin's version, protocol and Twitch scopes (through the libobs proc
+// handler, independent of load order) so the others can find them. name: "unified_chat" or "stream_alerts".
+void RegisterObsToolsPlugin(const char *name, const char *version);
+// Call at OBS_FRONTEND_EVENT_FINISHED_LOADING: logs the other OBS Tools plugins loaded and their versions, and
+// warns when one is from an older or newer release (its sign-ins, permissions or events may not match).
+void CheckObsToolsPlugins();
+// Empty, or a sentence for the Accounts window saying which plugin to update.
+std::string ObsToolsVersionWarning();
+// This plugin's Twitch scopes with every other loaded plugin's: what a sign-in should ask for.
+std::string AllTwitchScopes(const std::string &own);
 
 // Tools > OBS Tools, shared by every obs-tools plugin. The first plugin OBS loads creates the submenu with its
 // Accounts... entry and publishes it through the libobs proc handler; later plugins find it there. Call from

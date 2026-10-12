@@ -35,9 +35,10 @@ static constexpr const char *kDockId = "obs-unified-chat-dock";
 static void OnFrontendEvent(enum obs_frontend_event event, void *private_data)
 {
 	auto dock = static_cast<unified_chat::ChatDock *>(private_data);
-	if (event == OBS_FRONTEND_EVENT_FINISHED_LOADING)
+	if (event == OBS_FRONTEND_EVENT_FINISHED_LOADING) {
+		unified_chat::CheckObsToolsPlugins();
 		dock->Start();
-	else if (event == OBS_FRONTEND_EVENT_EXIT)
+	} else if (event == OBS_FRONTEND_EVENT_EXIT)
 		dock->Shutdown();
 	else if (event == OBS_FRONTEND_EVENT_STREAMING_STARTED)
 		dock->OnStreamingChanged(true);
@@ -53,6 +54,7 @@ bool obs_module_load(void)
 	if (mainwin == nullptr)
 		return false;
 
+	unified_chat::RegisterObsToolsPlugin("unified_chat", PLUGIN_VERSION);
 	auto dock = new unified_chat::ChatDock();
 	dock->setObjectName(kDockId);
 	if (!obs_frontend_add_dock_by_id(kDockId, obs_module_text("Title"), dock)) {

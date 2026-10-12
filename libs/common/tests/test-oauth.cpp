@@ -100,6 +100,14 @@ TEST_CASE("Only a refused refresh signs out; network and server failures are tem
 	CHECK(classify(500, R"({"error":"internal"})") == RefreshOutcome::Transient);
 }
 
+TEST_CASE("Scope lists merge without repeats, in order")
+{
+	CHECK(MergeScopes("chat:read user:read:chat", "user:read:chat bits:read") ==
+	      "chat:read user:read:chat bits:read");
+	CHECK(MergeScopes("", "a  b") == "a b");
+	CHECK(MergeScopes("a", "") == "a");
+}
+
 TEST_CASE("Token refresh window")
 {
 	Token token{"a", "r", 1000};

@@ -96,12 +96,17 @@ static const SecretCodec *Codec()
 	return PlatformSecretCodec(SecretPurpose::Accounts);
 }
 
-static Accounts ReadFile(const std::string &path, SecretReport *report)
+static std::string ReadText(const std::string &path)
 {
 	char *text = os_quick_read_utf8_file(path.c_str());
-	Accounts accounts = ParseAccounts(text ? text : "", Codec(), report);
+	std::string out = text ? text : "";
 	bfree(text);
-	return accounts;
+	return out;
+}
+
+static Accounts ReadFile(const std::string &path, SecretReport *report)
+{
+	return ParseAccounts(ReadText(path), Codec(), report);
 }
 
 AccountStore::AccountStore(std::string dir) : dir_(std::move(dir)), path_(dir_ + "/accounts.json") {}
@@ -117,10 +122,11 @@ void AccountStore::Update(const std::function<void(Accounts &)> &change)
 	NamedLock lock(kFileLock, kFileLockMs);
 	if (!lock.Held())
 		obs_log(LOG_WARNING, "accounts file lock timed out, writing anyway");
-	Accounts accounts = ReadFile(path_, nullptr);
+	const std::string previous = ReadText(path_);
+	Accounts accounts = ParseAccounts(previous, Codec());
 	change(accounts);
 	os_mkdirs(dir_.c_str());
-	std::string text = SerializeAccounts(accounts, Codec());
+	std::string text = SerializeAccounts(accounts, Codec(), previous);
 	if (!os_quick_write_utf8_file_safe(path_.c_str(), text.c_str(), text.size(), false, "tmp", "bak"))
 		obs_log(LOG_WARNING, "failed to save %s", path_.c_str());
 }

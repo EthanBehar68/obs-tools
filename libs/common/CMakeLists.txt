@@ -60,6 +60,7 @@ if(ENABLE_FRONTEND_API AND ENABLE_QT)
   )
   find_package(obs-frontend-api REQUIRED)
   find_package(Qt6 COMPONENTS Widgets Core Gui)
+  target_include_directories(obs-tools-ui PRIVATE "${CMAKE_SOURCE_DIR}/libs/obs-support")
   target_link_libraries(obs-tools-ui PUBLIC obs-tools-net OBS::obs-frontend-api Qt6::Core Qt6::Gui Qt6::Widgets)
 endif()
 

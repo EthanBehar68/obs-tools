@@ -50,19 +50,25 @@ static oauth::Token TokenFromJson(const json &obj, const SecretCodec *codec, Sec
 	return token;
 }
 
-std::string SerializeAccounts(const Accounts &accounts, const SecretCodec *codec)
+std::string SerializeAccounts(const Accounts &accounts, const SecretCodec *codec, const std::string &previous)
 {
-	json obj = {
-		{"version", 1},
-		{"twitch",
-		 {{"client_id", accounts.twitch.clientId},
-		  {"login", accounts.twitch.login},
-		  {"token", TokenToJson(accounts.twitch.token, codec)}}},
-		{"google",
-		 {{"client_id", accounts.google.clientId},
-		  {"client_secret", SealSecret(accounts.google.clientSecret, codec)},
-		  {"token", TokenToJson(accounts.google.token, codec)}}},
-	};
+	json obj = json::parse(previous, nullptr, false);
+	if (!obj.is_object())
+		obj = json::object();
+	if (!obj.contains("version"))
+		obj["version"] = 1; // a newer plugin's higher version stays
+	for (const char *service : {"twitch", "google"}) {
+		if (!obj[service].is_object())
+			obj[service] = json::object();
+	}
+	json &twitch = obj["twitch"];
+	twitch["client_id"] = accounts.twitch.clientId;
+	twitch["login"] = accounts.twitch.login;
+	twitch["token"] = TokenToJson(accounts.twitch.token, codec);
+	json &google = obj["google"];
+	google["client_id"] = accounts.google.clientId;
+	google["client_secret"] = SealSecret(accounts.google.clientSecret, codec);
+	google["token"] = TokenToJson(accounts.google.token, codec);
 	return obj.dump(4);
 }
 

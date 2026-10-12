@@ -19,6 +19,9 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "oauth-device.hpp"
 #include "text-util.hpp"
 
+#include <algorithm>
+#include <vector>
+
 #include <json.hpp>
 
 using json = nlohmann::json;
@@ -37,6 +40,27 @@ Provider TwitchProvider(const std::string &clientId)
 		{},
 		"chat:read chat:edit user:read:chat user:write:chat channel:moderate moderator:manage:banned_users "
 		"moderator:manage:chat_messages moderator:read:followers bits:read"};
+}
+
+std::string MergeScopes(const std::string &a, const std::string &b)
+{
+	std::string merged;
+	std::vector<std::string> seen;
+	for (const std::string *list : {&a, &b}) {
+		size_t at = 0;
+		while (at < list->size()) {
+			size_t end = list->find(' ', at);
+			if (end == std::string::npos)
+				end = list->size();
+			std::string scope = list->substr(at, end - at);
+			at = end + 1;
+			if (scope.empty() || std::find(seen.begin(), seen.end(), scope) != seen.end())
+				continue;
+			merged += (merged.empty() ? "" : " ") + scope;
+			seen.push_back(std::move(scope));
+		}
+	}
+	return merged;
 }
 
 Provider GoogleProvider(const std::string &clientId, const std::string &clientSecret)

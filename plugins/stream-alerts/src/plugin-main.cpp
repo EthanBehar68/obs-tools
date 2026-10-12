@@ -38,9 +38,10 @@ static void OnFrontendEvent(enum obs_frontend_event event, void *)
 {
 	if (!s_controller)
 		return;
-	if (event == OBS_FRONTEND_EVENT_FINISHED_LOADING)
+	if (event == OBS_FRONTEND_EVENT_FINISHED_LOADING) {
+		unified_chat::CheckObsToolsPlugins();
 		s_controller->Start();
-	else if (event == OBS_FRONTEND_EVENT_EXIT)
+	} else if (event == OBS_FRONTEND_EVENT_EXIT)
 		s_controller->Shutdown();
 	else if (event == OBS_FRONTEND_EVENT_STREAMING_STARTED)
 		s_controller->OnStreamingChanged(true);
@@ -58,6 +59,7 @@ bool obs_module_load(void)
 	if (mainwin == nullptr)
 		return false;
 
+	unified_chat::RegisterObsToolsPlugin("stream_alerts", PLUGIN_VERSION);
 	s_controller = new AlertsController(mainwin); // deleted with the main window
 	obs_frontend_add_event_callback(OnFrontendEvent, nullptr);
 	unified_chat::AddObsToolsMenuEntry(QString::fromUtf8(obs_module_text("Tools.StreamAlerts")), [mainwin]() {

@@ -46,7 +46,10 @@ struct Accounts {
 };
 
 // Tokens and the Google client secret are sealed with the codec when one is given.
-std::string SerializeAccounts(const Accounts &accounts, const SecretCodec *codec = nullptr);
+// previous: the file as it was. Keys this version doesn't know (a newer plugin's service or field) are kept, so an
+// older plugin saving a refreshed token never deletes them.
+std::string SerializeAccounts(const Accounts &accounts, const SecretCodec *codec = nullptr,
+			      const std::string &previous = {});
 // Missing or malformed fields come back empty, so a damaged file only means signing in again.
 Accounts ParseAccounts(const std::string &json, const SecretCodec *codec = nullptr, SecretReport *report = nullptr);
 

@@ -31,7 +31,8 @@ static constexpr const char *kKindNames[] = {"super_chat", "super_sticker", "new
 
 std::string SerializeYouTubeEvent(const YouTubeEvent &event)
 {
-	json obj = {{"kind", kKindNames[(int)event.kind]},
+	json obj = {{"v", 1}, // the payload's own version, inside kObsToolsProtocol
+		    {"kind", kKindNames[(int)event.kind]},
 		    {"id", event.id},
 		    {"channel_id", event.channelId},
 		    {"name", event.name},

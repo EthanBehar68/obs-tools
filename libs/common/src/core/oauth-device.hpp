@@ -34,6 +34,9 @@ struct Provider {
 };
 
 Provider TwitchProvider(const std::string &clientId);
+// Space-separated scope lists joined, each scope once, in first-seen order. Each plugin compiles in its own scope
+// list, so a sign-in asks for the union of every loaded plugin's.
+std::string MergeScopes(const std::string &a, const std::string &b);
 Provider GoogleProvider(const std::string &clientId, const std::string &clientSecret);
 
 struct DeviceCode {

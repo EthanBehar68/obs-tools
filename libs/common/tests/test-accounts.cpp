@@ -2,6 +2,8 @@
 
 #include "core/accounts.hpp"
 
+#include <json.hpp>
+
 using namespace unified_chat;
 
 namespace {
@@ -49,6 +51,21 @@ TEST_CASE("Accounts round trip through JSON")
 
 	CHECK(ParseAccounts("").twitch.Empty());
 	CHECK(ParseAccounts(R"({"twitch":[],"google":{"token":7}})").google.Empty());
+}
+
+TEST_CASE("Saving keeps what a newer plugin added to the file")
+{
+	const std::string newer = R"({"version":2,"kick":{"client_id":"k1"},
+		"twitch":{"client_id":"old","login":"me","scopes_seen":["a"]},"google":{}})";
+	Accounts accounts = ParseAccounts(newer);
+	accounts.twitch.clientId = "new";
+	auto saved = nlohmann::json::parse(SerializeAccounts(accounts, nullptr, newer));
+	CHECK(saved["version"] == 2);
+	CHECK(saved["kick"]["client_id"] == "k1");
+	CHECK(saved["twitch"]["client_id"] == "new");
+	CHECK(saved["twitch"]["scopes_seen"][0] == "a");
+	CHECK(nlohmann::json::parse(SerializeAccounts(accounts))["version"] == 1); // a new file
+	CHECK(ParseAccounts(SerializeAccounts(accounts, nullptr, "not json")).twitch.clientId == "new");
 }
 
 TEST_CASE("Account secrets are stored encrypted and read back")
