@@ -98,10 +98,12 @@ TEST_CASE("Paid alerts and raids go ahead of waiting follows, every time, and ne
 	AlertQueue queue;
 	for (int n = 1; n <= 12; ++n)
 		queue.Push(Follow(n)); // 10 individual + 1 combined
-	AlertEvent cheer{AlertKind::Cheer, "u1", "Cheerer"};
+	AlertEvent cheer{AlertKind::Cheer, "msg1", "Cheerer"};
 	cheer.count = 100;
 	CHECK(queue.Push(cheer));
-	CHECK(queue.Push(cheer)); // the same person again: alerts again
+	CHECK_FALSE(queue.Push(cheer)); // the same event sent twice
+	cheer.id = "msg2";
+	CHECK(queue.Push(cheer)); // the same person cheering again: alerts again
 	CHECK(queue.Push({AlertKind::Raid, "r1", "Raider"}));
 	for (int n = 0; n < 20; ++n)
 		queue.Push({AlertKind::SuperChat, "c" + std::to_string(n), "Fan"}); // never limited or combined
@@ -178,4 +180,27 @@ TEST_CASE("Every kind, the minimums and variant messages round trip")
 	CHECK(old.minBits == 1);
 	CHECK(old.subscriberCheckSeconds == 120);
 	CHECK(ParseAlertsConfig(R"({"min_bits":0})").minBits == 1);
+}
+
+TEST_CASE("Raising a minimum drops waiting cheers below it, nothing else")
+{
+	AlertQueue queue;
+	auto cheer = [](const char *id, int64_t bits) {
+		AlertEvent event{AlertKind::Cheer, id, "Fan"};
+		event.count = bits;
+		return event;
+	};
+	queue.Push(Follow(1));
+	queue.Push(cheer("a", 1));
+	queue.Push(cheer("b", 500));
+	queue.Push(cheer("c", 5));
+	CHECK(queue.RemoveIf([](const Alert &alert) {
+		return alert.kind == AlertKind::Cheer && alert.event.count < 100;
+	}) == 2);
+	CHECK(queue.Pop()->event.count == 500);
+	CHECK(queue.Pop()->kind == AlertKind::Follow);
+	CHECK(queue.Empty());
+	for (int n = 2; n <= 20; ++n)
+		queue.Push(Follow(n)); // removing kept the individual count right: still 10, then combined
+	CHECK(queue.Size() == AlertQueue::kMaxQueued + 1);
 }

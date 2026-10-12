@@ -21,6 +21,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "net/socket-wait.hpp"
 
 #include <atomic>
+#include <chrono>
 #include <memory>
 #include <string>
 
@@ -34,7 +35,7 @@ public:
 	EventSubSocket(const EventSubSocket &) = delete;
 	EventSubSocket &operator=(const EventSubSocket &) = delete;
 
-	// Connects and upgrades; on failure error says why.
+	// Connects and upgrades, within kOpenTimeout; on failure error says why.
 	bool Open(const std::string &url, std::string &error);
 
 	enum class Read { Message, Again, Closed };
@@ -46,7 +47,18 @@ public:
 	void Wait(void *wakeEvent, int timeoutMs);
 
 private:
+	static constexpr auto kOpenTimeout = std::chrono::seconds(20);
+
+	// Read by curl's progress callback while Open runs.
+	struct OpenState {
+		const std::atomic<bool> *stop;
+		std::chrono::steady_clock::time_point deadline;
+	};
+
+	static int AbortOpen(void *openState, curl_off_t, curl_off_t, curl_off_t, curl_off_t);
+
 	const std::atomic<bool> *stop_;
+	OpenState openState_{};
 	void *curl_ = nullptr;
 	curl_socket_t sock_ = CURL_SOCKET_BAD;
 	std::unique_ptr<SocketEvent> event_;

@@ -24,10 +24,14 @@ namespace unified_chat {
 
 static constexpr size_t kMaxMessageBytes = 1 << 20;
 
-static int AbortOnStop(void *userdata, curl_off_t, curl_off_t, curl_off_t, curl_off_t)
+// Ends Open on shutdown, or when the server accepted the connection but never answered the upgrade: CONNECTTIMEOUT
+// only covers TCP and TLS, and CURLOPT_TIMEOUT would also apply to the open WebSocket.
+int EventSubSocket::AbortOpen(void *openState, curl_off_t, curl_off_t, curl_off_t, curl_off_t)
 {
-	auto stop = static_cast<const std::atomic<bool> *>(userdata);
-	return stop && stop->load() ? 1 : 0;
+	auto state = static_cast<const OpenState *>(openState);
+	if (state->stop && state->stop->load())
+		return 1;
+	return std::chrono::steady_clock::now() > state->deadline ? 1 : 0;
 }
 
 EventSubSocket::EventSubSocket(const std::atomic<bool> *stop) : stop_(stop) {}
@@ -54,12 +58,18 @@ bool EventSubSocket::Open(const std::string &url, std::string &error)
 	curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
 	curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, errorBuffer);
 	curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
-	curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, AbortOnStop);
-	curl_easy_setopt(curl, CURLOPT_XFERINFODATA, stop_);
+	curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, AbortOpen);
+	curl_easy_setopt(curl, CURLOPT_XFERINFODATA, &openState_);
+#ifdef _WIN32
+	curl_easy_setopt(curl, CURLOPT_SSL_OPTIONS, (long)CURLSSLOPT_REVOKE_BEST_EFFORT); // as for HTTP and IRC
+#endif
+	openState_ = {stop_, std::chrono::steady_clock::now() + kOpenTimeout};
 	CURLcode rc = curl_easy_perform(curl);
 	curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, nullptr); // the buffer goes out of scope
+	curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 1L);       // the open is done; the limit no longer applies
 	if (rc != CURLE_OK) {
-		error = errorBuffer[0] ? errorBuffer : curl_easy_strerror(rc);
+		const bool timedOut = rc == CURLE_ABORTED_BY_CALLBACK && !(stop_ && stop_->load());
+		error = timedOut ? "no answer within 20 s" : errorBuffer[0] ? errorBuffer : curl_easy_strerror(rc);
 		return false;
 	}
 	curl_easy_getinfo(curl, CURLINFO_ACTIVESOCKET, &sock_);

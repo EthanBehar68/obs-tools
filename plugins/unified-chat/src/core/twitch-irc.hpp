@@ -78,7 +78,8 @@ struct SessionOutput {
 	std::vector<ChatMessage> messages;
 	std::vector<ModerationEvent> moderation;
 	std::vector<std::string> notices;
-	std::string channelId; // set once the channel's numeric id is known (ROOMSTATE)
+	std::vector<std::string> eventNotices; // USERNOTICE (subs, raids): carry viewers' text
+	std::string channelId;                 // set once the channel's numeric id is known (ROOMSTATE)
 	bool reconnect = false;
 	bool authFailed = false;
 };

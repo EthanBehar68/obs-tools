@@ -137,7 +137,7 @@ AlertEvent FromYouTubeEvent(const unified_chat::YouTubeEvent &event)
 {
 	using Kind = unified_chat::YouTubeEvent::Kind;
 	AlertEvent alert;
-	alert.id = event.channelId;
+	alert.id = event.id; // the chat message's id: the queue drops a repeat
 	alert.name = event.name;
 	alert.amount = event.amount;
 	alert.message = event.message;

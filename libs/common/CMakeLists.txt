@@ -34,6 +34,8 @@ target_sources(
     src/net/curl-http-client.hpp
     src/net/device-login.cpp
     src/net/device-login.hpp
+    src/net/eventsub-client.cpp
+    src/net/eventsub-client.hpp
     src/net/eventsub-socket.cpp
     src/net/eventsub-socket.hpp
     src/net/socket-wait.cpp

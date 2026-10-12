@@ -43,6 +43,7 @@ std::optional<Message> ParseMessage(const std::string &text)
 		return std::nullopt;
 
 	Message message;
+	message.messageId = StringAt(obj, {"metadata", "message_id"});
 	const std::string type = StringAt(obj, {"metadata", "message_type"});
 	if (type.empty())
 		return std::nullopt;
@@ -78,6 +79,63 @@ std::optional<Message> ParseMessage(const std::string &text)
 		message.status = StringAt(obj, {"payload", "subscription", "status"});
 	}
 	return message;
+}
+
+bool Session::Seen(const std::string &messageId)
+{
+	if (messageId.empty())
+		return false;
+	if (!recentSet_.insert(messageId).second)
+		return true;
+	recent_.push_back(messageId);
+	if (recent_.size() > kRecentIds) {
+		recentSet_.erase(recent_.front());
+		recent_.pop_front();
+	}
+	return false;
+}
+
+Session::Step Session::Handle(const std::string &text, bool fromSuccessor, Clock::time_point now)
+{
+	Step step;
+	auto message = ParseMessage(text);
+	if (!message)
+		return step;
+	lastReceive_ = now;
+	if (Seen(message->messageId))
+		return step; // a resend (delivery is at least once), often around a reconnect
+
+	switch (message->type) {
+	case Message::Type::Welcome:
+		if (message->keepaliveSeconds > 0)
+			keepalive_ = std::chrono::seconds(message->keepaliveSeconds);
+		if (fromSuccessor) {
+			if (reconnecting_) {
+				reconnecting_ = false;
+				step.promote = true;
+			}
+		} else if (!welcomed_) {
+			welcomed_ = true;
+			step.subscribe = message->sessionId;
+		}
+		break;
+	case Message::Type::Notification:
+		step.notification = std::move(*message);
+		break;
+	case Message::Type::Reconnect:
+		if (!fromSuccessor && !reconnecting_ && !message->reconnectUrl.empty()) {
+			reconnecting_ = true;
+			reconnectDeadline_ = now + kReconnectWindow;
+			step.reconnectTo = message->reconnectUrl;
+		}
+		break;
+	case Message::Type::Revocation:
+		step.revocation = std::move(*message);
+		break;
+	default:
+		break;
+	}
+	return step;
 }
 
 std::string BuildSubscription(std::string_view type, std::string_view version,

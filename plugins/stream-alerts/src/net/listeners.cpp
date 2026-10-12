@@ -23,7 +23,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "core/platform-events.hpp"
 #include "net/account-store.hpp"
 #include "net/curl-http-client.hpp"
-#include "net/eventsub-socket.hpp"
+#include "net/eventsub-client.hpp"
 #include "net/socket-wait.hpp"
 
 #include <algorithm>
@@ -207,8 +207,10 @@ TwitchListener::Outcome TwitchListener::Subscribe(const std::string &sessionId, 
 	return Outcome::Retry;
 }
 
-void TwitchListener::Handle(const std::string &type, const nlohmann::json &event)
+void TwitchListener::Handle(const eventsub::Message &message)
 {
+	const std::string &type = message.subscriptionType;
+	const nlohmann::json &event = message.event;
 	std::optional<AlertEvent> alert;
 	if (type == "channel.follow")
 		alert = FollowFromEvent(event);
@@ -216,121 +218,81 @@ void TwitchListener::Handle(const std::string &type, const nlohmann::json &event
 		alert = NotificationFromEvent(event);
 	else if (type == "channel.cheer")
 		alert = CheerFromEvent(event);
-	if (alert && callbacks_.onEvent)
+	if (!alert)
+		return;
+	if (IsPriority(alert->kind))
+		alert->id = message.messageId; // the same cheer or raid may be sent twice; the queue drops repeats
+	if (callbacks_.onEvent)
 		callbacks_.onEvent(std::move(*alert));
 }
 
-TwitchListener::Outcome TwitchListener::Session(const std::string &url, bool resumed, const std::string &userId,
-						std::string &reconnectUrl)
+TwitchListener::Outcome TwitchListener::Session(const std::string &userId)
 {
-	EventSubSocket socket(&stop_);
-	std::string error;
-	if (!socket.Open(url, error)) {
-		if (!stop_)
-			Status("can't connect to Twitch (" + error + "), retrying");
+	Outcome outcome = Outcome::Retry;
+	EventSubHandlers handlers;
+	handlers.logName = "Twitch alerts";
+	handlers.subscribe = [&](const std::string &sessionId) {
+		outcome = Subscribe(sessionId, userId);
+		if (outcome != Outcome::Ok)
+			return false;
+		std::string what;
+		for (auto [on, name] :
+		     {std::pair{allowed_.follows, "follows"}, std::pair{allowed_.notifications, "subs, gifts, raids"},
+		      std::pair{allowed_.cheers, "cheers"}}) {
+			if (on)
+				what += (what.empty() ? "" : ", ") + std::string(name);
+		}
+		Status("listening for " + what +
+		       (missing_.empty() ? std::string() : "; sign in to Twitch again for " + missing_));
+		return true;
+	};
+	handlers.notification = [&](const eventsub::Message &message) {
+		Handle(message);
+	};
+	handlers.revocation = [&](const eventsub::Message &message) {
+		Status("Twitch stopped sending " + message.subscriptionType + " (" + message.status + ")");
+		outcome = message.status == "authorization_revoked" || message.status == "user_removed"
+				  ? Outcome::Stop
+				  : Outcome::Retry;
+		return true;
+	};
+
+	const EventSubResult result = RunEventSub(eventsub::kUrl, stop_, wakeEvent_, handlers);
+	switch (result.end) {
+	case EventSubResult::End::ConnectFailed:
+		Status("can't connect to Twitch (" + result.error + "), retrying");
 		return Outcome::Retry;
+	case EventSubResult::End::SubscribeFailed:
+	case EventSubResult::End::Revoked:
+		return outcome;
+	case EventSubResult::End::TimedOut:
+		Status("connection to Twitch timed out, reconnecting");
+		return Outcome::Retry;
+	case EventSubResult::End::Closed:
+		Status("connection to Twitch lost, reconnecting");
+		return Outcome::Retry;
+	default:
+		return Outcome::Stop;
 	}
-
-	auto lastReceive = Clock::now();
-	auto keepalive = std::chrono::seconds(eventsub::kKeepaliveSeconds);
-	std::string text;
-
-	while (!stop_) {
-		// Read everything curl has, including data it already decrypted, before sleeping.
-		for (;;) {
-			auto read = socket.Next(text);
-			if (read == EventSubSocket::Read::Again)
-				break;
-			if (read == EventSubSocket::Read::Closed) {
-				Status("connection to Twitch lost, reconnecting");
-				return Outcome::Retry;
-			}
-			lastReceive = Clock::now();
-			auto parsed = eventsub::ParseMessage(text);
-			if (!parsed)
-				continue;
-			switch (parsed->type) {
-			case eventsub::Message::Type::Welcome: {
-				if (parsed->keepaliveSeconds > 0)
-					keepalive = std::chrono::seconds(parsed->keepaliveSeconds);
-				// Must subscribe within 10 seconds of the welcome; a reconnect keeps the subscription.
-				if (!resumed) {
-					Outcome outcome = Subscribe(parsed->sessionId, userId);
-					if (outcome != Outcome::Ok)
-						return outcome;
-				}
-				{
-					std::string what;
-					for (auto [on, name] : {std::pair{allowed_.follows, "follows"},
-								std::pair{allowed_.notifications, "subs, gifts, raids"},
-								std::pair{allowed_.cheers, "cheers"}}) {
-						if (on)
-							what += (what.empty() ? "" : ", ") + std::string(name);
-					}
-					Status("listening for " + what +
-					       (missing_.empty() ? std::string()
-								 : "; sign in to Twitch again for " + missing_));
-				}
-				break;
-			}
-			case eventsub::Message::Type::Notification:
-				Handle(parsed->subscriptionType, parsed->event);
-				break;
-			case eventsub::Message::Type::Reconnect:
-				reconnectUrl = parsed->reconnectUrl;
-				return reconnectUrl.empty() ? Outcome::Retry : Outcome::Reconnect;
-			case eventsub::Message::Type::Revocation:
-				Status("Twitch stopped sending " + parsed->subscriptionType + " (" + parsed->status +
-				       ")");
-				return parsed->status == "authorization_revoked" || parsed->status == "user_removed"
-					       ? Outcome::Stop
-					       : Outcome::Retry;
-			default:
-				break;
-			}
-		}
-
-		// Twitch sends something at least every keepalive interval; silence past it means a dead connection.
-		auto deadline = lastReceive + keepalive + std::chrono::seconds(10);
-		auto now = Clock::now();
-		if (now >= deadline) {
-			Status("connection to Twitch timed out, reconnecting");
-			return Outcome::Retry;
-		}
-		auto waitMs = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - now).count() + 1;
-		socket.Wait(wakeEvent_, (int)waitMs);
-	}
-	return Outcome::Stop;
 }
 
 void TwitchListener::Run()
 {
 	int backoffMs = 1000;
 	std::string userId;
-	std::string reconnectUrl;
 	while (!stop_) {
-		const bool resumed = !reconnectUrl.empty();
-		if (!resumed) {
-			Status("connecting");
-			Outcome outcome = Authorize(userId);
-			if (outcome == Outcome::Stop)
-				return;
-			if (outcome == Outcome::Retry) {
-				WaitFor(backoffMs);
-				backoffMs = (std::min)(backoffMs * 2, kMaxBackoffMs);
-				continue;
-			}
-		}
-		const std::string url = resumed ? reconnectUrl : std::string(eventsub::kUrl);
-		reconnectUrl.clear();
-		const auto started = Clock::now();
-		Outcome outcome = Session(url, resumed, userId, reconnectUrl);
+		Status("connecting");
+		Outcome outcome = Authorize(userId);
 		if (outcome == Outcome::Stop)
 			return;
-		if (outcome == Outcome::Reconnect)
-			continue; // Twitch asked; the new URL keeps the subscription
-		if (Clock::now() - started > std::chrono::minutes(5))
-			backoffMs = 1000; // it had been working
+		if (outcome == Outcome::Ok) {
+			const auto started = Clock::now();
+			outcome = Session(userId);
+			if (outcome == Outcome::Stop)
+				return;
+			if (Clock::now() - started > std::chrono::minutes(5))
+				backoffMs = 1000; // it had been working
+		}
 		WaitFor(backoffMs);
 		backoffMs = (std::min)(backoffMs * 2, kMaxBackoffMs);
 	}

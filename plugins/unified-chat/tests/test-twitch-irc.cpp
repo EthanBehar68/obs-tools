@@ -151,8 +151,9 @@ TEST_CASE("Session reports USERNOTICE system messages")
 	SessionOutput out;
 	session.HandleLine("@system-msg=Fan\\ssubscribed\\sfor\\s3\\smonths! :tmi.twitch.tv USERNOTICE #streamer :hype",
 			   out);
-	REQUIRE(out.notices.size() == 1);
-	CHECK(out.notices[0] == "Fan subscribed for 3 months! - hype");
+	CHECK(out.notices.empty()); // viewers' text: shown, but not logged like other notices
+	REQUIRE(out.eventNotices.size() == 1);
+	CHECK(out.eventNotices[0] == "Fan subscribed for 3 months! - hype");
 }
 
 TEST_CASE("Session becomes sendable after USERSTATE and echoes with display name")

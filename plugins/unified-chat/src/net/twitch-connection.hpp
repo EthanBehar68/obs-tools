@@ -46,7 +46,10 @@ struct ConnectionCallbacks {
 	std::function<void(std::string channelId)> onChannelId;
 	// The live viewer count, checked every 5 minutes; -1 when not live or unknown.
 	std::function<void(int64_t viewers)> onViewers;
-	std::function<void(const std::string &)> onNotice;
+	std::function<void(const std::string &)> onNotice; // also written to the OBS log
+	// A sub, gift or raid notice, which carries viewers' own text: shown, but kept out of the OBS log (logs get
+	// shared when asking for help).
+	std::function<void(const std::string &)> onEventNotice;
 	std::function<void(LinkState)> onState;
 	std::function<void(const oauth::Token &, const std::string &login)> onTokenChanged;
 	// A message queued with Send() could not be delivered (the reason is reported via onNotice).
@@ -64,7 +67,6 @@ struct OutgoingMessage {
 };
 
 class HttpClient;
-class EventSubSocket;
 namespace eventsub {
 struct Message;
 }
@@ -103,9 +105,10 @@ private:
 	std::vector<std::string> HelixHeaders() const;
 	void WaitFor(int ms);
 	void Wake();
-	void Moderate(const ModerationAction &action, const std::string &channelId);
-	void CheckViewers(const std::string &channelId);
+	void Moderate(const ModerationAction &action, const std::string &channelId, HttpClient &http);
+	void CheckViewers(const std::string &channelId, HttpClient &http);
 	void Notice(const std::string &text);
+	void EventNotice(const std::string &text);
 	void SetState(LinkState state);
 
 	std::string channel_;

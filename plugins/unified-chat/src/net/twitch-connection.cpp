@@ -19,7 +19,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "twitch-connection.hpp"
 #include "net/account-store.hpp"
 #include "net/curl-http-client.hpp"
-#include "net/eventsub-socket.hpp"
+#include "net/eventsub-client.hpp"
 #include "net/socket-wait.hpp"
 #include "core/eventsub.hpp"
 #include "core/text-util.hpp"
@@ -49,7 +49,6 @@ static constexpr auto kStaleConnection = std::chrono::minutes(6);
 static constexpr auto kValidateInterval = std::chrono::hours(1);
 static constexpr int kMaxBackoffMs = 60000;
 static constexpr int kMaxReadsPerDrain = 32; // 16 KB each; a flood can't hold up outgoing messages
-static constexpr auto kReconnectWindow = std::chrono::seconds(15); // for the new socket's welcome
 static constexpr size_t kMaxSentIds = 16;
 
 static int64_t UnixNow()
@@ -127,7 +126,7 @@ void TwitchConnection::Moderate(ModerationAction action)
 	Wake();
 }
 
-void TwitchConnection::Moderate(const ModerationAction &action, const std::string &channelId)
+void TwitchConnection::Moderate(const ModerationAction &action, const std::string &channelId, HttpClient &http)
 {
 	// Runs on the connection thread; a Helix call takes a fraction of a second and moderation is rare.
 	if (!token_.IsValid()) {
@@ -145,7 +144,6 @@ void TwitchConnection::Moderate(const ModerationAction &action, const std::strin
 		return;
 	}
 
-	CurlHttpClient http(&stop_);
 	auto perform = [&]() {
 		std::vector<std::string> headers{"Authorization: Bearer " + token_.accessToken,
 						 "Client-Id: " + clientId_};
@@ -170,15 +168,20 @@ void TwitchConnection::Moderate(const ModerationAction &action, const std::strin
 		Notice(action.userName + " was unbanned");
 }
 
-void TwitchConnection::CheckViewers(const std::string &channelId)
+void TwitchConnection::CheckViewers(const std::string &channelId, HttpClient &http)
 {
-	CurlHttpClient http(&stop_);
 	auto res = http.Get("https://api.twitch.tv/helix/streams?user_id=" + UrlEncode(channelId),
 			    {"Authorization: Bearer " + token_.accessToken, "Client-Id: " + clientId_});
 	if (!res.Ok())
 		return; // try again at the next check; a count isn't worth a notice
 	if (auto viewers = twitch::ParseStreamViewerCount(res.body); viewers && callbacks_.onViewers)
 		callbacks_.onViewers(*viewers);
+}
+
+void TwitchConnection::EventNotice(const std::string &text)
+{
+	if (callbacks_.onEventNotice)
+		callbacks_.onEventNotice("Twitch: " + text);
 }
 
 void TwitchConnection::Notice(const std::string &text)
@@ -277,6 +280,7 @@ void TwitchConnection::RunSession(void *handle)
 	std::random_device random;
 	twitch::IrcSession session(channel_, login_, token_.accessToken, 10000 + random() % 90000);
 	twitch::LineBuffer buffer;
+	CurlHttpClient http(&stop_, "Twitch chat API"); // for moderation and viewer counts, one reused connection
 
 	for (const auto &line : session.Start()) {
 		if (!SendLine(curl, sock, line))
@@ -297,7 +301,7 @@ void TwitchConnection::RunSession(void *handle)
 			actions.swap(moderation_);
 		}
 		for (const auto &action : actions)
-			Moderate(action, session.ChannelId());
+			Moderate(action, session.ChannelId(), http);
 		for (const auto &outgoing : pending) {
 			auto failed = [&]() {
 				if (callbacks_.onSendFailed)
@@ -357,7 +361,8 @@ void TwitchConnection::RunSession(void *handle)
 					SendLine(curl, sock, reply);
 				for (auto &message : out.messages)
 					batch.push_back(std::move(message));
-				if (!out.notices.empty() || !out.moderation.empty() || out.authFailed || out.reconnect)
+				if (!out.notices.empty() || !out.eventNotices.empty() || !out.moderation.empty() ||
+				    out.authFailed || out.reconnect)
 					flush();
 				for (auto &event : out.moderation) {
 					if (callbacks_.onModeration)
@@ -367,6 +372,8 @@ void TwitchConnection::RunSession(void *handle)
 					callbacks_.onChannelId(out.channelId);
 				for (const auto &notice : out.notices)
 					Notice(notice);
+				for (const auto &notice : out.eventNotices)
+					EventNotice(notice);
 				if (out.authFailed) {
 					bool rejected = false;
 					if (!RefreshToken(&rejected) && !rejected) {
@@ -403,12 +410,17 @@ void TwitchConnection::RunSession(void *handle)
 					     session.IsJoined() && !session.ChannelId().empty();
 		if (canCountViewers && now >= nextViewerCheck) {
 			nextViewerCheck = now + viewerCheckInterval_;
-			CheckViewers(session.ChannelId());
+			CheckViewers(session.ChannelId(), http);
 		}
 		if (token_.IsValid() && now - lastValidate > kValidateInterval) {
 			lastValidate = now;
 			if (!ValidateToken(true))
 				return;
+			if (EventSubReady()) {
+				// E.g. OBS started offline, so the first check couldn't tell what the sign-in allows.
+				Notice("moving chat to EventSub");
+				return;
+			}
 		}
 
 		// Still more to read (a flood): loop straight back so queued sends go out, without blocking.
@@ -548,10 +560,14 @@ void TwitchConnection::HandleNotification(const eventsub::Message &message, std:
 		return;
 	}
 	if (message.subscriptionType == "channel.chat.notification") {
-		// Subs, gifts, raids: notices, as IRC showed them.
+		// Subs, gifts, raids: notices, as IRC showed them. Each recipient of a gift bomb is left out: the gift
+		// bomb's own notice says it all, and 100 lines would mean 100 relayouts.
+		if (eventsub::StringAt(message.event, {"notice_type"}) == "sub_gift" &&
+		    !eventsub::StringAt(message.event, {"sub_gift", "community_gift_id"}).empty())
+			return;
 		if (std::string text = twitch::NotificationText(message.event); !text.empty()) {
 			flush();
-			Notice(text);
+			EventNotice(text);
 		}
 		return;
 	}
@@ -612,83 +628,37 @@ bool TwitchConnection::RunEventSub()
 	if (broadcasterId_.empty() && !LookUpUsers(http))
 		return false;
 
-	auto socket = std::make_unique<EventSubSocket>(&stop_);
-	std::string error;
-	if (!socket->Open(eventsub::kUrl, error)) {
-		if (!stop_)
-			Notice("connection failed: " + error);
-		return false;
-	}
-
-	// A server-requested reconnect: the new socket keeps the subscriptions, and the old one is read until the new
-	// one says welcome.
-	std::unique_ptr<EventSubSocket> successor;
-	bool successorWelcomed = false;
-	auto successorDeadline = Clock::now();
-
-	auto lastReceive = Clock::now();
-	auto keepalive = std::chrono::seconds(eventsub::kKeepaliveSeconds);
 	auto lastValidate = Clock::now();
 	auto nextViewerCheck = Clock::now();
 	bool subscribed = false;
 	bool revoked = false;
-
-	// Reads everything waiting on one socket; false when it closed (or must be given up).
 	std::vector<ChatMessage> batch;
-	auto drain = [&](EventSubSocket &from, bool isSuccessor) {
-		std::string text;
-		for (;;) {
-			auto read = from.Next(text);
-			if (read == EventSubSocket::Read::Again)
-				return true;
-			if (read == EventSubSocket::Read::Closed)
-				return false;
-			lastReceive = Clock::now();
-			auto message = eventsub::ParseMessage(text);
-			if (!message)
-				continue;
-			switch (message->type) {
-			case eventsub::Message::Type::Welcome:
-				if (message->keepaliveSeconds > 0)
-					keepalive = std::chrono::seconds(message->keepaliveSeconds);
-				if (isSuccessor) {
-					successorWelcomed = true;
-				} else if (!subscribed) {
-					if (!SubscribeChat(http, message->sessionId))
-						return false;
-					subscribed = true;
-					SetState(LinkState::Connected);
-					Notice("joined #" + twitch::NormalizeChannel(channel_) + " (EventSub)");
-				}
-				break;
-			case eventsub::Message::Type::Notification:
-				HandleNotification(*message, batch);
-				break;
-			case eventsub::Message::Type::Reconnect:
-				if (!isSuccessor && !successor && !message->reconnectUrl.empty()) {
-					obs_log(LOG_INFO, "Twitch: EventSub asked to move to a new connection");
-					successor = std::make_unique<EventSubSocket>(&stop_);
-					successorWelcomed = false;
-					successorDeadline = Clock::now() + kReconnectWindow;
-					if (!successor->Open(message->reconnectUrl, error)) {
-						obs_log(LOG_WARNING, "Twitch: EventSub new connection failed: %s",
-							error.c_str());
-						successor.reset(); // the old socket closes soon; then a fresh start
-					}
-				}
-				break;
-			case eventsub::Message::Type::Revocation:
-				Notice("Twitch stopped sending " + message->subscriptionType + " (" + message->status +
-				       ")");
-				revoked = true;
-				return false;
-			default:
-				break;
-			}
-		}
-	};
 
-	while (!stop_) {
+	EventSubHandlers handlers;
+	handlers.logName = "Twitch chat";
+	handlers.subscribe = [&](const std::string &sessionId) {
+		if (!SubscribeChat(http, sessionId))
+			return false;
+		subscribed = true;
+		SetState(LinkState::Connected);
+		Notice("joined #" + twitch::NormalizeChannel(channel_) + " (EventSub)");
+		return true;
+	};
+	handlers.notification = [&](const eventsub::Message &message) {
+		HandleNotification(message, batch);
+	};
+	handlers.revocation = [&](const eventsub::Message &message) {
+		Notice("Twitch stopped sending " + message.subscriptionType + " (" + message.status + ")");
+		revoked = true;
+		return true;
+	};
+	handlers.afterRead = [&]() {
+		if (!batch.empty() && callbacks_.onMessages)
+			callbacks_.onMessages(std::move(batch));
+		batch.clear();
+	};
+	const bool countViewers = viewerCheckInterval_.count() > 0;
+	handlers.work = [&]() {
 		std::deque<OutgoingMessage> pending;
 		std::deque<ModerationAction> actions;
 		{
@@ -697,7 +667,7 @@ bool TwitchConnection::RunEventSub()
 			actions.swap(moderation_);
 		}
 		for (const auto &action : actions)
-			Moderate(action, broadcasterId_);
+			Moderate(action, broadcasterId_, http);
 		for (const auto &outgoing : pending) {
 			if (!subscribed) {
 				Notice("not joined yet, message not sent");
@@ -707,55 +677,45 @@ bool TwitchConnection::RunEventSub()
 			}
 			SendViaApi(http, outgoing);
 		}
-
-		const bool open = drain(*socket, false);
-		if (successor && !drain(*successor, true))
-			successor.reset();
-		if (!batch.empty() && callbacks_.onMessages)
-			callbacks_.onMessages(std::move(batch));
-		batch.clear();
-		if (successor && successorWelcomed) {
-			socket = std::move(successor); // the old one was read to the end above
-			successorWelcomed = false;
-			obs_log(LOG_INFO, "Twitch: EventSub moved to the new connection");
-		} else if (!open) {
-			if (revoked)
-				return false;
-			if (!stop_)
-				Notice(subscribed ? "disconnected" : "couldn't start chat");
-			return subscribed;
-		}
-
-		auto now = Clock::now();
-		if (successor && now > successorDeadline) {
-			obs_log(LOG_WARNING, "Twitch: EventSub new connection sent no welcome in time");
-			successor.reset();
-		}
-		// Twitch sends something at least every keepalive interval; silence past it means a dead connection.
-		if (now > lastReceive + keepalive + std::chrono::seconds(10)) {
-			Notice("connection timed out");
-			return subscribed;
-		}
-		const bool countViewers = subscribed && viewerCheckInterval_.count() > 0;
-		if (countViewers && now >= nextViewerCheck) {
+		const auto now = Clock::now();
+		if (subscribed && countViewers && now >= nextViewerCheck) {
 			nextViewerCheck = now + viewerCheckInterval_;
-			CheckViewers(broadcasterId_);
+			CheckViewers(broadcasterId_, http);
 		}
 		if (now - lastValidate > kValidateInterval) {
 			lastValidate = now;
 			if (!ValidateToken(true) || !EventSubReady())
-				return true; // reconnects as whatever the sign-in now allows
+				return false; // reconnects as whatever the sign-in now allows
 		}
+		return true;
+	};
+	handlers.nextDue = [&]() {
+		auto due = lastValidate + kValidateInterval;
+		if (subscribed && countViewers)
+			due = (std::min)(due, nextViewerCheck);
+		return due;
+	};
 
-		auto due = (std::min)({lastReceive + keepalive + std::chrono::seconds(11),
-				       lastValidate + kValidateInterval,
-				       countViewers ? nextViewerCheck : (Clock::time_point::max)()});
-		auto waitMs = std::chrono::duration_cast<std::chrono::milliseconds>(due - Clock::now()).count() + 1;
-		if (successor)
-			waitMs = (std::min)(waitMs, 100LL); // two sockets for a few seconds: check both often
-		socket->Wait(wakeEvent_, (int)std::clamp<long long>(waitMs, 0, 60 * 60 * 1000));
+	const EventSubResult result = unified_chat::RunEventSub(eventsub::kUrl, stop_, wakeEvent_, handlers);
+	if (stop_)
+		return true;
+	switch (result.end) {
+	case EventSubResult::End::ConnectFailed:
+		Notice("connection failed: " + result.error);
+		return false;
+	case EventSubResult::End::SubscribeFailed:
+		Notice("couldn't start chat");
+		return false;
+	case EventSubResult::End::TimedOut:
+		Notice("connection timed out");
+		break;
+	case EventSubResult::End::Closed:
+		Notice(subscribed ? "disconnected" : "couldn't start chat");
+		break;
+	default:
+		break;
 	}
-	return true;
+	return result.subscribed && !revoked;
 }
 
 bool TwitchConnection::RunIrc()

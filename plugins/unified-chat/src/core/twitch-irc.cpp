@@ -294,7 +294,7 @@ void IrcSession::HandleLine(std::string_view line, SessionOutput &out)
 		if (msg.params.size() >= 2 && !msg.params[1].empty())
 			notice += notice.empty() ? msg.params[1] : " - " + msg.params[1];
 		if (!notice.empty())
-			out.notices.push_back(std::move(notice));
+			out.eventNotices.push_back(std::move(notice));
 	} else if (msg.command == "NOTICE") {
 		std::string text = msg.params.empty() ? std::string() : msg.params.back();
 		if (text.find("Login authentication failed") != std::string::npos ||

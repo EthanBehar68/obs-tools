@@ -20,6 +20,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include "core/accounts.hpp"
 #include "core/alert-queue.hpp"
+#include "core/eventsub.hpp"
 #include "core/platform-events.hpp"
 
 #include <atomic>
@@ -78,12 +79,12 @@ public:
 	~TwitchListener() override;
 
 private:
-	enum class Outcome { Ok, Retry, Reconnect, Stop };
+	enum class Outcome { Ok, Retry, Stop };
 	void Run() override;
 	Outcome Authorize(std::string &userId);
-	Outcome Session(const std::string &url, bool resumed, const std::string &userId, std::string &reconnectUrl);
+	Outcome Session(const std::string &userId);
 	Outcome Subscribe(const std::string &sessionId, const std::string &userId);
-	void Handle(const std::string &subscriptionType, const nlohmann::json &event);
+	void Handle(const unified_chat::eventsub::Message &message);
 
 	TwitchWants wants_;   // what the user turned on
 	TwitchWants allowed_; // of that, what the sign-in allows

@@ -67,3 +67,92 @@ TEST_CASE("A subscription request names the type, condition and WebSocket sessio
 	CHECK(body["transport"]["method"] == "websocket");
 	CHECK(body["transport"]["session_id"] == "s1");
 }
+
+namespace {
+
+using Clock = Session::Clock;
+
+std::string Welcome(const char *id, const char *sessionId, int keepalive = 60)
+{
+	return std::string(R"({"metadata":{"message_id":")") + id +
+	       R"(","message_type":"session_welcome"},"payload":{"session":{"id":")" + sessionId +
+	       R"(","keepalive_timeout_seconds":)" + std::to_string(keepalive) + "}}}";
+}
+
+std::string Notification(const char *id, const char *type = "channel.follow")
+{
+	return std::string(R"({"metadata":{"message_id":")") + id +
+	       R"(","message_type":"notification","subscription_type":")" + type +
+	       R"("},"payload":{"event":{"user_id":"1"}}})";
+}
+
+std::string Reconnect(const char *id, const char *url)
+{
+	return std::string(R"({"metadata":{"message_id":")") + id +
+	       R"(","message_type":"session_reconnect"},"payload":{"session":{"reconnect_url":")" + url + R"("}}})";
+}
+
+} // namespace
+
+TEST_CASE("A session subscribes once, on the first welcome")
+{
+	const auto t0 = Clock::now();
+	Session session(t0);
+	CHECK_FALSE(session.Welcomed());
+	auto step = session.Handle(Welcome("w1", "s1", 30), false, t0);
+	CHECK(step.subscribe == "s1");
+	CHECK(session.Welcomed());
+	CHECK(session.Deadline() == t0 + std::chrono::seconds(40)); // keepalive 30 s, plus 10 s of slack
+	CHECK(session.Handle(Welcome("w2", "s1"), false, t0).subscribe.empty());
+}
+
+TEST_CASE("Every message moves the deadline; a resent message is dropped")
+{
+	const auto t0 = Clock::now();
+	Session session(t0);
+	session.Handle(Welcome("w1", "s1"), false, t0);
+	auto first = session.Handle(Notification("n1"), false, t0 + std::chrono::seconds(5));
+	REQUIRE(first.notification);
+	CHECK(first.notification->subscriptionType == "channel.follow");
+	CHECK(first.notification->messageId == "n1");
+	auto again = session.Handle(Notification("n1"), false, t0 + std::chrono::seconds(20));
+	CHECK_FALSE(again.notification);                            // at-least-once delivery: the same message_id twice
+	CHECK(session.Deadline() == t0 + std::chrono::seconds(90)); // a resend still shows the socket is alive
+	CHECK(session.Handle(Notification("n2"), false, t0).notification);
+	CHECK_FALSE(session.Handle("not json", false, t0).notification);
+}
+
+TEST_CASE("A reconnect opens a second socket, whose welcome takes over without resubscribing")
+{
+	const auto t0 = Clock::now();
+	Session session(t0);
+	session.Handle(Welcome("w1", "s1"), false, t0);
+	auto reconnect = session.Handle(Reconnect("r1", "wss://eventsub.wss.twitch.tv?id=2"), false, t0);
+	CHECK(reconnect.reconnectTo == "wss://eventsub.wss.twitch.tv?id=2");
+	CHECK(session.Reconnecting());
+	CHECK(session.ReconnectDeadline() == t0 + Session::kReconnectWindow);
+	// Still on the old socket meanwhile: its notifications count.
+	CHECK(session.Handle(Notification("n1"), false, t0).notification);
+	// The same notification on the new socket isn't delivered twice.
+	CHECK_FALSE(session.Handle(Notification("n1"), true, t0).notification);
+	auto welcome = session.Handle(Welcome("w2", "s2"), true, t0);
+	CHECK(welcome.promote);
+	CHECK(welcome.subscribe.empty()); // the subscriptions moved with the session
+	CHECK_FALSE(session.Reconnecting());
+	// A second reconnect request while one is under way is ignored; after giving up, a new one starts.
+	session.Handle(Reconnect("r2", "wss://a"), false, t0);
+	CHECK(session.Handle(Reconnect("r3", "wss://b"), false, t0).reconnectTo.empty());
+	session.AbandonReconnect();
+	CHECK(session.Handle(Reconnect("r4", "wss://c"), false, t0).reconnectTo == "wss://c");
+}
+
+TEST_CASE("A revocation is reported")
+{
+	const auto t0 = Clock::now();
+	Session session(t0);
+	auto step = session.Handle(R"({"metadata":{"message_id":"x","message_type":"revocation",
+		"subscription_type":"channel.cheer"},"payload":{"subscription":{"status":"authorization_revoked"}}})",
+				   false, t0);
+	REQUIRE(step.revocation);
+	CHECK(step.revocation->status == "authorization_revoked");
+}

@@ -207,11 +207,21 @@ static bool operator!=(const TwitchWants &a, const TwitchWants &b)
 void AlertsController::ApplyConfig(const AlertsConfig &config, bool save)
 {
 	const TwitchWants before = Wants();
+	const bool minimumsRaised = config.minBits > config_.minBits || config.minRaidViewers > config_.minRaidViewers;
 	const bool subscriberChanged = config.subscriber.enabled != config_.subscriber.enabled ||
 				       config.subscriberCheckSeconds != config_.subscriberCheckSeconds;
 	config_ = config;
 	if (save)
 		SaveConfig();
+	if (minimumsRaised) {
+		// Waiting cheers and raids below the new minimum won't play after all.
+		const size_t dropped = queue_.RemoveIf([this](const Alert &alert) {
+			return (alert.kind == AlertKind::Cheer && alert.event.count < config_.minBits) ||
+			       (alert.kind == AlertKind::Raid && alert.event.viewers < config_.minRaidViewers);
+		});
+		if (dropped > 0)
+			obs_log(LOG_INFO, "%zu waiting cheers or raids dropped: below the new minimum", dropped);
+	}
 	const bool twitchChanged = Wants() != before;
 	if (streaming_ && (twitchChanged || subscriberChanged))
 		StartListeners(twitchChanged, subscriberChanged);

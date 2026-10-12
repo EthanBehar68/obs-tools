@@ -25,6 +25,8 @@ namespace stream_alerts {
 bool AlertQueue::Push(const AlertEvent &event)
 {
 	if (IsPriority(event.kind)) {
+		if (!event.id.empty() && !seen_.insert(std::to_string((int)event.kind) + ":" + event.id).second)
+			return false; // the same event again
 		// Ahead of the first waiting follow or subscriber, behind other priority alerts.
 		auto at = std::find_if(queue_.begin(), queue_.end(),
 				       [](const Alert &alert) { return !IsPriority(alert.kind); });
@@ -58,6 +60,22 @@ std::optional<Alert> AlertQueue::Pop()
 	if (!alert.combined && !IsPriority(alert.kind))
 		--individual_;
 	return alert;
+}
+
+size_t AlertQueue::RemoveIf(const std::function<bool(const Alert &)> &match)
+{
+	size_t removed = 0;
+	for (auto it = queue_.begin(); it != queue_.end();) {
+		if (it->combined || !match(*it)) {
+			++it;
+			continue;
+		}
+		if (!IsPriority(it->kind))
+			--individual_;
+		it = queue_.erase(it);
+		++removed;
+	}
+	return removed;
 }
 
 void AlertQueue::Reset()

@@ -21,6 +21,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <cstddef>
 #include <cstdint>
 #include <deque>
+#include <functional>
 #include <optional>
 #include <string>
 #include <unordered_set>
@@ -56,7 +57,9 @@ inline bool IsPriority(AlertKind kind)
 
 struct AlertEvent {
 	AlertKind kind = AlertKind::Follow;
-	std::string id;   // the platform's user / channel id: one follow / subscriber alert per person per stream
+	// Follow / Subscriber: the person's user / channel id (one alert per person per stream). Other kinds: the
+	// event's own message id, so a resent event doesn't play twice; empty = not checked.
+	std::string id;
 	std::string name; // display name
 	// Details for the message placeholders; new fields go at the end (positional initialization).
 	bool variant = false; // TwitchSub: a resub; Member: a milestone
@@ -77,8 +80,9 @@ struct Alert {
 
 // Alerts wait here and play one at a time. Up to kMaxQueued individual follow / subscriber alerts wait; past that,
 // a kind's further events join one combined alert at the end ("+14 more new followers!"), so a follow-bot flood
-// doesn't take over the screen for half an hour, and nobody is dropped. Priority alerts (IsPriority) are never
-// combined or limited, repeat for the same person, and go ahead of waiting follows and subscribers.
+// doesn't take over the screen for half an hour, and nobody is dropped. Priority alerts (IsPriority: someone paid,
+// or a raid) are never skipped, combined or limited, and go ahead of waiting follows and subscribers; only the same
+// event arriving twice is dropped.
 class AlertQueue {
 public:
 	static constexpr size_t kMaxQueued = 10;
@@ -90,6 +94,8 @@ public:
 	size_t Size() const { return queue_.size(); }
 	// A new stream: waiting alerts are dropped and everyone may alert again.
 	void Reset();
+	// Drops waiting single alerts that match, e.g. cheers below a minimum the user just raised. The number dropped.
+	size_t RemoveIf(const std::function<bool(const Alert &)> &match);
 
 private:
 	std::deque<Alert> queue_;

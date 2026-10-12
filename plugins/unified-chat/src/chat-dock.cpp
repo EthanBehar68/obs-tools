@@ -345,6 +345,10 @@ ConnectionCallbacks ChatDock::MakeCallbacks(Platform platform)
 		QString qtext = QString::fromStdString(text);
 		QMetaObject::invokeMethod(this, [this, qtext]() { AppendNotice(qtext); }, Qt::QueuedConnection);
 	};
+	callbacks.onEventNotice = [this](const std::string &text) {
+		QString qtext = QString::fromStdString(text);
+		QMetaObject::invokeMethod(this, [this, qtext]() { AppendNotice(qtext); }, Qt::QueuedConnection);
+	};
 	callbacks.onState = [this, platform](LinkState state) {
 		QMetaObject::invokeMethod(
 			this, [this, platform, state]() { SetLinkState(platform, state); }, Qt::QueuedConnection);
