@@ -106,7 +106,7 @@ If YouTube goes live some other way (another app, or a multistream output with a
   - **Messages that mention you** (your Twitch login or YouTube name) get a tinted background.
 - **Emotes and badges (Twitch):**
   - Emotes show as pictures: Twitch's own emotes, plus your channel's and the global **BTTV, FFZ and 7TV** emotes. Animated emotes show their first frame, which keeps the dock light during streams.
-  - Role badges (broadcaster, moderator, VIP, subscriber/founder) appear before the name. They need a Twitch sign-in; read-only chat shows none.
+  - Role badges (broadcaster, moderator, VIP, subscriber/founder) appear before the name, followed by Twitch's **Watching without audio** (muted speaker) or **Listening only** badge when the viewer has chosen one, so you know they can't hear or see the stream. They need a Twitch sign-in; read-only chat shows none.
   - Images download once per session in the background. A line appears at once with the right spacing and the picture fills in a moment later.
   - Your own sent messages show at once and fill in Twitch's emotes, your badges and colour a moment later, when Twitch's copy arrives (EventSub). Over IRC, Twitch's own emotes in your messages stay as words, because IRC doesn't send your message back.
 - **Moderate from the dock:** right-click someone's line for **Delete message**, **Timeout** (1 minute, 10 minutes, 1 hour, 24 hours or Custom…), **Ban…** (with an optional reason on Twitch) and, on lines already marked timed out or banned, **Unban**. Every action asks first. You must be the broadcaster or a moderator of that chat.

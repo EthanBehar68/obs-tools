@@ -80,8 +80,9 @@ std::vector<MessageSegment> SplitMessage(std::string_view text, const std::vecto
 std::string EmoteImageKey(const Emote &emote);
 std::string EmoteImageUrl(const Emote &emote, bool hiDpi);
 
-// Twitch "badges" tag -> the role badges to show (broadcaster, moderator, VIP, founder / subscriber), in that
-// order; other badges are dropped.
+// Twitch "badges" tag -> the badges to show, in this order: roles (broadcaster, moderator, VIP, founder /
+// subscriber), then "Watching without audio" / "Listening only" (no_audio / no_video, which viewers pick in
+// Twitch's Chat Identity). Other badges are dropped.
 std::vector<Badge> ParseRoleBadges(std::string_view tag);
 // Helix Get Global / Channel Chat Badges -> "set/version" -> image URL (1x, or 2x for high-DPI).
 std::unordered_map<std::string, std::string> ParseBadgeImages(const std::string &json, bool hiDpi);

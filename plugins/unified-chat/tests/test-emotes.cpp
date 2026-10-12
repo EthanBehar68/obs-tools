@@ -144,6 +144,13 @@ TEST_CASE("Role badges only, in a fixed order; founder replaces subscriber")
 
 	CHECK(ParseRoleBadges("broadcaster/1").at(0).set == "broadcaster");
 	CHECK(ParseRoleBadges("").empty());
+
+	// The viewer's chosen "Watching without audio" / "Listening only" badge comes after the roles.
+	auto noAudio = ParseRoleBadges("no_audio/1,moderator/1");
+	REQUIRE(noAudio.size() == 2);
+	CHECK(noAudio[0].set == "moderator");
+	CHECK(noAudio[1].set == "no_audio");
+	CHECK(ParseRoleBadges("no_video/1").at(0).set == "no_video");
 	CHECK(BadgeImageKey({"subscriber", "12"}) == "unified-chat://badge/subscriber/12");
 }
 

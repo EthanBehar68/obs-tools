@@ -8,6 +8,7 @@
 - **A message Twitch refuses says why** (e.g. a duplicate message, or follower-only mode) instead of quietly not appearing.
 - **Twitch subs, gifts, raids and announcements** show as notices, as they did over IRC.
 - **YouTube Super Chats, Super Stickers and memberships** are passed on to Stream Alerts, which can now alert on them.
+- **Twitch's Watching without audio and Listening only badges** show after the role badges, so you can tell who can't hear or see the stream (Legend rows included).
 - **Settings → General → Check viewer counts every:** 1 to 60 minutes, or Off (5 minutes by default).
 - **YouTube quota numbers corrected** to Google's current table: a poll costs 5 units, a sent message 20, a deleted message 20, a ban, timeout or unban 200 (the moderation confirmation shows the right number).
 - **In your own channel, timeouts and bans keep their tags** (*(timed out 10 minutes)*, *(banned)*). In someone else's channel Twitch doesn't say which, so those lines get *(removed)*.

@@ -97,6 +97,8 @@ static QWidget *MakeLegend(QWidget *parent)
 	addRow(image(PlatformImage(Platform::YouTube, size, dpr)), "Legend.YouTube");
 	addRow(image(SelfBadgeImage(size, dpr)), "Legend.Self");
 	addRow(html(grey(QStringLiteral("badges"))), "Legend.Badges");
+	addRow(html(grey(QStringLiteral("\U0001F507"))), "Legend.NoAudio");
+	addRow(html(grey(QStringLiteral("<s>\U0001F441</s>"))), "Legend.NoVideo");
 	addRow(html(grey(QStringLiteral("emotes"))), "Legend.Emotes");
 	addRow(html(QStringLiteral("<b>name</b>")), "Legend.Name");
 	addRow(html(grey(QStringLiteral("→ @name"))), "Legend.Reply");

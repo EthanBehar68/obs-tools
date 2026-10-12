@@ -329,7 +329,8 @@ std::string EmoteImageUrl(const Emote &emote, bool hiDpi)
 
 std::vector<Badge> ParseRoleBadges(std::string_view tag)
 {
-	static const char *const kOrder[] = {"broadcaster", "moderator", "vip", "founder", "subscriber"};
+	static const char *const kOrder[] = {"broadcaster", "moderator", "vip",     "founder",
+					     "subscriber",  "no_audio",  "no_video"};
 	std::vector<Badge> all;
 	while (!tag.empty()) {
 		auto comma = tag.find(',');
