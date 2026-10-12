@@ -221,19 +221,24 @@ TEST_CASE("Moderation tags and notices")
 	CHECK(TagFor(clear).severity == TagFor(deleted).severity);
 }
 
-TEST_CASE("Follows and subscribers from Stream Alerts get a starred line in the platform's colour")
+TEST_CASE("Event lines: platform icon, emoji, what happened in bold, the comment in the same colour")
 {
-	const std::string follow = FormatAlertHtml(Platform::Twitch, "<Cool_User>", false, 16);
-	CHECK(follow.find(kTwitchIconResource) != std::string::npos);
-	CHECK(follow.find("\xE2\x98\x85 &lt;Cool_User&gt; followed") !=
-	      std::string::npos); // the star, then the escaped name
-	CHECK(follow.find("#a970ff") != std::string::npos);
-	CHECK(follow.find("(test)") == std::string::npos);
+	int length = -1;
+	const std::string cheer =
+		FormatEventHtml({Platform::Twitch, HighlightKind::Cheer, "<Fan> cheered 500 bits", "love it"},
+				"\U0001F48E", "#ffcc00", 16, &length);
+	CHECK(cheer.find(kTwitchIconResource) != std::string::npos);
+	CHECK(cheer.find("\U0001F48E <b style=\"color: #ffcc00;\">&lt;Fan&gt; cheered 500 bits</b>") !=
+	      std::string::npos);
+	CHECK(cheer.find("color: #ffcc00; white-space: pre-wrap;\"> \u2014 love it</span>") != std::string::npos);
+	CHECK(length == 7);
 
-	const std::string sub = FormatAlertHtml(Platform::YouTube, "Jane", true, 16);
-	CHECK(sub.find(kYouTubeIconResource) != std::string::npos);
-	CHECK(sub.find("Jane subscribed") != std::string::npos);
-	CHECK(sub.find("(test)") != std::string::npos);
+	const std::string follow = FormatEventHtml(
+		{Platform::YouTube, HighlightKind::Subscriber, "Jane subscribed", ""}, "", "bad", 16, &length);
+	CHECK(follow.find(kYouTubeIconResource) != std::string::npos);
+	CHECK(follow.find("\u2014") == std::string::npos);  // no comment, no dash
+	CHECK(follow.find("#e8a317") != std::string::npos); // an unreadable colour falls back to the default
+	CHECK(length == 0);
 }
 
 TEST_CASE("FormatNoticeHtml escapes")

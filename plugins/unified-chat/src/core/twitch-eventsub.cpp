@@ -88,6 +88,12 @@ std::optional<ChatMessage> ChatMessageFromEvent(const json &event, std::string_v
 	chat.authorId = StringAt(event, {"chatter_user_id"});
 	chat.color = SanitizeColor(StringAt(event, {"color"}));
 	chat.isSelf = !selfUserId.empty() && chat.authorId == selfUserId;
+	chat.firstMessage = StringAt(event, {"message_type"}) == "user_intro"; // Twitch's first-time chatter prompt
+	if (auto cheer = event.find("cheer"); cheer != event.end() && cheer->is_object()) {
+		auto bits = cheer->find("bits");
+		if (bits != cheer->end() && bits->is_number_integer())
+			chat.bits = bits->get<int64_t>();
+	}
 
 	// Fragments are the text in order, with emotes marked: their ranges in code points, like the IRC tag.
 	const json *fragments = nullptr;
@@ -186,6 +192,26 @@ std::string NotificationText(const json &event)
 	if (!message.empty())
 		text += text.empty() ? message : " - " + message;
 	return text;
+}
+
+std::optional<ChatEvent> NotificationEvent(const json &event)
+{
+	const std::string type = StringAt(event, {"notice_type"});
+	ChatEvent chat;
+	chat.platform = Platform::Twitch;
+	if (type == "sub" || type == "resub")
+		chat.kind = HighlightKind::TwitchSub;
+	else if (type == "sub_gift" || type == "community_sub_gift")
+		chat.kind = HighlightKind::GiftSubs;
+	else if (type == "raid")
+		chat.kind = HighlightKind::Raid;
+	else
+		return std::nullopt;
+	chat.text = StringAt(event, {"system_message"});
+	chat.comment = StringAt(event, {"message", "text"});
+	if (chat.text.empty())
+		return std::nullopt;
+	return chat;
 }
 
 std::optional<std::string> BuildSendChatBody(const std::string &broadcasterId, const std::string &senderId,

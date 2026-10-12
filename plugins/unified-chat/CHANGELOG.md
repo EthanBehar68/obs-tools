@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Highlights
+- **Alerts stand out in the chat:** follows, subs, gift subs, cheers, raids, YouTube subscribers, Super Chats and memberships are tinted lines with their own emoji, and the viewer's message is part of the same line. Twitch subs and raids used to be grey notices, and follows bold lines in the same purple as names.
+- **First-time chatters** are tinted and marked ✨, on Twitch and YouTube.
+- **Settings → Highlights:** show or hide each kind, pick its colour (text stays readable) and any emoji, with a live preview.
+- "Show follows and subscribers" is now **Show alerts in chat**.
+
 ### Twitch chat over EventSub
 - **Twitch chat now uses EventSub and the Twitch API**, the connection Twitch recommends over IRC. Sign in to Twitch again once (Tools → OBS Tools → Accounts… → Sign in) to allow it; until then, and whenever you're signed out, chat keeps using IRC. Settings → Twitch → Chat connection switches back to IRC if ever needed.
 - **Twitch's own emotes now show in your sent messages too:** your line appears at once and fills in emotes, badges and colour when Twitch's copy arrives.

@@ -104,6 +104,7 @@ If YouTube goes live some other way (another app, or a multistream output with a
   - With just `@` typed (no letter), **Tab** cycles through recent chatters instead.
   - Twitch replies from others show who they answer: `Viewer → @Dezad: welcome back`.
   - **Messages that mention you** (your Twitch login or YouTube name) get a tinted background.
+  - **First-time chatters** get a green tint and ✨ before their name. Twitch flags people who use its introduce-yourself prompt; for everyone else (and on YouTube, which never says) the dock remembers who has chatted with you before, in `plugin_config\obs-unified-chat\chatters.json`. It spends your first stream with this version learning your regulars, so nobody is marked during it.
 - **Emotes and badges (Twitch):**
   - Emotes show as pictures: Twitch's own emotes, plus your channel's and the global **BTTV, FFZ and 7TV** emotes. Animated emotes show their first frame, which keeps the dock light during streams.
   - Role badges (broadcaster, moderator, VIP, subscriber/founder) appear before the name, followed by Twitch's **Watching without audio** (muted speaker) or **Listening only** badge when the viewer has chosen one, so you know they can't hear or see the stream. They need a Twitch sign-in; read-only chat shows none.
@@ -121,8 +122,9 @@ If YouTube goes live some other way (another app, or a multistream output with a
 
   A line keeps its most serious tag (banned > timed out > deleted). Timeouts, bans and clears also add a grey notice at the bottom, e.g. *Twitch: trollguy was timed out for 10 minutes*. **Settings → Legend** explains every mark the dock uses.
 - **Clear** empties the view. **Messages to keep** in Settings caps how much history the dock holds (default 500).
-- System notices (connection changes, subscriptions and raids, errors) appear as grey italic lines.
-- **Follows and subscribers:** with the [Stream Alerts](../stream-alerts/README.md) plugin, each new Twitch follower and YouTube subscriber appears as a bold line in the platform's colour, e.g. **★ Cool_User followed** (test alerts are marked *(test)*). Everyone gets a line, including people a combined "+N more" alert covers. The lines are only in the dock, never sent to chat. Turn them off in **Settings → General → Show follows and subscribers**.
+- System notices (connection changes, errors) appear as grey italic lines.
+- **Alerts in the chat** stand out as tinted lines with their own emoji: Twitch follows, subs and resubs, gift subs, cheers and raids; YouTube subscribers, Super Chats and Stickers, memberships and gifted memberships. The viewer's own message (a resub message, a cheer or Super Chat comment) follows the dash in the same colour, e.g. **💎 Fan cheered 500 bits** — love the stream. Follows and YouTube subscribers need the [Stream Alerts](../stream-alerts/README.md) plugin; everyone gets a line, including people a combined "+N more" alert covers. The lines are only in the dock, never sent to chat. **Settings → General → Show alerts in chat** turns them all off.
+- **Settings → Highlights** sets, for each alert kind, first-time chatters and mentions: whether it's shown, its colour (the dock keeps the text readable on your theme), and its emoji (any emoji; **Win + .** opens the Windows emoji picker). A preview shows the result on your dock's background; **Reset** brings back a row's default.
 
 ## 5. Where settings are stored
 

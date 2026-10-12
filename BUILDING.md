@@ -74,7 +74,8 @@ Each library and plugin keeps its unit tests in its own `tests\` folder. They us
 | Twitch IRC parsing, tag unescaping, login/PING/RECONNECT state machine, `/me`, CRLF injection | `test-twitch-irc.cpp` |
 | Twitch EventSub chat events (messages, emote fragments, replies, deletions, clears, bans), chat subscriptions, Send Chat Message, echo updates | `test-twitch-eventsub.cpp` |
 | YouTube response parsing, video URL parsing, dedupe, and the full `ChatSession` against a scripted fake HTTP server (broadcast discovery, paging, token refresh, 401 retry, quota backoff, chat end, send + echo) | `test-youtube.cpp` |
-| Send routing (targets, length limits, partial delivery), HTML escaping of chat lines, config round trip, 1.2.0 sign-in migration | `test-router-format-config.cpp` |
+| Send routing (targets, length limits, partial delivery), HTML escaping of chat lines and event lines, config round trip, 1.2.0 sign-in migration | `test-router-format-config.cpp` |
+| Highlight defaults, readable styles for any colour, emoji limits, event lines, the chatter list | `test-highlights.cpp` |
 | **plugins\stream-alerts** (`stream-alerts-tests.exe`) | |
 | Alert queue (order, once per person per stream, combining past 10, priority alerts), message placeholders, config round trip and 0.1.0 configs | `test-alert-queue.cpp` |
 | Twitch subscriptions, follow / chat notification / cheer events, YouTube events to alerts, validate scopes, recent-subscriber baseline and new-subscriber detection | `test-platform-events.cpp` |
@@ -125,6 +126,9 @@ plugins\unified-chat\
 │   │   ├── chat-format.*     chat line -> escaped Qt rich text
 │   │   ├── name-color.*      readable name colors (WCAG contrast vs. the chat background), cached per color
 │   │   ├── echo-merger.*     your own Both message shown as one line
+│   │   ├── highlights.*      highlight kinds (alerts, first-time chatter, mention): defaults, readable tint + text
+│   │   │                     for any colour, event lines from cheers / Super Chats / memberships
+│   │   ├── chatter-log.*     who has chatted before (chatters.json), for first-time chatters
 │   │   ├── bot-merger.*      a bot's identical Twitch + YouTube lines folded into one (line shown first, icon added later)
 │   │   ├── mentions.*        clickable-name links, "mentions you" matching, recent chatters for @ + Tab completion
 │   │   ├── emotes.*          Twitch emote/badge tags, BTTV/FFZ/7TV lists, emote index, message splitting, image URLs

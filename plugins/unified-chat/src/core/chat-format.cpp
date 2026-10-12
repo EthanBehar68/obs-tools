@@ -43,7 +43,7 @@ std::string FormatMessageHtml(const ChatMessage &message, int iconSize)
 
 std::string FormatMessageHtml(const ChatMessage &message, int iconSize, const std::vector<Platform> &platforms,
 			      NameColorResolver *colors, const EmoteIndex *emotes, int emoteHeight,
-			      int *renderedTextLength)
+			      int *renderedTextLength, std::string_view nameIcon)
 {
 	std::string color = SanitizeColor(message.color);
 	if (color.empty())
@@ -61,6 +61,8 @@ std::string FormatMessageHtml(const ChatMessage &message, int iconSize, const st
 	for (const auto &badge : message.badges)
 		html += "<img src=\"" + HtmlEscape(BadgeImageKey(badge)) + "\" title=\"" + HtmlEscape(badge.set) +
 			imageSize;
+	if (!nameIcon.empty())
+		html += HtmlEscape(nameIcon) + " "; // e.g. a first-time chatter's emoji
 	const std::string name =
 		"<span style=\"color: " + color + "; font-weight: bold;\">" + HtmlEscape(message.author) + "</span>";
 	// Other people's names are links: clicking one starts a mention (and on Twitch, a reply). The inner span
@@ -144,18 +146,22 @@ std::string FormatNoticeHtml(std::string_view text)
 	return "<span style=\"color: #9a9a9a; font-style: italic;\">" + HtmlEscape(text) + "</span>";
 }
 
-std::string FormatAlertHtml(Platform platform, std::string_view name, bool test, int iconSize,
-			    NameColorResolver *colors)
+std::string FormatEventHtml(const ChatEvent &event, std::string_view icon, std::string_view textColor, int iconSize,
+			    int *renderedTextLength)
 {
-	std::string color(DefaultNameColor(platform));
-	if (colors)
-		color = colors->Resolve(color);
 	const std::string size = std::to_string(iconSize);
-	std::string html = "<img src=\"" + std::string(IconResource(platform)) + "\" width=\"" + size + "\" height=\"" +
-			   size + "\" style=\"vertical-align: middle;\"> <b style=\"color: " + color + ";\">\u2605 " +
-			   HtmlEscape(name) + (platform == Platform::Twitch ? " followed" : " subscribed") + "</b>";
-	if (test)
-		html += " <i style=\"color: #9a9a9a;\">(test)</i>";
+	const std::string color = SanitizeColor(textColor).empty() ? std::string("#e8a317") : SanitizeColor(textColor);
+	std::string html = "<img src=\"" + std::string(IconResource(event.platform)) + "\" width=\"" + size +
+			   "\" height=\"" + size + "\" style=\"vertical-align: middle;\"> ";
+	if (!icon.empty())
+		html += HtmlEscape(icon) + " ";
+	html += "<b style=\"color: " + color + ";\">" + HtmlEscape(event.text) + "</b>";
+	// The viewer's words are part of the event: same colour, regular weight. Last, so a strike finds them.
+	if (!event.comment.empty())
+		html += "<span style=\"color: " + color + "; white-space: pre-wrap;\"> \u2014 " +
+			HtmlEscape(event.comment) + "</span>";
+	if (renderedTextLength)
+		*renderedTextLength = event.comment.empty() ? 0 : (int)Utf16Length(event.comment);
 	return html;
 }
 

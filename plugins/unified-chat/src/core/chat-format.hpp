@@ -21,6 +21,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "obs-tools.hpp"
 
 #include "chat-message.hpp"
+#include "highlights.hpp"
 
 #include <string>
 #include <string_view>
@@ -48,12 +49,13 @@ std::string FormatMessageHtml(const ChatMessage &message, int iconSize);
 // the document (UTF-16 units, one per emote image).
 std::string FormatMessageHtml(const ChatMessage &message, int iconSize, const std::vector<Platform> &platforms,
 			      NameColorResolver *colors = nullptr, const EmoteIndex *emotes = nullptr,
-			      int emoteHeight = 0, int *renderedTextLength = nullptr);
+			      int emoteHeight = 0, int *renderedTextLength = nullptr, std::string_view nameIcon = {});
 std::string FormatNoticeHtml(std::string_view text);
-// A follow (Twitch) or subscriber (YouTube) from Stream Alerts: the platform icon, then "★ name followed" in bold
-// in the platform's colour (made readable with colors); a test alert is marked "(test)".
-std::string FormatAlertHtml(Platform platform, std::string_view name, bool test, int iconSize,
-			    NameColorResolver *colors = nullptr);
+// An alert line (follow, sub, cheer, Super Chat...): the platform icon, the emoji, what happened in bold, then the
+// viewer's comment in the same colour. textColor comes from ComputeHighlightStyle. renderedTextLength receives the
+// comment's length (UTF-16 units), which ends the block, for moderation strikes.
+std::string FormatEventHtml(const ChatEvent &event, std::string_view icon, std::string_view textColor, int iconSize,
+			    int *renderedTextLength = nullptr);
 
 // How a line removed by a moderator is marked. A line keeps its most severe tag: banned > timed out >
 // deleted / chat cleared.

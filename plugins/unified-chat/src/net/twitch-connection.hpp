@@ -21,6 +21,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "core/obs-tools.hpp"
 
 #include "core/chat-message.hpp"
+#include "core/highlights.hpp"
 #include "core/moderation.hpp"
 #include "core/oauth-device.hpp"
 
@@ -59,6 +60,8 @@ struct ConnectionCallbacks {
 	// A sub, gift or raid notice, which carries viewers' own text: shown, but kept out of the OBS log (logs get
 	// shared when asking for help).
 	std::function<void(const std::string &)> onEventNotice;
+	// A sub, gift or raid as an event line (also not logged, for the same reason).
+	std::function<void(ChatEvent)> onChatEvent;
 	std::function<void(LinkState)> onState;
 	std::function<void(const oauth::Token &, const std::string &login)> onTokenChanged;
 	// A message queued with Send() could not be delivered (the reason is reported via onNotice).
@@ -113,6 +116,7 @@ private:
 	void CheckViewers(const std::string &channelId, HttpClient &http);
 	void Notice(const std::string &text);
 	void EventNotice(const std::string &text);
+	void Event(ChatEvent event);
 	void SetState(LinkState state);
 
 	std::string channel_;

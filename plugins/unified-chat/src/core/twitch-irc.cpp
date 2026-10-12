@@ -266,6 +266,9 @@ void IrcSession::HandleLine(std::string_view line, SessionOutput &out)
 			DropLeadingMention(chat.text, parentLogin, parentName);
 		}
 		chat.isSelf = msg.Nick() == nick_;
+		chat.firstMessage = msg.Tag("first-msg") == "1";
+		if (const auto &bits = msg.Tag("bits"); !bits.empty())
+			chat.bits = std::strtoll(bits.c_str(), nullptr, 10);
 		out.messages.push_back(std::move(chat));
 	} else if (msg.command == "CLEARMSG") {
 		ModerationEvent event;
@@ -294,9 +297,22 @@ void IrcSession::HandleLine(std::string_view line, SessionOutput &out)
 		// relayouts. msg-param-community-gift-id is undocumented; without it every line shows, as before.
 		if (msg.Tag("msg-id") == "subgift" && !msg.Tag("msg-param-community-gift-id").empty())
 			return;
+		const std::string &kind = msg.Tag("msg-id");
+		const std::string comment = msg.params.size() >= 2 ? msg.params[1] : std::string();
+		std::optional<HighlightKind> highlight;
+		if (kind == "sub" || kind == "resub")
+			highlight = HighlightKind::TwitchSub;
+		else if (kind == "subgift" || kind == "submysterygift")
+			highlight = HighlightKind::GiftSubs;
+		else if (kind == "raid")
+			highlight = HighlightKind::Raid;
+		if (highlight && !msg.Tag("system-msg").empty()) {
+			out.events.push_back({Platform::Twitch, *highlight, msg.Tag("system-msg"), comment});
+			return;
+		}
 		std::string notice = msg.Tag("system-msg");
-		if (msg.params.size() >= 2 && !msg.params[1].empty())
-			notice += notice.empty() ? msg.params[1] : " - " + msg.params[1];
+		if (!comment.empty())
+			notice += notice.empty() ? comment : " - " + comment;
 		if (!notice.empty())
 			out.eventNotices.push_back(std::move(notice));
 	} else if (msg.command == "NOTICE") {

@@ -21,6 +21,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "obs-tools.hpp"
 
 #include "chat-router.hpp"
+#include "highlights.hpp"
 #include "core/accounts.hpp"
 
 #include <functional>
@@ -48,8 +49,11 @@ struct ChatConfig {
 	int viewerCheckMinutes = 5; // both platforms; 0 = off. YouTube: 1 quota unit per check
 	// Accounts whose identical Twitch and YouTube messages are shown as one line.
 	std::vector<std::string> mergeBots{"Nightbot"};
-	// New followers and subscribers from the Stream Alerts plugin, as lines in the chat.
+	// Alerts as lines in the chat: follows and subscribers from Stream Alerts; subs, gifts, raids, cheers, Super
+	// Chats and memberships from the chats themselves.
 	bool showAlerts = true;
+	// How each kind of highlighted line looks, and whether it's shown.
+	Highlights highlights;
 };
 
 // "Nightbot, StreamElements" <-> {"Nightbot", "StreamElements"}; empty entries are dropped.

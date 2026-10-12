@@ -162,7 +162,25 @@ TEST_CASE("Session reports USERNOTICE system messages")
 	CHECK(bomb.eventNotices.empty()); // one recipient of a gift bomb
 	session.HandleLine("@msg-id=subgift;system-msg=Fan\\sgifted\\sa\\ssub :tmi.twitch.tv USERNOTICE #streamer",
 			   bomb);
-	CHECK(bomb.eventNotices.size() == 1); // a single gift
+	REQUIRE(bomb.events.size() == 1); // a single gift: an event line
+	CHECK(bomb.events[0].kind == HighlightKind::GiftSubs);
+	CHECK(bomb.events[0].text == "Fan gifted a sub");
+
+	SessionOutput resub;
+	session.HandleLine(
+		"@msg-id=resub;system-msg=Fan\\sresubscribed :tmi.twitch.tv USERNOTICE #streamer :still here", resub);
+	REQUIRE(resub.events.size() == 1);
+	CHECK(resub.events[0].kind == HighlightKind::TwitchSub);
+	CHECK(resub.events[0].comment == "still here");
+	CHECK(resub.eventNotices.empty());
+
+	SessionOutput cheer;
+	session.HandleLine("@bits=100;first-msg=1;display-name=Fan;id=c1 :fan!fan@fan.tmi.twitch.tv PRIVMSG #streamer "
+			   ":Cheer100 nice",
+			   cheer);
+	REQUIRE(cheer.messages.size() == 1);
+	CHECK(cheer.messages[0].bits == 100);
+	CHECK(cheer.messages[0].firstMessage);
 }
 
 TEST_CASE("Session becomes sendable after USERSTATE and echoes with display name")
