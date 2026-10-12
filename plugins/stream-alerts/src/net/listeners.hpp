@@ -52,7 +52,10 @@ protected:
 	void WaitFor(int ms);
 	void Status(const std::string &status);
 	// Through the shared store, so a single-use Twitch refresh token is never spent twice.
+	// False when no new token was had; refreshRejected_ then says whether the sign-in was refused (sign out) or
+	// the refresh only failed for now (network, server: retry later).
 	bool Refresh(unified_chat::Service service);
+	bool refreshRejected_ = false;
 
 	ListenerCallbacks callbacks_;
 	unified_chat::Account account_;

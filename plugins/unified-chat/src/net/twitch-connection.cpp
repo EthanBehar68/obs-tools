@@ -199,15 +199,17 @@ void TwitchConnection::WaitFor(int ms)
 	cv_.wait_for(lock, std::chrono::milliseconds(ms), [this] { return stop_.load(); });
 }
 
-bool TwitchConnection::RefreshToken()
+bool TwitchConnection::RefreshToken(bool *rejected)
 {
 	// Through the shared store: another plugin may already have spent this single-use refresh token, and then
 	// its new token is the one to use.
 	auto fresh = SharedAccounts().Refresh(Service::Twitch, token_, &stop_);
-	if (!fresh)
+	if (rejected)
+		*rejected = fresh.Rejected();
+	if (!fresh.Granted())
 		return false;
 
-	token_ = *fresh;
+	token_ = fresh.token;
 	if (callbacks_.onTokenChanged)
 		callbacks_.onTokenChanged(token_, login_);
 	return true;
@@ -217,13 +219,20 @@ bool TwitchConnection::ValidateToken(bool allowRefresh)
 {
 	if (!token_.IsValid())
 		return false;
-	if (token_.NeedsRefresh(UnixNow()) && !RefreshToken())
+	// A refresh that fails for now (network, server) keeps the sign-in; only Twitch refusing it signs out.
+	bool rejected = false;
+	if (token_.NeedsRefresh(UnixNow()) && !RefreshToken(&rejected) && rejected)
 		allowRefresh = false;
 
 	CurlHttpClient http(&stop_);
 	auto res = http.Get(twitch::kValidateUrl, {"Authorization: OAuth " + token_.accessToken});
 	if (res.status == 0)
 		return true; // offline; the IRC login will report a bad token
+	if (!res.Ok() && res.status != 401) {
+		// A server error or rate limit says nothing about the token: keep it, check again next time.
+		Notice("couldn't check the sign-in (HTTP " + std::to_string(res.status) + "), keeping it");
+		return true;
+	}
 	if (res.Ok()) {
 		std::string login = twitch::ParseValidateLogin(res.body);
 		// Keeps the user id and granted scopes too: moderation needs both.
@@ -236,8 +245,12 @@ bool TwitchConnection::ValidateToken(bool allowRefresh)
 		}
 		return true;
 	}
-	if (res.status == 401 && allowRefresh && RefreshToken())
+	if (allowRefresh && RefreshToken(&rejected))
 		return ValidateToken(false);
+	if (allowRefresh && !rejected) {
+		Notice("the sign-in needs refreshing and Twitch couldn't be reached for it, trying again shortly");
+		return false; // kept: the next connection attempt validates again
+	}
 
 	SharedAccounts().Invalidate(Service::Twitch, token_);
 	token_ = {};
@@ -355,7 +368,10 @@ void TwitchConnection::RunSession(void *handle)
 				for (const auto &notice : out.notices)
 					Notice(notice);
 				if (out.authFailed) {
-					if (!RefreshToken()) {
+					bool rejected = false;
+					if (!RefreshToken(&rejected) && !rejected) {
+						Notice("login failed and the sign-in couldn't be refreshed now, retrying");
+					} else if (rejected) {
 						SharedAccounts().Invalidate(Service::Twitch, token_);
 						token_ = {};
 						if (callbacks_.onTokenChanged)

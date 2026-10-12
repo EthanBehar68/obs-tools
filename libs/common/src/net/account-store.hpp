@@ -38,12 +38,18 @@ public:
 	// Read, change and write under the lock, so another plugin's write in between isn't lost.
 	void Update(const std::function<void(Accounts &)> &change);
 
+	struct RefreshResult {
+		oauth::RefreshOutcome outcome = oauth::RefreshOutcome::Transient;
+		oauth::Token token; // when Granted
+		bool Granted() const { return outcome == oauth::RefreshOutcome::Granted; }
+		bool Rejected() const { return outcome == oauth::RefreshOutcome::Rejected; }
+	};
 	// For a token the caller found expired or rejected: the token to use instead, either one another plugin
-	// already refreshed or a fresh refresh (saved before this returns). nullopt: signed out, or the refresh
-	// failed. Blocks for the refresh request; call it from a worker thread.
-	std::optional<oauth::Token> Refresh(Service service, const oauth::Token &stale,
-					    const std::atomic<bool> *cancel = nullptr);
-	// stale was rejected and couldn't be refreshed: sign out, unless the stored token has changed since.
+	// already refreshed or a fresh refresh (saved before this returns). Rejected: the sign-in is gone (refused,
+	// or nothing to refresh with). Transient: the refresh couldn't be done now (network, server, lock); keep the
+	// sign-in. Blocks for the refresh request; call it from a worker thread.
+	RefreshResult Refresh(Service service, const oauth::Token &stale, const std::atomic<bool> *cancel = nullptr);
+	// stale was rejected and Refresh said Rejected: sign out, unless the stored token has changed since.
 	void Invalidate(Service service, const oauth::Token &stale);
 	// A refresh done elsewhere (the YouTube chat session refreshes by itself): saved if stale is still stored.
 	void Replace(Service service, const oauth::Token &stale, const oauth::Token &next);

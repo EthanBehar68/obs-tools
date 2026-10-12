@@ -379,10 +379,11 @@ bool ChatSession::Refresh(int64_t now)
 		return false;
 	auto res = http_.Post(provider_.tokenUrl, {}, oauth::BuildRefreshBody(provider_, token_.refreshToken),
 			      "application/x-www-form-urlencoded");
-	if (res.status == 0)
-		return false;
 	auto parsed = oauth::ParseTokenResponse(res.status, res.body, now, token_.refreshToken);
-	if (parsed.status != oauth::PollStatus::Granted) {
+	const auto outcome = oauth::ClassifyRefresh(res.status, parsed);
+	if (outcome == oauth::RefreshOutcome::Transient)
+		return false; // network, server error or rate limit: keep the sign-in and try again later
+	if (outcome == oauth::RefreshOutcome::Rejected) {
 		token_ = {};
 		state_ = State::SignedOut;
 		if (onTokenChanged_)

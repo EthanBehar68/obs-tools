@@ -24,6 +24,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <plugin-support.h>
 #include <util/platform.h>
 
+#include <algorithm>
 #include <ctime>
 
 #ifdef _WIN32
@@ -39,12 +40,24 @@ static constexpr const wchar_t *kRefreshLock = L"Local\\obs-tools-accounts-refre
 
 class NamedLock {
 public:
-	NamedLock(const wchar_t *name, DWORD timeoutMs)
+	// With cancel, waits in short slices and gives up once it's set, so closing OBS never waits out timeoutMs
+	// behind another plugin's refresh.
+	NamedLock(const wchar_t *name, DWORD timeoutMs, const std::atomic<bool> *cancel = nullptr)
 	{
 		handle_ = CreateMutexW(nullptr, FALSE, name);
-		if (handle_) {
-			DWORD result = WaitForSingleObject(handle_, timeoutMs);
-			held_ = result == WAIT_OBJECT_0 || result == WAIT_ABANDONED; // abandoned: the holder crashed
+		if (!handle_)
+			return;
+		constexpr DWORD kSliceMs = 100;
+		for (DWORD waited = 0;; waited += kSliceMs) {
+			const DWORD slice = cancel ? (std::min)(kSliceMs, timeoutMs - (std::min)(waited, timeoutMs))
+						   : timeoutMs;
+			DWORD result = WaitForSingleObject(handle_, slice);
+			if (result == WAIT_OBJECT_0 || result == WAIT_ABANDONED) { // abandoned: the holder crashed
+				held_ = true;
+				return;
+			}
+			if (result != WAIT_TIMEOUT || !cancel || cancel->load() || waited + slice >= timeoutMs)
+				return;
 		}
 	}
 	~NamedLock()
@@ -69,7 +82,7 @@ static constexpr const wchar_t *kRefreshLock = L"";
 
 class NamedLock {
 public:
-	NamedLock(const wchar_t *, unsigned long) {}
+	NamedLock(const wchar_t *, unsigned long, const std::atomic<bool> * = nullptr) {}
 	bool Held() const { return true; }
 };
 #endif
@@ -125,21 +138,22 @@ bool AccountStore::ReplaceIfCurrent(Service service, const oauth::Token &stale, 
 	return replaced;
 }
 
-std::optional<oauth::Token> AccountStore::Refresh(Service service, const oauth::Token &stale,
+AccountStore::RefreshResult AccountStore::Refresh(Service service, const oauth::Token &stale,
 						  const std::atomic<bool> *cancel)
 {
+	using oauth::RefreshOutcome;
 	// Held across the request: a Twitch refresh token works once, so a second plugin must wait and then take
 	// the token this one saved instead of spending the same refresh token.
-	NamedLock refreshing(kRefreshLock, kRefreshLockMs);
+	NamedLock refreshing(kRefreshLock, kRefreshLockMs, cancel);
 	if (!refreshing.Held())
-		return std::nullopt;
+		return {RefreshOutcome::Transient, {}};
 
 	const Account stored = Load().Get(service);
 	switch (NextRefreshStep(stored.token, stale)) {
 	case RefreshStep::UseStored:
-		return stored.token;
+		return {RefreshOutcome::Granted, stored.token};
 	case RefreshStep::SignedOut:
-		return std::nullopt;
+		return {RefreshOutcome::Rejected, {}};
 	case RefreshStep::Refresh:
 		break;
 	}
@@ -148,17 +162,22 @@ std::optional<oauth::Token> AccountStore::Refresh(Service service, const oauth::
 						 ? oauth::TwitchProvider(stored.clientId)
 						 : oauth::GoogleProvider(stored.clientId, stored.clientSecret);
 	if (provider.clientId.empty())
-		return std::nullopt;
+		return {RefreshOutcome::Rejected, {}};
 	CurlHttpClient http(cancel);
 	auto res = http.Post(provider.tokenUrl, {}, oauth::BuildRefreshBody(provider, stored.token.refreshToken),
 			     "application/x-www-form-urlencoded");
 	auto parsed =
 		oauth::ParseTokenResponse(res.status, res.body, (int64_t)std::time(nullptr), stored.token.refreshToken);
-	if (parsed.status != oauth::PollStatus::Granted)
-		return std::nullopt;
+	const RefreshOutcome outcome = oauth::ClassifyRefresh(res.status, parsed);
+	if (outcome != RefreshOutcome::Granted) {
+		obs_log(LOG_WARNING, "%s sign-in refresh %s (%s)", service == Service::Twitch ? "Twitch" : "Google",
+			outcome == RefreshOutcome::Rejected ? "rejected" : "failed for now", parsed.error.c_str());
+		return {outcome, {}};
+	}
 	if (!ReplaceIfCurrent(service, stored.token, parsed.token))
-		return Load().Get(service).token; // the user signed in again meanwhile: that sign-in wins
-	return parsed.token;
+		return {RefreshOutcome::Granted,
+			Load().Get(service).token}; // the user signed in again meanwhile: it wins
+	return {RefreshOutcome::Granted, parsed.token};
 }
 
 void AccountStore::Invalidate(Service service, const oauth::Token &stale)

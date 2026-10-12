@@ -90,7 +90,8 @@ public:
 private:
 	void Run();
 	bool ValidateToken(bool allowRefresh);
-	bool RefreshToken();
+	// False when no new token was had; *rejected says whether Twitch refused it (sign out) or it failed for now.
+	bool RefreshToken(bool *rejected = nullptr);
 	bool EventSubReady();
 	bool RunIrc();
 	void RunSession(void *curl);

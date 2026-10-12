@@ -92,9 +92,10 @@ void Listener::Status(const std::string &status)
 bool Listener::Refresh(Service service)
 {
 	auto fresh = SharedAccounts().Refresh(service, account_.token, &stop_);
-	if (!fresh)
+	refreshRejected_ = fresh.Rejected();
+	if (!fresh.Granted())
 		return false;
-	account_.token = *fresh;
+	account_.token = fresh.token;
 	return true;
 }
 
@@ -127,6 +128,10 @@ TwitchListener::Outcome TwitchListener::Authorize(std::string &userId)
 		auto res = http.Get(oauth::kTwitchValidateUrl, {"Authorization: OAuth " + account_.token.accessToken});
 		if (res.status == 401 && attempt == 0 && Refresh(Service::Twitch))
 			continue;
+		if (res.status == 401 && attempt == 0 && !refreshRejected_) {
+			Status("the Twitch sign-in needs refreshing and Twitch couldn't be reached for it, retrying");
+			return Outcome::Retry;
+		}
 		if (res.status == 401) {
 			SharedAccounts().Invalidate(Service::Twitch, account_.token);
 			Status("sign-in expired: sign in again in Tools → OBS Tools → Accounts");
@@ -360,13 +365,22 @@ void SubscriberPoller::Run()
 			Refresh(Service::Google);
 
 		HttpResponse res;
+		bool refreshFailedForNow = false;
 		for (int attempt = 0; attempt < 2; ++attempt) {
 			res = http.Get(RecentSubscribersUrl(), {"Authorization: Bearer " + account_.token.accessToken});
-			if (res.status == 401 && attempt == 0 && Refresh(Service::Google))
-				continue;
+			if (res.status == 401 && attempt == 0) {
+				if (Refresh(Service::Google))
+					continue;
+				refreshFailedForNow = !refreshRejected_;
+			}
 			break;
 		}
 		const std::string reason = oauth::ParseGoogleErrorReason(res.body);
+		if (res.status == 401 && refreshFailedForNow) {
+			Status("the YouTube sign-in needs refreshing and Google couldn't be reached for it, retrying");
+			WaitFor(60 * 1000);
+			continue;
+		}
 		if (res.status == 401) {
 			SharedAccounts().Invalidate(Service::Google, account_.token);
 			Status("sign-in expired: sign in again in Tools → OBS Tools → Accounts");

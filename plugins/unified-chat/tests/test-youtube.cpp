@@ -382,6 +382,20 @@ TEST_CASE("ChatSession signs out when the refresh token is revoked")
 	CHECK_FALSE(out.notices.empty());
 }
 
+TEST_CASE("ChatSession keeps the sign-in when a refresh fails for now")
+{
+	FakeHttp http;
+	bool changed = false;
+	ChatSession session(http, oauth::GoogleProvider("id", "sec"), {"old", "refresh", 100}, "", 5000,
+			    [&](const oauth::Token &) { changed = true; });
+	http.Queue(503, "<html>Service Unavailable</html>"); // the refresh
+	http.Queue(401, R"({"error":{"code":401}})");        // the API call with the old token
+	http.Queue(503, "<html>Service Unavailable</html>"); // the refresh tried again after the 401
+	session.Step(90);
+	CHECK_FALSE(changed);
+	CHECK(session.GetState() != State::SignedOut);
+}
+
 TEST_CASE("ChatSession backs off on quota errors and network failures")
 {
 	FakeHttp http;

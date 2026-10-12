@@ -85,6 +85,21 @@ TEST_CASE("ParseTokenResponse maps device flow errors for both providers")
 	CHECK(ParseTokenResponse(500, "<html>", 0).status == PollStatus::Error);
 }
 
+TEST_CASE("Only a refused refresh signs out; network and server failures are temporary")
+{
+	auto classify = [](long status, const std::string &body) {
+		return ClassifyRefresh(status, ParseTokenResponse(status, body, 0, "r"));
+	};
+	CHECK(classify(200, R"({"access_token":"a","expires_in":3600})") == RefreshOutcome::Granted);
+	CHECK(classify(400, R"({"error":"invalid_grant"})") == RefreshOutcome::Rejected);
+	CHECK(classify(400, R"({"status":400,"message":"Invalid refresh token"})") == RefreshOutcome::Rejected);
+	CHECK(classify(401, R"({"error":"invalid_client"})") == RefreshOutcome::Rejected);
+	CHECK(classify(0, "") == RefreshOutcome::Transient);
+	CHECK(classify(503, "<html>") == RefreshOutcome::Transient);
+	CHECK(classify(429, R"({"error":"rate_limited"})") == RefreshOutcome::Transient);
+	CHECK(classify(500, R"({"error":"internal"})") == RefreshOutcome::Transient);
+}
+
 TEST_CASE("Token refresh window")
 {
 	Token token{"a", "r", 1000};

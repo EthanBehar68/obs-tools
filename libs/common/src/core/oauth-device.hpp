@@ -72,6 +72,12 @@ std::optional<DeviceCode> ParseDeviceCode(const std::string &json);
 PollResult ParseTokenResponse(long httpStatus, const std::string &json, int64_t now,
 			      const std::string &previousRefreshToken = {});
 
+// What a refresh attempt means for the stored sign-in. Only Rejected (the token endpoint refused the refresh token,
+// HTTP 400 or 401) may sign the user out; a network failure, server error or rate limit is Transient: keep the
+// sign-in and try again later.
+enum class RefreshOutcome { Granted, Rejected, Transient };
+RefreshOutcome ClassifyRefresh(long httpStatus, const PollResult &parsed);
+
 constexpr const char *kTwitchValidateUrl = "https://id.twitch.tv/oauth2/validate";
 // The login from a Twitch validate response, or an empty string.
 std::string ParseTwitchLogin(const std::string &json);

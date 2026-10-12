@@ -120,6 +120,13 @@ std::optional<DeviceCode> ParseDeviceCode(const std::string &body)
 	return code;
 }
 
+RefreshOutcome ClassifyRefresh(long httpStatus, const PollResult &parsed)
+{
+	if (parsed.status == PollStatus::Granted)
+		return RefreshOutcome::Granted;
+	return httpStatus == 400 || httpStatus == 401 ? RefreshOutcome::Rejected : RefreshOutcome::Transient;
+}
+
 PollResult ParseTokenResponse(long httpStatus, const std::string &body, int64_t now,
 			      const std::string &previousRefreshToken)
 {
