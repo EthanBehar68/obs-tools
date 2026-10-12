@@ -4,7 +4,7 @@
 
 #include <json.hpp>
 
-using namespace unified_chat;
+using namespace obs_tools;
 
 namespace {
 

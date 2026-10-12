@@ -21,7 +21,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include <string_view>
 
-namespace unified_chat {
+namespace obs_tools {
 
 static constexpr std::string_view kSecretPrefix = "enc:v1:";
 
@@ -50,4 +50,4 @@ std::string OpenSecret(const std::string &stored, const SecretCodec *codec, Secr
 	return opened.value_or(std::string()); // unreadable: sign in again rather than fail
 }
 
-} // namespace unified_chat
+} // namespace obs_tools

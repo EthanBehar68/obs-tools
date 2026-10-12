@@ -2,7 +2,7 @@
 
 #include "core/json-array-reader.hpp"
 
-using namespace unified_chat;
+using namespace obs_tools;
 
 TEST_CASE("JsonArrayReader yields each object as soon as it closes")
 {

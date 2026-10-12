@@ -23,7 +23,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <string_view>
 #include <vector>
 
-namespace unified_chat {
+namespace obs_tools {
 
 // Splits a JSON array of objects that arrives in arbitrary chunks ("[{...}", ",{...}", "]") into its complete
 // top-level objects as soon as each one closes. It only tracks nesting and strings; each object is parsed
@@ -46,4 +46,4 @@ private:
 	bool escaped_ = false;
 };
 
-} // namespace unified_chat
+} // namespace obs_tools

@@ -20,7 +20,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 using json = nlohmann::json;
 
-namespace unified_chat::eventsub {
+namespace obs_tools::eventsub {
 
 std::string StringAt(const json &obj, std::initializer_list<const char *> path)
 {
@@ -152,4 +152,4 @@ std::string BuildSubscription(std::string_view type, std::string_view version,
 	return body.dump();
 }
 
-} // namespace unified_chat::eventsub
+} // namespace obs_tools::eventsub

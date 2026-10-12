@@ -22,7 +22,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <optional>
 #include <string>
 
-namespace unified_chat {
+namespace obs_tools {
 
 // A paid or membership event from YouTube live chat. Only the chat carries these, so Unified Chat (which reads it)
 // passes them on to Stream Alerts as JSON over a libobs signal.
@@ -42,4 +42,4 @@ struct YouTubeEvent {
 std::string SerializeYouTubeEvent(const YouTubeEvent &event);
 std::optional<YouTubeEvent> ParseYouTubeEvent(const std::string &json);
 
-} // namespace unified_chat
+} // namespace obs_tools

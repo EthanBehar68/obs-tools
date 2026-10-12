@@ -31,7 +31,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <windows.h>
 #endif
 
-namespace unified_chat {
+namespace obs_tools {
 
 #ifdef _WIN32
 // Local\ = this Windows session: every plugin in every OBS instance the user runs.
@@ -211,4 +211,4 @@ AccountStore &SharedAccounts()
 	return store;
 }
 
-} // namespace unified_chat
+} // namespace obs_tools

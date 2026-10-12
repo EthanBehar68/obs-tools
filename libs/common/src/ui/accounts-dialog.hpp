@@ -20,10 +20,10 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 class QWidget;
 
-namespace unified_chat {
+namespace obs_tools {
 
 // The shared Twitch and Google sign-ins (Tools > OBS Tools > Accounts...). Modal; saves as it goes and, on
 // closing, tells every plugin which accounts changed. Opening it again while it's open just raises it.
 void OpenAccountsDialog(QWidget *parent);
 
-} // namespace unified_chat
+} // namespace obs_tools

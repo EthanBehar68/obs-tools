@@ -25,7 +25,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <algorithm>
 #include <memory>
 
-namespace unified_chat {
+namespace obs_tools {
 
 using Clock = std::chrono::steady_clock;
 
@@ -132,4 +132,4 @@ EventSubResult RunEventSub(const std::string &url, const std::atomic<bool> &stop
 	return result;
 }
 
-} // namespace unified_chat
+} // namespace obs_tools

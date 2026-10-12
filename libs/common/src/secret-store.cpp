@@ -25,7 +25,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <dpapi.h>
 #endif
 
-namespace unified_chat {
+namespace obs_tools {
 
 #ifdef _WIN32
 
@@ -87,4 +87,4 @@ const SecretCodec *PlatformSecretCodec(SecretPurpose)
 
 #endif
 
-} // namespace unified_chat
+} // namespace obs_tools

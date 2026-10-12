@@ -30,7 +30,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <vector>
 
 // Twitch EventSub over WebSocket: the message envelope and subscription requests, shared by every plugin.
-namespace unified_chat::eventsub {
+namespace obs_tools::eventsub {
 
 // Twitch sends a keepalive when nothing else happened for this long; no message for longer means the connection is
 // gone. 10..600 are allowed: a minute keeps the thread asleep yet notices a silent drop quickly.
@@ -100,4 +100,4 @@ private:
 // The string at a path of object keys, or empty when anything on the way is missing or not a string.
 std::string StringAt(const nlohmann::json &obj, std::initializer_list<const char *> path);
 
-} // namespace unified_chat::eventsub
+} // namespace obs_tools::eventsub

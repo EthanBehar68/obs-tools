@@ -24,7 +24,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include <algorithm>
 
-namespace unified_chat {
+namespace obs_tools {
 
 namespace {
 
@@ -224,4 +224,4 @@ HttpResponse CurlHttpClient::Perform(const std::string &url, const std::vector<s
 	return response;
 }
 
-} // namespace unified_chat
+} // namespace obs_tools

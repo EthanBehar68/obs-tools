@@ -28,7 +28,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QMainWindow>
 #include <QMenu>
 
-namespace unified_chat {
+namespace obs_tools {
 
 static constexpr const char *kMenuProc = "obs_tools_menu";
 static constexpr const char *kMenuProcDecl = "void obs_tools_menu(out ptr menu)";
@@ -325,4 +325,4 @@ void NotifyYouTubeEvent(const std::string &eventJson)
 	calldata_free(&cd);
 }
 
-} // namespace unified_chat
+} // namespace obs_tools

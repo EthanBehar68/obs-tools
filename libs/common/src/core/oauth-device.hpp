@@ -23,7 +23,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <string>
 
 // OAuth 2.0 Device Authorization Grant (RFC 8628) as implemented by Twitch and Google.
-namespace unified_chat::oauth {
+namespace obs_tools::oauth {
 
 struct Provider {
 	std::string deviceUrl;
@@ -87,4 +87,4 @@ std::string ParseTwitchLogin(const std::string &json);
 // The first "reason" of a Google API error, else its message or the OAuth error code.
 std::string ParseGoogleErrorReason(const std::string &json);
 
-} // namespace unified_chat::oauth
+} // namespace obs_tools::oauth

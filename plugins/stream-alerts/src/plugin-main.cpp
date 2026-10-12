@@ -39,7 +39,7 @@ static void OnFrontendEvent(enum obs_frontend_event event, void *)
 	if (!s_controller)
 		return;
 	if (event == OBS_FRONTEND_EVENT_FINISHED_LOADING) {
-		unified_chat::CheckObsToolsPlugins();
+		obs_tools::CheckObsToolsPlugins();
 		s_controller->Start();
 	} else if (event == OBS_FRONTEND_EVENT_EXIT)
 		s_controller->Shutdown();
@@ -59,18 +59,18 @@ bool obs_module_load(void)
 	if (mainwin == nullptr)
 		return false;
 
-	unified_chat::RegisterObsToolsPlugin("stream_alerts", PLUGIN_VERSION);
+	obs_tools::RegisterObsToolsPlugin("stream_alerts", PLUGIN_VERSION);
 	s_controller = new AlertsController(mainwin); // deleted with the main window
 	obs_frontend_add_event_callback(OnFrontendEvent, nullptr);
-	unified_chat::AddObsToolsMenuEntry(QString::fromUtf8(obs_module_text("Tools.StreamAlerts")), [mainwin]() {
+	obs_tools::AddObsToolsMenuEntry(QString::fromUtf8(obs_module_text("Tools.StreamAlerts")), [mainwin]() {
 		if (s_controller)
 			s_controller->OpenSettings(mainwin);
 	});
-	unified_chat::SetAccountsChangedHandler([](bool twitch, bool google) {
+	obs_tools::SetAccountsChangedHandler([](bool twitch, bool google) {
 		if (s_controller)
 			s_controller->OnAccountsChanged(twitch, google);
 	});
-	unified_chat::SetYouTubeEventHandler([](const std::string &eventJson) {
+	obs_tools::SetYouTubeEventHandler([](const std::string &eventJson) {
 		if (s_controller)
 			s_controller->OnYouTubeEvent(eventJson);
 	});
@@ -80,8 +80,8 @@ bool obs_module_load(void)
 
 void obs_module_unload(void)
 {
-	unified_chat::ClearAccountsChangedHandler();
-	unified_chat::ClearYouTubeEventHandler();
+	obs_tools::ClearAccountsChangedHandler();
+	obs_tools::ClearYouTubeEventHandler();
 	obs_frontend_remove_event_callback(OnFrontendEvent, nullptr);
 	obs_log(LOG_INFO, "plugin unloaded");
 }

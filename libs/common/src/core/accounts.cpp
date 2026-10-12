@@ -22,7 +22,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 using json = nlohmann::json;
 
-namespace unified_chat {
+namespace obs_tools {
 
 static std::string GetString(const json &obj, const char *key)
 {
@@ -120,4 +120,4 @@ bool AdoptLegacyAccounts(Accounts &shared, const Accounts &legacy)
 	return copied;
 }
 
-} // namespace unified_chat
+} // namespace obs_tools

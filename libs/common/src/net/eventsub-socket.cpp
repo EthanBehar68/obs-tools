@@ -20,7 +20,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include <curl/curl.h>
 
-namespace unified_chat {
+namespace obs_tools {
 
 static constexpr size_t kMaxMessageBytes = 1 << 20;
 
@@ -118,4 +118,4 @@ void EventSubSocket::Wait(void *wakeEvent, int timeoutMs)
 		WaitForActivity(*event_, wakeEvent, sock_, timeoutMs);
 }
 
-} // namespace unified_chat
+} // namespace obs_tools

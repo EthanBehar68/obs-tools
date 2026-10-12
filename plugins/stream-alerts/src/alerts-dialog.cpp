@@ -140,7 +140,7 @@ AlertsDialog::AlertsDialog(AlertsController *controller, QWidget *parent)
 
 	auto bottom = new QHBoxLayout();
 	auto accounts = new QPushButton(Text("Alerts.Accounts"), this);
-	connect(accounts, &QPushButton::clicked, this, [this]() { unified_chat::OpenAccountsDialog(this); });
+	connect(accounts, &QPushButton::clicked, this, [this]() { obs_tools::OpenAccountsDialog(this); });
 	bottom->addWidget(accounts);
 	bottom->addStretch();
 	auto buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);

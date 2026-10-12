@@ -18,6 +18,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #pragma once
 
+#include "core/obs-tools.hpp"
+
 #include "core/chat-message.hpp"
 #include "core/moderation.hpp"
 #include "core/oauth-device.hpp"
@@ -31,6 +33,13 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <string>
 #include <thread>
 #include <vector>
+
+namespace obs_tools {
+class HttpClient;
+namespace eventsub {
+struct Message;
+}
+} // namespace obs_tools
 
 namespace unified_chat {
 
@@ -65,11 +74,6 @@ struct OutgoingMessage {
 	std::string replyParentId; // Twitch only: id of the message this answers
 	std::string replyTo;       // its author's display name, for the local echo
 };
-
-class HttpClient;
-namespace eventsub {
-struct Message;
-}
 
 // Owns a worker thread holding one Twitch chat connection. With useEventSub and a sign-in that allows it, chat is
 // read over EventSub (a WebSocket) and sent with the Helix API, as Twitch recommends; otherwise over IRC (TLS via

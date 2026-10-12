@@ -22,7 +22,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <chrono>
 #include <ctime>
 
-namespace unified_chat {
+namespace obs_tools {
 
 static constexpr const char *kFormType = "application/x-www-form-urlencoded";
 
@@ -117,4 +117,4 @@ void DeviceLogin::Run()
 	}
 }
 
-} // namespace unified_chat
+} // namespace obs_tools

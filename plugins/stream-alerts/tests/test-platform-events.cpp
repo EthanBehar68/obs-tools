@@ -143,8 +143,8 @@ TEST_CASE("Cheers give bits and the message; anonymous cheers have no name")
 
 TEST_CASE("YouTube events from the chat become alerts")
 {
-	unified_chat::YouTubeEvent milestone;
-	milestone.kind = unified_chat::YouTubeEvent::Kind::MemberMilestone;
+	obs_tools::YouTubeEvent milestone;
+	milestone.kind = obs_tools::YouTubeEvent::Kind::MemberMilestone;
 	milestone.name = "@old";
 	milestone.months = 12;
 	auto alert = FromYouTubeEvent(milestone);
@@ -152,8 +152,8 @@ TEST_CASE("YouTube events from the chat become alerts")
 	CHECK(alert.variant);
 	CHECK(alert.months == 12);
 
-	unified_chat::YouTubeEvent sticker;
-	sticker.kind = unified_chat::YouTubeEvent::Kind::SuperSticker;
+	obs_tools::YouTubeEvent sticker;
+	sticker.kind = obs_tools::YouTubeEvent::Kind::SuperSticker;
 	sticker.amount = "$2.00";
 	CHECK(FromYouTubeEvent(sticker).kind == AlertKind::SuperChat);
 }

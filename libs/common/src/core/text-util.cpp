@@ -20,7 +20,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include <cctype>
 
-namespace unified_chat {
+namespace obs_tools {
 
 static bool IsSpace(char c)
 {
@@ -285,4 +285,4 @@ std::string FormEncode(const std::vector<std::pair<std::string, std::string>> &f
 	return out;
 }
 
-} // namespace unified_chat
+} // namespace obs_tools

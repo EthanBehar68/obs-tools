@@ -25,7 +25,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <utility>
 #include <vector>
 
-namespace unified_chat {
+namespace obs_tools {
 
 std::string Trim(std::string_view text);
 std::string ToLower(std::string_view text);
@@ -56,4 +56,4 @@ std::optional<std::string> Base64Decode(std::string_view text);
 std::string UrlEncode(std::string_view text);
 std::string FormEncode(const std::vector<std::pair<std::string, std::string>> &fields);
 
-} // namespace unified_chat
+} // namespace obs_tools

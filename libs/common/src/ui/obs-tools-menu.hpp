@@ -25,7 +25,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 class QMenu;
 class QString;
 
-namespace unified_chat {
+namespace obs_tools {
 
 // What OBS Tools plugins exchange: the accounts file, the Twitch scopes, the signals below and their JSON. Bump it
 // when any of that changes in a way an older plugin would get wrong, and release both plugins together.
@@ -66,4 +66,4 @@ void SetYouTubeEventHandler(std::function<void(const std::string &eventJson)> ha
 void ClearYouTubeEventHandler();
 void NotifyYouTubeEvent(const std::string &eventJson);
 
-} // namespace unified_chat
+} // namespace obs_tools

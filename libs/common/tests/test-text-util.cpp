@@ -2,7 +2,7 @@
 
 #include "core/text-util.hpp"
 
-using namespace unified_chat;
+using namespace obs_tools;
 
 TEST_CASE("Trim removes surrounding whitespace only")
 {

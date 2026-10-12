@@ -20,7 +20,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include "core/secret-codec.hpp"
 
-namespace unified_chat {
+namespace obs_tools {
 
 enum class SecretPurpose {
 	Accounts,         // plugin_config/obs-tools/accounts.json
@@ -32,4 +32,4 @@ enum class SecretPurpose {
 // store is available; secrets are then stored as is.
 const SecretCodec *PlatformSecretCodec(SecretPurpose purpose);
 
-} // namespace unified_chat
+} // namespace obs_tools

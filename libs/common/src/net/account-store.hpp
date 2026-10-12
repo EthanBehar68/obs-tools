@@ -25,7 +25,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <optional>
 #include <string>
 
-namespace unified_chat {
+namespace obs_tools {
 
 // The shared accounts file. Every plugin has its own instance; system-wide named locks keep their reads,
 // writes and token refreshes from interleaving. Safe to use from any thread. The file is small and only read on
@@ -64,4 +64,4 @@ private:
 // plugin_config/obs-tools/accounts.json, next to the calling plugin's own config folder.
 AccountStore &SharedAccounts();
 
-} // namespace unified_chat
+} // namespace obs_tools

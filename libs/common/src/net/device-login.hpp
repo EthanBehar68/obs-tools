@@ -26,7 +26,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <mutex>
 #include <thread>
 
-namespace unified_chat {
+namespace obs_tools {
 
 // Runs one OAuth device authorization on a worker thread. Callbacks run on that thread.
 class DeviceLogin {
@@ -55,4 +55,4 @@ private:
 	std::thread thread_;
 };
 
-} // namespace unified_chat
+} // namespace obs_tools

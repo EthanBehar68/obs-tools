@@ -2,7 +2,7 @@
 
 #include "core/eventsub.hpp"
 
-using namespace unified_chat::eventsub;
+using namespace obs_tools::eventsub;
 
 // The examples from Twitch's EventSub WebSocket reference.
 TEST_CASE("EventSub welcome, keepalive and reconnect messages are read")

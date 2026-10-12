@@ -696,7 +696,7 @@ bool TwitchConnection::RunEventSub()
 		return due;
 	};
 
-	const EventSubResult result = unified_chat::RunEventSub(eventsub::kUrl, stop_, wakeEvent_, handlers);
+	const EventSubResult result = obs_tools::RunEventSub(eventsub::kUrl, stop_, wakeEvent_, handlers);
 	if (stop_)
 		return true;
 	switch (result.end) {

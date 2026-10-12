@@ -55,11 +55,11 @@ protected:
 	// Through the shared store, so a single-use Twitch refresh token is never spent twice.
 	// False when no new token was had; refreshRejected_ then says whether the sign-in was refused (sign out) or
 	// the refresh only failed for now (network, server: retry later).
-	bool Refresh(unified_chat::Service service);
+	bool Refresh(obs_tools::Service service);
 	bool refreshRejected_ = false;
 
 	ListenerCallbacks callbacks_;
-	unified_chat::Account account_;
+	obs_tools::Account account_;
 	std::atomic<bool> stop_ = false;
 	void *wakeEvent_ = nullptr;
 
@@ -84,7 +84,7 @@ private:
 	Outcome Authorize(std::string &userId);
 	Outcome Session(const std::string &userId);
 	Outcome Subscribe(const std::string &sessionId, const std::string &userId);
-	void Handle(const unified_chat::eventsub::Message &message);
+	void Handle(const obs_tools::eventsub::Message &message);
 
 	TwitchWants wants_;   // what the user turned on
 	TwitchWants allowed_; // of that, what the sign-in allows

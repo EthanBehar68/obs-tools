@@ -24,7 +24,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <chrono>
 #include <string>
 
-namespace unified_chat {
+namespace obs_tools {
 
 // Blocking HTTPS client on top of the libcurl that ships with OBS. Requests abort promptly
 // once the shared cancel flag is set, so worker threads can be joined quickly on shutdown.
@@ -76,4 +76,4 @@ private:
 	int requests_ = 0, newConnections_ = 0, failures_ = 0, serverErrors_ = 0;
 };
 
-} // namespace unified_chat
+} // namespace obs_tools

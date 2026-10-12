@@ -25,7 +25,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <memory>
 #include <string>
 
-namespace unified_chat {
+namespace obs_tools {
 
 // One EventSub WebSocket over curl (CONNECT_ONLY 2). curl answers pings itself. Not thread-safe: one thread owns it.
 class EventSubSocket {
@@ -65,4 +65,4 @@ private:
 	std::string partial_;
 };
 
-} // namespace unified_chat
+} // namespace obs_tools

@@ -26,11 +26,11 @@ using json = nlohmann::json;
 
 namespace stream_alerts {
 
-using unified_chat::eventsub::StringAt;
+using obs_tools::eventsub::StringAt;
 
 std::string BuildFollowSubscription(const std::string &sessionId, const std::string &userId)
 {
-	return unified_chat::eventsub::BuildSubscription(
+	return obs_tools::eventsub::BuildSubscription(
 		"channel.follow", "2", {{"broadcaster_user_id", userId}, {"moderator_user_id", userId}}, sessionId);
 }
 
@@ -51,12 +51,12 @@ std::vector<std::string> BuildTwitchSubscriptions(const std::string &sessionId, 
 	if (wants.follows)
 		bodies.push_back(BuildFollowSubscription(sessionId, userId));
 	if (wants.notifications)
-		bodies.push_back(unified_chat::eventsub::BuildSubscription(
+		bodies.push_back(obs_tools::eventsub::BuildSubscription(
 			"channel.chat.notification", "1", {{"broadcaster_user_id", userId}, {"user_id", userId}},
 			sessionId));
 	if (wants.cheers)
-		bodies.push_back(unified_chat::eventsub::BuildSubscription(
-			"channel.cheer", "1", {{"broadcaster_user_id", userId}}, sessionId));
+		bodies.push_back(obs_tools::eventsub::BuildSubscription("channel.cheer", "1",
+									{{"broadcaster_user_id", userId}}, sessionId));
 	return bodies;
 }
 
@@ -133,9 +133,9 @@ std::optional<AlertEvent> CheerFromEvent(const json &event)
 	return alert;
 }
 
-AlertEvent FromYouTubeEvent(const unified_chat::YouTubeEvent &event)
+AlertEvent FromYouTubeEvent(const obs_tools::YouTubeEvent &event)
 {
-	using Kind = unified_chat::YouTubeEvent::Kind;
+	using Kind = obs_tools::YouTubeEvent::Kind;
 	AlertEvent alert;
 	alert.id = event.id; // the chat message's id: the queue drops a repeat
 	alert.name = event.name;

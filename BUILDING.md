@@ -87,7 +87,7 @@ Run them with `ctest --preset windows-x64`, or run a test exe directly, e.g. `bu
 CMakeLists.txt       root: shared CMake setup, then add_subdirectory for libs\common and each plugin
 buildspec.json       OBS / obs-deps / Qt pins for the whole repository
 libs\
-├── common\src\      shared by every plugin (namespace unified_chat for now)
+├── common\src\      shared by every plugin (namespace obs_tools; Unified Chat pulls it in via core\obs-tools.hpp)
 │   ├── core\        no libobs, no Qt, no I/O  -> static library obs-tools-core (tested)
 │   │   ├── accounts.*           the shared sign-ins: accounts.json format, which plugin may refresh, 1.2.0 migration
 │   │   ├── eventsub.*           Twitch EventSub WebSocket messages and subscription requests

@@ -2,7 +2,7 @@
 
 #include "core/youtube-events.hpp"
 
-using namespace unified_chat;
+using namespace obs_tools;
 
 TEST_CASE("YouTube events survive the trip between plugins")
 {

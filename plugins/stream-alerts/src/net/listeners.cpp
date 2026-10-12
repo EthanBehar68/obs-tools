@@ -32,7 +32,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 namespace stream_alerts {
 
-using namespace unified_chat;
+using namespace obs_tools;
 using Clock = std::chrono::steady_clock;
 
 static constexpr int kMaxBackoffMs = 60000;

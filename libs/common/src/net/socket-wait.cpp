@@ -26,7 +26,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <sys/select.h>
 #endif
 
-namespace unified_chat {
+namespace obs_tools {
 
 bool WaitSocket(curl_socket_t sock, bool forRead, int timeoutMs)
 {
@@ -106,4 +106,4 @@ void CloseWakeEvent(void *) {}
 
 #endif
 
-} // namespace unified_chat
+} // namespace obs_tools

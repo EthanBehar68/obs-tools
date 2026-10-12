@@ -42,7 +42,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include <memory>
 
-namespace unified_chat {
+namespace obs_tools {
 
 static QString Text(const char *key)
 {
@@ -312,4 +312,4 @@ void OpenAccountsDialog(QWidget *parent)
 	dialog.exec();
 }
 
-} // namespace unified_chat
+} // namespace obs_tools

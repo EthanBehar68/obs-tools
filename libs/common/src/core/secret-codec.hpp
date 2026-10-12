@@ -22,7 +22,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <optional>
 #include <string>
 
-namespace unified_chat {
+namespace obs_tools {
 
 // Encrypts secrets at rest (on Windows: DPAPI, bound to the user's account). Both functions work on raw bytes;
 // unprotect returns nullopt when the data can't be decrypted, e.g. a config copied from another account.
@@ -42,4 +42,4 @@ std::string SealSecret(const std::string &value, const SecretCodec *codec);
 // Plain text passes through (and is reported); an unreadable secret comes back empty.
 std::string OpenSecret(const std::string &stored, const SecretCodec *codec, SecretReport *report);
 
-} // namespace unified_chat
+} // namespace obs_tools

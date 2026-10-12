@@ -18,6 +18,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #pragma once
 
+#include "obs-tools.hpp"
+
 #include "chat-router.hpp"
 #include "core/accounts.hpp"
 

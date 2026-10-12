@@ -20,7 +20,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include <curl/curl.h>
 
-namespace unified_chat {
+namespace obs_tools {
 
 // Waits on a socket curl opened with CURLOPT_CONNECT_ONLY. A long-lived connection thread sleeps in
 // WaitForActivity until data arrives, its wake event is set, or its next deadline, so an idle connection costs
@@ -54,4 +54,4 @@ void *CreateWakeEvent();
 void SetWakeEvent(void *event);
 void CloseWakeEvent(void *event);
 
-} // namespace unified_chat
+} // namespace obs_tools

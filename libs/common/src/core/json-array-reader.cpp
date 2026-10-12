@@ -18,7 +18,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include "json-array-reader.hpp"
 
-namespace unified_chat {
+namespace obs_tools {
 
 static bool IsJsonSpace(char c)
 {
@@ -101,4 +101,4 @@ std::vector<std::string> JsonArrayReader::Feed(std::string_view data)
 	return objects;
 }
 
-} // namespace unified_chat
+} // namespace obs_tools

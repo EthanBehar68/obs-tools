@@ -24,7 +24,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 using json = nlohmann::json;
 
-namespace unified_chat {
+namespace obs_tools {
 
 static constexpr const char *kKindNames[] = {"super_chat", "super_sticker", "new_member", "member_milestone",
 					     "gift_memberships"};
@@ -75,4 +75,4 @@ std::optional<YouTubeEvent> ParseYouTubeEvent(const std::string &text)
 	return event;
 }
 
-} // namespace unified_chat
+} // namespace obs_tools

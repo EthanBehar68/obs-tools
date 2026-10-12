@@ -2,7 +2,7 @@
 
 #include "core/oauth-device.hpp"
 
-using namespace unified_chat::oauth;
+using namespace obs_tools::oauth;
 
 TEST_CASE("Twitch device request uses scopes and no secret")
 {

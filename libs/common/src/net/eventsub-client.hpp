@@ -25,7 +25,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <functional>
 #include <string>
 
-namespace unified_chat {
+namespace obs_tools {
 
 // What the caller does with one EventSub session. All of it runs on the calling thread.
 struct EventSubHandlers {
@@ -57,4 +57,4 @@ struct EventSubResult {
 EventSubResult RunEventSub(const std::string &url, const std::atomic<bool> &stop, void *wakeEvent,
 			   const EventSubHandlers &handlers);
 
-} // namespace unified_chat
+} // namespace obs_tools

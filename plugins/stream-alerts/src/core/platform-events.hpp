@@ -55,7 +55,7 @@ std::optional<AlertEvent> NotificationFromEvent(const nlohmann::json &event);
 // channel.cheer
 std::optional<AlertEvent> CheerFromEvent(const nlohmann::json &event);
 // What Unified Chat passes on from YouTube chat.
-AlertEvent FromYouTubeEvent(const unified_chat::YouTubeEvent &event);
+AlertEvent FromYouTubeEvent(const obs_tools::YouTubeEvent &event);
 
 struct TwitchUser {
 	std::string id;

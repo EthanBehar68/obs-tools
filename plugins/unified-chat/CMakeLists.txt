@@ -24,6 +24,7 @@ target_sources(
     src/core/moderation.hpp
     src/core/name-color.cpp
     src/core/name-color.hpp
+    src/core/obs-tools.hpp
     src/core/twitch-eventsub.cpp
     src/core/twitch-eventsub.hpp
     src/core/twitch-irc.cpp

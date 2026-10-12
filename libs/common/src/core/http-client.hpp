@@ -23,7 +23,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <string_view>
 #include <vector>
 
-namespace unified_chat {
+namespace obs_tools {
 
 struct HttpResponse {
 	long status = 0; // 0 = transport failure, see error
@@ -65,4 +65,4 @@ public:
 	}
 };
 
-} // namespace unified_chat
+} // namespace obs_tools

@@ -26,7 +26,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 using json = nlohmann::json;
 
-namespace unified_chat::oauth {
+namespace obs_tools::oauth {
 
 static constexpr const char *kDeviceGrant = "urn:ietf:params:oauth:grant-type:device_code";
 
@@ -220,4 +220,4 @@ std::string ParseGoogleErrorReason(const std::string &body)
 	return StringField(*error, "message");
 }
 
-} // namespace unified_chat::oauth
+} // namespace obs_tools::oauth

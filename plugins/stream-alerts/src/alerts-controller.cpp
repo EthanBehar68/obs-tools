@@ -304,7 +304,7 @@ void AlertsController::OnYouTubeEvent(const std::string &eventJson)
 {
 	if (!streaming_)
 		return; // alerts run only while streaming (chat may be connected anyway, in its "Always" mode)
-	if (auto event = unified_chat::ParseYouTubeEvent(eventJson))
+	if (auto event = obs_tools::ParseYouTubeEvent(eventJson))
 		Push(FromYouTubeEvent(*event));
 }
 
@@ -381,7 +381,7 @@ void AlertsController::Push(const AlertEvent &event, bool test)
 	// The chat dock shows each follower and subscriber as they arrive, including those a combined alert will
 	// cover. Subs, cheers and the rest are already in the chat.
 	if (!IsPriority(event.kind))
-		unified_chat::NotifyAlert(event.kind == AlertKind::Follow, event.name, test);
+		obs_tools::NotifyAlert(event.kind == AlertKind::Follow, event.name, test);
 	if (phase_ == Phase::Idle)
 		ShowNext();
 }

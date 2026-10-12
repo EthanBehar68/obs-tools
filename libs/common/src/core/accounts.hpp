@@ -24,7 +24,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <string>
 
 // The sign-ins shared by every obs-tools plugin (plugin_config/obs-tools/accounts.json).
-namespace unified_chat {
+namespace obs_tools {
 
 enum class Service { Twitch, Google };
 
@@ -67,4 +67,4 @@ RefreshStep NextRefreshStep(const oauth::Token &stored, const oauth::Token &stal
 // Fills services the shared file doesn't have yet from an older per-plugin config. True if anything was copied.
 bool AdoptLegacyAccounts(Accounts &shared, const Accounts &legacy);
 
-} // namespace unified_chat
+} // namespace obs_tools

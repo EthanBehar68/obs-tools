@@ -19,6 +19,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #pragma once
 
 #include "core/youtube-events.hpp"
+#include "obs-tools.hpp"
 
 #include <cstdint>
 #include <optional>
