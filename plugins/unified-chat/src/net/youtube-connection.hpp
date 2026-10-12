@@ -35,7 +35,7 @@ class YouTubeConnection {
 public:
 	YouTubeConnection(std::string clientId, std::string clientSecret, oauth::Token token, std::string video,
 			  int pollSeconds, bool stream, bool startedWithStream, int64_t historyCutoff,
-			  ConnectionCallbacks callbacks);
+			  int viewerCheckMinutes, ConnectionCallbacks callbacks);
 	~YouTubeConnection();
 
 	YouTubeConnection(const YouTubeConnection &) = delete;
@@ -57,6 +57,7 @@ private:
 	bool stream_;
 	bool startedWithStream_;
 	int64_t historyCutoff_;
+	int viewerCheckMinutes_; // 0 = off
 	ConnectionCallbacks callbacks_;
 
 	std::atomic<bool> stop_ = false;

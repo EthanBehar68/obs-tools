@@ -59,6 +59,7 @@ private:
 	QSpinBox *maxMessages_;
 	QLineEdit *mergeBots_;
 	QCheckBox *showAlerts_;
+	QSpinBox *viewerCheck_;
 };
 
 } // namespace unified_chat

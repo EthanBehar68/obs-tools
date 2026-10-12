@@ -107,7 +107,8 @@ std::string SerializeAlertsConfig(const AlertsConfig &config)
 {
 	json obj = {{"duration_seconds", config.durationSeconds},
 		    {"min_bits", config.minBits},
-		    {"min_raid_viewers", config.minRaidViewers}};
+		    {"min_raid_viewers", config.minRaidViewers},
+		    {"subscriber_check_seconds", config.subscriberCheckSeconds}};
 	for (AlertKind kind : kAllKinds)
 		obj[KindKey(kind)] = ToJson(config.For(kind));
 	return obj.dump(4);
@@ -129,6 +130,8 @@ AlertsConfig ParseAlertsConfig(const std::string &text)
 	number("duration_seconds", config.durationSeconds, 1, 60);
 	number("min_bits", config.minBits, 1, 1000000);
 	number("min_raid_viewers", config.minRaidViewers, 1, 1000000);
+	number("subscriber_check_seconds", config.subscriberCheckSeconds, kMinSubscriberCheckSeconds,
+	       kMaxSubscriberCheckSeconds);
 	return config;
 }
 

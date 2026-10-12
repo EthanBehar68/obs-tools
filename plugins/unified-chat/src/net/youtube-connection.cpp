@@ -47,7 +47,7 @@ static LinkState ToLinkState(youtube::State state)
 
 YouTubeConnection::YouTubeConnection(std::string clientId, std::string clientSecret, oauth::Token token,
 				     std::string video, int pollSeconds, bool stream, bool startedWithStream,
-				     int64_t historyCutoff, ConnectionCallbacks callbacks)
+				     int64_t historyCutoff, int viewerCheckMinutes, ConnectionCallbacks callbacks)
 	: clientId_(std::move(clientId)),
 	  clientSecret_(std::move(clientSecret)),
 	  token_(std::move(token)),
@@ -56,6 +56,7 @@ YouTubeConnection::YouTubeConnection(std::string clientId, std::string clientSec
 	  stream_(stream),
 	  startedWithStream_(startedWithStream),
 	  historyCutoff_(historyCutoff),
+	  viewerCheckMinutes_(viewerCheckMinutes),
 	  callbacks_(std::move(callbacks))
 {
 	thread_ = std::thread(&YouTubeConnection::Run, this);
@@ -118,7 +119,7 @@ void YouTubeConnection::Run()
 				     });
 
 	session.SetStreaming(stream_);
-	session.SetViewerChecks(true);
+	session.SetViewerChecks(int64_t(viewerCheckMinutes_) * 60);
 	session.SetHistoryCutoff(historyCutoff_);
 	if (startedWithStream_) {
 		// OBS just started streaming: YouTube takes a few seconds to bring the broadcast live, so look often

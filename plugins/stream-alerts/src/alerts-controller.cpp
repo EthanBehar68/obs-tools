@@ -207,7 +207,8 @@ static bool operator!=(const TwitchWants &a, const TwitchWants &b)
 void AlertsController::ApplyConfig(const AlertsConfig &config, bool save)
 {
 	const TwitchWants before = Wants();
-	const bool subscriberChanged = config.subscriber.enabled != config_.subscriber.enabled;
+	const bool subscriberChanged = config.subscriber.enabled != config_.subscriber.enabled ||
+				       config.subscriberCheckSeconds != config_.subscriberCheckSeconds;
 	config_ = config;
 	if (save)
 		SaveConfig();
@@ -246,7 +247,8 @@ void AlertsController::StartListeners(bool twitch, bool google)
 	if (google) {
 		subscribers_.reset();
 		if (config_.subscriber.enabled)
-			subscribers_ = std::make_unique<SubscriberPoller>(MakeCallbacks(false));
+			subscribers_ = std::make_unique<SubscriberPoller>(MakeCallbacks(false),
+									  config_.subscriberCheckSeconds);
 		else
 			subscriberStatus_ = Text("Status.Disabled");
 	}

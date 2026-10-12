@@ -55,6 +55,7 @@ private:
 		QPlainTextEdit *overflow = nullptr; // Follow, Subscriber
 		QPlainTextEdit *variant = nullptr;  // TwitchSub, Member
 		QSpinBox *minimum = nullptr;        // Cheer: bits; Raid: viewers
+		QSpinBox *interval = nullptr;       // Subscriber: seconds between checks
 		QLabel *status = nullptr;
 	};
 

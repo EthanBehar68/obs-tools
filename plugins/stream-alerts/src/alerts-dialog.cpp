@@ -206,6 +206,24 @@ QWidget *AlertsDialog::MakePage(AlertKind kind, const QStringList &sources, cons
 		form->addRow(Text("Alerts.Minimum"), page.minimum);
 	}
 
+	if (kind == AlertKind::Subscriber) {
+		page.interval = new QSpinBox(widget);
+		page.interval->setRange(kMinSubscriberCheckSeconds, kMaxSubscriberCheckSeconds);
+		page.interval->setSingleStep(30);
+		page.interval->setSuffix(" s");
+		page.interval->setValue(original_.subscriberCheckSeconds);
+		auto cost = new QLabel(widget);
+		auto showCost = [cost](int seconds) {
+			cost->setText(Text("Alerts.CheckCost").arg((3600 + seconds - 1) / seconds)); // 1 unit per check
+		};
+		showCost(page.interval->value());
+		connect(page.interval, &QSpinBox::valueChanged, cost, showCost);
+		auto row = new QHBoxLayout();
+		row->addWidget(page.interval);
+		row->addWidget(cost, 1);
+		form->addRow(Text("Alerts.CheckEvery"), row);
+	}
+
 	page.status = new QLabel(widget);
 	page.status->setWordWrap(true);
 	form->addRow(Text("Alerts.Status"), page.status);
@@ -242,6 +260,8 @@ AlertsConfig AlertsDialog::Current() const
 			settings.variantMessage = ToStd(page.variant->toPlainText());
 		if (page.minimum)
 			(kind == AlertKind::Cheer ? config.minBits : config.minRaidViewers) = page.minimum->value();
+		if (page.interval)
+			config.subscriberCheckSeconds = page.interval->value();
 	}
 	config.durationSeconds = duration_->value();
 	return config;

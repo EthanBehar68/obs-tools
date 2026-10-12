@@ -128,8 +128,9 @@ public:
 	// Checked while a stream is open; returning true ends the Step early (e.g. to send a message).
 	void SetInterrupt(std::function<bool()> interrupt) { interrupt_ = std::move(interrupt); }
 	bool IsStreaming() const { return streaming_ && !streamFailed_; }
-	// Check the live viewer count every 5 minutes while connected (1 quota unit each). Off by default.
-	void SetViewerChecks(bool enabled) { viewerChecks_ = enabled; }
+	// Check the live viewer count this often while connected (1 quota unit each; YouTube updates the count about
+	// once a minute). 0, the default, never checks.
+	void SetViewerChecks(int64_t intervalSeconds) { viewerCheckSeconds_ = intervalSeconds; }
 	// Messages posted before this (unix seconds) are chat history, e.g. from an earlier session on a reused
 	// broadcast, and aren't shown. Messages without a timestamp are always shown. 0 = show everything.
 	void SetHistoryCutoff(int64_t unixSeconds) { historyCutoff_ = unixSeconds; }
@@ -180,7 +181,7 @@ private:
 	std::string liveChatId_;
 	std::string liveVideoId_; // the broadcast's video, for the viewer count
 	int64_t nextViewerCheck_ = 0;
-	bool viewerChecks_ = false;
+	int64_t viewerCheckSeconds_ = 0;
 	std::string pageToken_;
 	std::string ownChannelId_;
 	std::string ownName_;

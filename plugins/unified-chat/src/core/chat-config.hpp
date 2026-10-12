@@ -43,6 +43,7 @@ struct ChatConfig {
 
 	SendTarget sendTarget = SendTarget::Both;
 	int maxMessages = 500;
+	int viewerCheckMinutes = 5; // both platforms; 0 = off. YouTube: 1 quota unit per check
 	// Accounts whose identical Twitch and YouTube messages are shown as one line.
 	std::vector<std::string> mergeBots{"Nightbot"};
 	// New followers and subscribers from the Stream Alerts plugin, as lines in the chat.

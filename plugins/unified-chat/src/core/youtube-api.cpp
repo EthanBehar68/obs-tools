@@ -46,7 +46,6 @@ static constexpr const char *kMessagesFields =
 	"authorDetails(displayName,channelId,isChatOwner,isChatModerator,isChatSponsor))";
 static constexpr const char *kBroadcastFields = "&fields=items(id,snippet/liveChatId)";
 static constexpr const char *kViewersFields = "&fields=items/liveStreamingDetails/concurrentViewers";
-static constexpr int64_t kViewerCheckSeconds = 300; // YouTube updates the count about once a minute
 static constexpr const char *kVideoFields = "&fields=items/liveStreamingDetails/activeLiveChatId";
 static constexpr const char *kChannelFields = "&fields=items(id,snippet/title)";
 
@@ -692,7 +691,7 @@ StepResult ChatSession::Step(int64_t now)
 		FindLiveChat(now, out);
 		return out;
 	}
-	if (viewerChecks_ && !liveVideoId_.empty() && now >= nextViewerCheck_)
+	if (viewerCheckSeconds_ > 0 && !liveVideoId_.empty() && now >= nextViewerCheck_)
 		CheckViewers(now, out);
 	if (IsStreaming())
 		Stream(now, out);
@@ -704,7 +703,7 @@ StepResult ChatSession::Step(int64_t now)
 void ChatSession::CheckViewers(int64_t now, StepResult &out)
 {
 	// 1 quota unit; failures just wait for the next check (the count isn't worth a notice).
-	nextViewerCheck_ = now + kViewerCheckSeconds;
+	nextViewerCheck_ = now + viewerCheckSeconds_;
 	HttpResponse res = Authorized(false,
 				      std::string(kApiBase) + "/videos?part=liveStreamingDetails&id=" +
 					      UrlEncode(liveVideoId_) + kViewersFields,

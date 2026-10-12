@@ -46,7 +46,6 @@ using Clock = std::chrono::steady_clock;
 static constexpr auto kStaleConnection = std::chrono::minutes(6);
 static constexpr auto kValidateInterval = std::chrono::hours(1);
 static constexpr int kMaxBackoffMs = 60000;
-static constexpr auto kViewerCheckInterval = std::chrono::minutes(5);
 static constexpr int kMaxReadsPerDrain = 32; // 16 KB each; a flood can't hold up outgoing messages
 static constexpr auto kReconnectWindow = std::chrono::seconds(15); // for the new socket's welcome
 static constexpr size_t kMaxSentIds = 16;
@@ -80,13 +79,14 @@ static bool SendLine(CURL *curl, curl_socket_t sock, const std::string &line)
 }
 
 TwitchConnection::TwitchConnection(std::string channel, std::string clientId, std::string login, oauth::Token token,
-				   bool useEventSub, ConnectionCallbacks callbacks)
+				   bool useEventSub, int viewerCheckMinutes, ConnectionCallbacks callbacks)
 	: channel_(std::move(channel)),
 	  clientId_(std::move(clientId)),
 	  login_(std::move(login)),
 	  token_(std::move(token)),
 	  callbacks_(std::move(callbacks)),
-	  useEventSub_(useEventSub)
+	  useEventSub_(useEventSub),
+	  viewerCheckInterval_(viewerCheckMinutes)
 {
 	wakeEvent_ = CreateWakeEvent();
 	thread_ = std::thread(&TwitchConnection::Run, this);
@@ -270,7 +270,7 @@ void TwitchConnection::RunSession(void *handle)
 
 	auto lastReceive = Clock::now();
 	auto lastValidate = Clock::now();
-	auto nextViewerCheck = Clock::now(); // soon after joining, then every kViewerCheckInterval
+	auto nextViewerCheck = Clock::now(); // soon after joining, then every viewerCheckInterval_
 	bool wasJoined = false;
 
 	while (!stop_) {
@@ -381,9 +381,10 @@ void TwitchConnection::RunSession(void *handle)
 			return;
 		}
 		// The viewer count needs the API (a sign-in) and the channel's id, known once joined.
-		const bool canCountViewers = token_.IsValid() && session.IsJoined() && !session.ChannelId().empty();
+		const bool canCountViewers = viewerCheckInterval_.count() > 0 && token_.IsValid() &&
+					     session.IsJoined() && !session.ChannelId().empty();
 		if (canCountViewers && now >= nextViewerCheck) {
-			nextViewerCheck = now + kViewerCheckInterval;
+			nextViewerCheck = now + viewerCheckInterval_;
 			CheckViewers(session.ChannelId());
 		}
 		if (token_.IsValid() && now - lastValidate > kValidateInterval) {
@@ -710,8 +711,9 @@ bool TwitchConnection::RunEventSub()
 			Notice("connection timed out");
 			return subscribed;
 		}
-		if (subscribed && now >= nextViewerCheck) {
-			nextViewerCheck = now + kViewerCheckInterval;
+		const bool countViewers = subscribed && viewerCheckInterval_.count() > 0;
+		if (countViewers && now >= nextViewerCheck) {
+			nextViewerCheck = now + viewerCheckInterval_;
 			CheckViewers(broadcasterId_);
 		}
 		if (now - lastValidate > kValidateInterval) {
@@ -722,7 +724,7 @@ bool TwitchConnection::RunEventSub()
 
 		auto due = (std::min)({lastReceive + keepalive + std::chrono::seconds(11),
 				       lastValidate + kValidateInterval,
-				       subscribed ? nextViewerCheck : (Clock::time_point::max)()});
+				       countViewers ? nextViewerCheck : (Clock::time_point::max)()});
 		auto waitMs = std::chrono::duration_cast<std::chrono::milliseconds>(due - Clock::now()).count() + 1;
 		if (successor)
 			waitMs = (std::min)(waitMs, 100LL); // two sockets for a few seconds: check both often

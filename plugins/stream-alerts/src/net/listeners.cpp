@@ -333,7 +333,9 @@ void TwitchListener::Run()
 
 // SubscriberPoller
 
-SubscriberPoller::SubscriberPoller(ListenerCallbacks callbacks) : Listener(std::move(callbacks))
+SubscriberPoller::SubscriberPoller(ListenerCallbacks callbacks, int intervalSeconds)
+	: Listener(std::move(callbacks)),
+	  intervalSeconds_(intervalSeconds)
 {
 	Start();
 }
@@ -348,7 +350,7 @@ void SubscriberPoller::Run()
 	SubscriberWatch watch;
 	CurlHttpClient http(&stop_);
 	while (!stop_) {
-		int waitSeconds = kSubscriberCheckSeconds;
+		int waitSeconds = intervalSeconds_;
 		account_ = SharedAccounts().Load().google; // picks up a refresh the chat plugin made
 		if (!account_.token.IsValid()) {
 			Status("not signed in (Tools → OBS Tools → Accounts)");

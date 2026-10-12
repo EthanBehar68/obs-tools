@@ -251,6 +251,7 @@ TEST_CASE("Config round trips through JSON")
 	config.youtubeConnectOnStream = false;
 	config.sendTarget = SendTarget::YouTube;
 	config.maxMessages = 800;
+	config.viewerCheckMinutes = 0;
 
 	const std::string text = SerializeConfig(config);
 	CHECK(text.find("token") == std::string::npos); // sign-ins live in the shared accounts file
@@ -266,6 +267,7 @@ TEST_CASE("Config round trips through JSON")
 	CHECK(ParseConfig("{}").youtubeConnectOnStream); // waiting for Start Streaming is the default
 	CHECK(loaded.sendTarget == SendTarget::YouTube);
 	CHECK(loaded.maxMessages == 800);
+	CHECK(loaded.viewerCheckMinutes == 0);
 	CHECK(ParseConfig("{}").showAlerts); // on by default
 	config.showAlerts = false;
 	CHECK_FALSE(ParseConfig(SerializeConfig(config)).showAlerts);
@@ -344,6 +346,7 @@ TEST_CASE("Config falls back to defaults for damaged input")
 	CHECK(empty.sendTarget == SendTarget::Both);
 	CHECK(empty.youtubePollSeconds == 8);
 	CHECK(empty.maxMessages == 500);
+	CHECK(empty.viewerCheckMinutes == 5);
 
 	ChatConfig wrongTypes = ParseConfig(R"({"twitch":{"channel":5},"youtube":{"poll_seconds":0},
 		"max_messages":"lots","send_target":"twitch"})");

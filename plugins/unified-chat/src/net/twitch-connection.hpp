@@ -23,6 +23,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "core/oauth-device.hpp"
 
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <deque>
 #include <functional>
@@ -74,7 +75,7 @@ struct Message;
 class TwitchConnection {
 public:
 	TwitchConnection(std::string channel, std::string clientId, std::string login, oauth::Token token,
-			 bool useEventSub, ConnectionCallbacks callbacks);
+			 bool useEventSub, int viewerCheckMinutes, ConnectionCallbacks callbacks);
 	~TwitchConnection();
 
 	TwitchConnection(const TwitchConnection &) = delete;
@@ -118,6 +119,7 @@ private:
 	std::deque<OutgoingMessage> outgoing_;
 	std::deque<ModerationAction> moderation_;
 	bool useEventSub_ = true;
+	std::chrono::minutes viewerCheckInterval_; // 0 = off
 	bool scopeNoticeShown_ = false;
 	TwitchIdentity identity_; // from the token check (worker thread only): user id and granted scopes
 	// EventSub only (worker thread): the channel's id, how your sent lines look, ids of sent messages whose

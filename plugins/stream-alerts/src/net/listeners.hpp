@@ -87,14 +87,17 @@ private:
 	std::string missing_; // for the status: what a new sign-in would add
 };
 
-// New YouTube subscribers: the recent-subscribers feed every kSubscriberCheckSeconds, compared with the last one.
+// New YouTube subscribers: the recent-subscribers feed every intervalSeconds (1 quota unit each), compared with the
+// last one.
 class SubscriberPoller : public Listener {
 public:
-	explicit SubscriberPoller(ListenerCallbacks callbacks);
+	SubscriberPoller(ListenerCallbacks callbacks, int intervalSeconds);
 	~SubscriberPoller() override;
 
 private:
 	void Run() override;
+
+	int intervalSeconds_;
 };
 
 } // namespace stream_alerts

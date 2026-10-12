@@ -87,6 +87,7 @@ std::string SerializeConfig(const ChatConfig &config)
 		  {"connect", config.youtubeConnectOnStream ? "on_stream" : "always"}}},
 		{"send_target", std::string(SendTargetToString(config.sendTarget))},
 		{"max_messages", config.maxMessages},
+		{"viewer_check_minutes", config.viewerCheckMinutes},
 		{"merge_bots", config.mergeBots},
 		{"show_alerts", config.showAlerts},
 	};
@@ -127,6 +128,7 @@ ChatConfig ParseConfig(const std::string &text, Accounts *legacy, const SecretCo
 
 	config.sendTarget = SendTargetFromString(Get<std::string>(obj, "send_target", "both"));
 	config.maxMessages = std::clamp(Get<int>(obj, "max_messages", 500), 50, 10000);
+	config.viewerCheckMinutes = std::clamp(Get<int>(obj, "viewer_check_minutes", 5), 0, 60);
 
 	auto showAlerts = obj.find("show_alerts");
 	if (showAlerts != obj.end() && showAlerts->is_boolean())

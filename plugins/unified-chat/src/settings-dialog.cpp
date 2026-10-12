@@ -183,6 +183,13 @@ SettingsDialog::SettingsDialog(const ChatConfig &config, QWidget *parent) : QDia
 	maxMessages_->setSingleStep(50);
 	maxMessages_->setValue(config.maxMessages);
 	generalForm->addRow(Text("Settings.MaxMessages"), maxMessages_);
+	viewerCheck_ = new QSpinBox(generalBox);
+	viewerCheck_->setRange(0, 60);
+	viewerCheck_->setSuffix(Text("Settings.MinutesSuffix"));
+	viewerCheck_->setSpecialValueText(Text("Settings.Off")); // 0
+	viewerCheck_->setValue(config.viewerCheckMinutes);
+	viewerCheck_->setToolTip(Text("Settings.ViewerCheckHint"));
+	generalForm->addRow(Text("Settings.ViewerCheck"), viewerCheck_);
 	mergeBots_ = new QLineEdit(FromStd(JoinNameList(config.mergeBots)), generalBox);
 	mergeBots_->setPlaceholderText(Text("Settings.MergeBotsHint"));
 	mergeBots_->setToolTip(Text("Settings.MergeBotsTip"));
@@ -218,6 +225,7 @@ ChatConfig SettingsDialog::Result() const
 	result.twitchChannel = channel.empty() ? ToStd(twitchChannel_->text()) : channel;
 	result.twitchEventSub = twitchMethod_->currentData().toBool();
 	result.youtubeVideo = ToStd(youtubeVideo_->text());
+	result.viewerCheckMinutes = viewerCheck_->value();
 	result.youtubePollSeconds = youtubePoll_->value();
 	result.youtubeStream = youtubeMethod_->currentData().toBool();
 	result.youtubeConnectOnStream = youtubeConnect_->currentData().toBool();

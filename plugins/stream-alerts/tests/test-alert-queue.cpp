@@ -161,17 +161,21 @@ TEST_CASE("Every kind, the minimums and variant messages round trip")
 	config.member.variantMessage = "{months}!";
 	config.minBits = 500;
 	config.minRaidViewers = 10;
+	config.subscriberCheckSeconds = 300;
 	AlertsConfig loaded = ParseAlertsConfig(SerializeAlertsConfig(config));
 	for (AlertKind kind : kAllKinds)
 		CHECK(loaded.For(kind).source == std::string("Source ") + KindKey(kind));
 	CHECK(loaded.member.variantMessage == "{months}!");
 	CHECK(loaded.minBits == 500);
 	CHECK(loaded.minRaidViewers == 10);
+	CHECK(loaded.subscriberCheckSeconds == 300);
+	CHECK(ParseAlertsConfig(R"({"subscriber_check_seconds":5})").subscriberCheckSeconds == 30);
 
 	// A 0.1.0 config: only follow and subscriber; the new kinds get their defaults.
 	AlertsConfig old = ParseAlertsConfig(R"({"follow":{"source":"F"},"subscriber":{"source":"S"}})");
 	CHECK(old.follow.source == "F");
 	CHECK(old.giftSubs.message == "{name} gifted {count} subs!");
 	CHECK(old.minBits == 1);
+	CHECK(old.subscriberCheckSeconds == 120);
 	CHECK(ParseAlertsConfig(R"({"min_bits":0})").minBits == 1);
 }

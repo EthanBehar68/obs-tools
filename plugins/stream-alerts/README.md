@@ -5,7 +5,7 @@ Alerts for **Twitch** and **YouTube**, built into OBS: no StreamElements, Stream
 | Platform | Alerts | How they arrive |
 |---|---|---|
 | Twitch | follows, subs and resubs, gift subs, cheers, raids | the moment they happen (EventSub over one WebSocket; the connection sleeps between events) |
-| YouTube | channel subscribers | checked every 2 minutes (30 of your daily 10,000 quota units an hour). Only public subscriptions can be seen; that's a YouTube rule |
+| YouTube | channel subscribers | checked every 2 minutes by default (30 of your daily 10,000 quota units an hour); **Check every** sets 30 seconds (120 units an hour) to 15 minutes (4). Only public subscriptions can be seen; that's a YouTube rule |
 | YouTube | Super Chats and Super Stickers, new members and milestones, gifted memberships | from [Unified Chat](../unified-chat/README.md)'s YouTube chat, about 2 seconds after they happen, at no extra quota. Unified Chat must be installed and connected to YouTube |
 
 - Alerts run **only while OBS is streaming**. Nothing connects or polls while you're offline.

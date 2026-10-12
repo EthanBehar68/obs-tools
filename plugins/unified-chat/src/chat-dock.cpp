@@ -397,7 +397,8 @@ void ChatDock::ConnectTwitch()
 	assetChannelId_.clear();
 	twitch_ = std::make_unique<TwitchConnection>(config_.twitchChannel, accounts_.twitch.clientId,
 						     accounts_.twitch.login, accounts_.twitch.token,
-						     config_.twitchEventSub, MakeCallbacks(Platform::Twitch));
+						     config_.twitchEventSub, config_.viewerCheckMinutes,
+						     MakeCallbacks(Platform::Twitch));
 }
 
 void ChatDock::ConnectYouTube()
@@ -416,7 +417,7 @@ void ChatDock::ConnectYouTube()
 						       accounts_.google.token, config_.youtubeVideo,
 						       config_.youtubePollSeconds, config_.youtubeStream,
 						       config_.youtubeConnectOnStream, historyCutoff_,
-						       MakeCallbacks(Platform::YouTube));
+						       config_.viewerCheckMinutes, MakeCallbacks(Platform::YouTube));
 }
 
 void ChatDock::OnStreamingChanged(bool streaming)

@@ -806,7 +806,7 @@ TEST_CASE("The viewer count is checked on connecting and then every 5 minutes")
 {
 	FakeHttp http;
 	ChatSession session(http, oauth::GoogleProvider("id", "sec"), FreshToken(), "", 5000, nullptr);
-	session.SetViewerChecks(true);
+	session.SetViewerChecks(300);
 	http.Queue(200, kBroadcastLive);
 	http.Queue(200, kChannel);
 	session.Step(1000);

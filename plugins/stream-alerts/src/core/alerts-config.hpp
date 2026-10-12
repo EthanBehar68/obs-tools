@@ -51,6 +51,7 @@ struct AlertsConfig {
 	int minBits = 1;        // smaller cheers don't alert
 	int minRaidViewers = 1; // nor smaller raids
 	int durationSeconds = 5;
+	int subscriberCheckSeconds = 120; // YouTube subscribers: 1 quota unit per check, so 30 an hour
 
 	AlertSettings &For(AlertKind kind);
 	const AlertSettings &For(AlertKind kind) const { return const_cast<AlertsConfig *>(this)->For(kind); }
@@ -59,8 +60,9 @@ struct AlertsConfig {
 // The JSON key of a kind's settings: "follow", "twitch_sub", ...
 const char *KindKey(AlertKind kind);
 
-constexpr int kGapMs = 1000;                 // between two alerts
-constexpr int kSubscriberCheckSeconds = 120; // 30 YouTube quota units an hour, only while streaming
+constexpr int kGapMs = 1000; // between two alerts
+constexpr int kMinSubscriberCheckSeconds = 30;
+constexpr int kMaxSubscriberCheckSeconds = 900;
 
 std::string SerializeAlertsConfig(const AlertsConfig &config);
 // Missing or malformed fields fall back to the defaults.
