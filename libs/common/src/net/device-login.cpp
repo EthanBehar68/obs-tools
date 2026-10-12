@@ -55,6 +55,7 @@ void DeviceLogin::Run()
 	};
 
 	CurlHttpClient http(&stop_);
+	http.SetLogFailures(false); // polling answers "authorization_pending" until the user approves
 	auto res = http.Post(provider_.deviceUrl, {}, oauth::BuildDeviceRequestBody(provider_), kFormType);
 	auto code = res.Ok() ? oauth::ParseDeviceCode(res.body) : std::nullopt;
 	if (!code) {

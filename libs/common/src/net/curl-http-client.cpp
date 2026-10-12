@@ -19,6 +19,10 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "curl-http-client.hpp"
 
 #include <curl/curl.h>
+#include <obs-module.h>
+#include <plugin-support.h>
+
+#include <algorithm>
 
 namespace unified_chat {
 
@@ -66,7 +70,37 @@ int Progress(void *userdata, curl_off_t, curl_off_t, curl_off_t, curl_off_t)
 	return 0;
 }
 
+// "https://host/path" without the query, which can be long and carries ids.
+std::string WithoutQuery(const std::string &url)
+{
+	return url.substr(0, url.find('?'));
+}
+
+// One line, short enough to read in a log: control characters become spaces.
+std::string Excerpt(const std::string &text, size_t maxLength = 200)
+{
+	std::string out = text.substr(0, maxLength);
+	std::replace_if(out.begin(), out.end(), [](char c) { return (unsigned char)c < 0x20; }, ' ');
+	return text.size() > maxLength ? out + "…" : out;
+}
+
 } // namespace
+
+void CurlHttpClient::Count(bool newConnection, bool failed, bool serverError)
+{
+	++requests_;
+	newConnections_ += newConnection;
+	failures_ += failed;
+	serverErrors_ += serverError;
+	const auto now = std::chrono::steady_clock::now();
+	if (logName_.empty() || now - statsSince_ < std::chrono::hours(1))
+		return;
+	const auto minutes = std::chrono::duration_cast<std::chrono::minutes>(now - statsSince_).count();
+	obs_log(LOG_INFO, "%s: last %lld min: %d requests, %d new connections, %d failed (%d server errors)",
+		logName_.c_str(), (long long)minutes, requests_, newConnections_, failures_, serverErrors_);
+	statsSince_ = now;
+	requests_ = newConnections_ = failures_ = serverErrors_ = 0;
+}
 
 CurlHttpClient::~CurlHttpClient()
 {
@@ -154,6 +188,34 @@ HttpResponse CurlHttpClient::Perform(const std::string &url, const std::vector<s
 		response.status = 0;
 		response.error = errorBuffer[0] ? errorBuffer : curl_easy_strerror(code);
 	}
+
+	// Before the reset, which clears these.
+	long connects = 0;
+	curl_off_t connectUs = 0, tlsUs = 0, totalUs = 0;
+	curl_easy_getinfo(curl, CURLINFO_NUM_CONNECTS, &connects);
+	curl_easy_getinfo(curl, CURLINFO_CONNECT_TIME_T, &connectUs);
+	curl_easy_getinfo(curl, CURLINFO_APPCONNECT_TIME_T, &tlsUs);
+	curl_easy_getinfo(curl, CURLINFO_TOTAL_TIME_T, &totalUs);
+	const bool cancelled = cancel_ && cancel_->load();
+	const bool failed = !response.interrupted && !cancelled &&
+			    (response.status == 0 || (response.status >= 400 && response.status != 401));
+	if (failed && logFailures_) {
+		const char *method = deleteMethod ? "DELETE" : body ? "POST" : "GET";
+		const std::string connection =
+			connects > 0 ? "new connection (connect " + std::to_string(connectUs / 1000) +
+					       " ms, TLS done at " + std::to_string(tlsUs / 1000) + " ms)"
+				     : std::string("reused connection");
+		if (response.status == 0)
+			obs_log(LOG_WARNING, "HTTP %s %s failed: curl %d, %s; after %lld ms, %s", method,
+				WithoutQuery(url).c_str(), (int)code, response.error.c_str(),
+				(long long)(totalUs / 1000), connection.c_str());
+		else
+			obs_log(LOG_WARNING, "HTTP %s %s: %ld after %lld ms, %s: %s", method, WithoutQuery(url).c_str(),
+				response.status, (long long)(totalUs / 1000), connection.c_str(),
+				Excerpt(response.body).c_str());
+	}
+	if (!cancelled)
+		Count(connects > 0, failed, response.status >= 500);
 
 	// Drops this request's options (they point at locals) but keeps the open connection, TLS session and
 	// DNS cache for the next request.

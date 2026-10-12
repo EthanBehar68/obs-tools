@@ -333,12 +333,17 @@ void AlertsController::Push(const AlertEvent &event, bool test)
 {
 	if (IsPriority(event.kind)) {
 		// Not set up: it would show nothing and only hold up the others. Tests skip the minimums.
-		if (!config_.For(event.kind).IsSetUp())
+		const char *skipped = !config_.For(event.kind).IsSetUp() ? "turned off or no source set"
+				      : !test && event.kind == AlertKind::Cheer && event.count < config_.minBits
+					      ? "below the minimum bits"
+				      : !test && event.kind == AlertKind::Raid && event.viewers < config_.minRaidViewers
+					      ? "below the minimum raid size"
+					      : nullptr;
+		if (skipped) {
+			obs_log(LOG_INFO, "%s from %s not shown: %s", KindName(event.kind), event.name.c_str(),
+				skipped);
 			return;
-		if (!test && event.kind == AlertKind::Cheer && event.count < config_.minBits)
-			return;
-		if (!test && event.kind == AlertKind::Raid && event.viewers < config_.minRaidViewers)
-			return;
+		}
 	}
 	if (!queue_.Push(event))
 		return;

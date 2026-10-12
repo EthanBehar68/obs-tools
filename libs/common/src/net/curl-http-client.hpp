@@ -21,6 +21,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "core/http-client.hpp"
 
 #include <atomic>
+#include <chrono>
+#include <string>
 
 namespace unified_chat {
 
@@ -28,9 +30,17 @@ namespace unified_chat {
 // once the shared cancel flag is set, so worker threads can be joined quickly on shutdown.
 // One curl handle is kept for the client's lifetime so connections, TLS sessions and DNS results are
 // reused between requests. Use a client from one thread at a time.
+//
+// Logging: every failed request (no response, or HTTP 400 and up except 401, which callers refresh and retry)
+// gets one detailed line in the OBS log. A client given a log name also writes an hourly summary, which shows
+// how often requests fail and whether connections are being reused.
 class CurlHttpClient : public HttpClient {
 public:
-	explicit CurlHttpClient(const std::atomic<bool> *cancel = nullptr) : cancel_(cancel) {}
+	explicit CurlHttpClient(const std::atomic<bool> *cancel = nullptr, std::string logName = {})
+		: cancel_(cancel),
+		  logName_(std::move(logName))
+	{
+	}
 	~CurlHttpClient() override;
 
 	CurlHttpClient(const CurlHttpClient &) = delete;
@@ -40,6 +50,8 @@ public:
 	HttpResponse Post(const std::string &url, const std::vector<std::string> &headers, const std::string &body,
 			  const std::string &contentType) override;
 	HttpResponse Delete(const std::string &url, const std::vector<std::string> &headers) override;
+	// Off for requests that fail by design, such as the sign-in's "still waiting" polls.
+	void SetLogFailures(bool enabled) { logFailures_ = enabled; }
 	HttpResponse GetStream(const std::string &url, const std::vector<std::string> &headers,
 			       const std::function<bool(std::string_view)> &onData,
 			       const std::function<bool()> &interrupt) override;
@@ -49,8 +61,16 @@ private:
 			     const std::string &contentType, const std::function<bool(std::string_view)> *onData,
 			     const std::function<bool()> *interrupt, bool deleteMethod = false);
 
+	void Count(bool newConnection, bool failed, bool serverError);
+
 	const std::atomic<bool> *cancel_;
+	std::string logName_;
+	bool logFailures_ = true;
 	void *curl_ = nullptr; // CURL *
+
+	// For the hourly summary.
+	std::chrono::steady_clock::time_point statsSince_ = std::chrono::steady_clock::now();
+	int requests_ = 0, newConnections_ = 0, failures_ = 0, serverErrors_ = 0;
 };
 
 } // namespace unified_chat

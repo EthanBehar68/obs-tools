@@ -27,6 +27,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "core/twitch-irc.hpp"
 
 #include <curl/curl.h>
+#include <obs-module.h>
+#include <plugin-support.h>
 
 #include <algorithm>
 #include <chrono>
@@ -590,7 +592,7 @@ void TwitchConnection::SendViaApi(HttpClient &http, const OutgoingMessage &outgo
 bool TwitchConnection::RunEventSub()
 {
 	SetState(LinkState::Connecting);
-	CurlHttpClient http(&stop_); // one handle, so the Helix calls reuse a connection
+	CurlHttpClient http(&stop_, "Twitch chat API"); // one handle, so the Helix calls reuse a connection
 	if (broadcasterId_.empty() && !LookUpUsers(http))
 		return false;
 
@@ -648,11 +650,15 @@ bool TwitchConnection::RunEventSub()
 				break;
 			case eventsub::Message::Type::Reconnect:
 				if (!isSuccessor && !successor && !message->reconnectUrl.empty()) {
+					obs_log(LOG_INFO, "Twitch: EventSub asked to move to a new connection");
 					successor = std::make_unique<EventSubSocket>(&stop_);
 					successorWelcomed = false;
 					successorDeadline = Clock::now() + kReconnectWindow;
-					if (!successor->Open(message->reconnectUrl, error))
+					if (!successor->Open(message->reconnectUrl, error)) {
+						obs_log(LOG_WARNING, "Twitch: EventSub new connection failed: %s",
+							error.c_str());
 						successor.reset(); // the old socket closes soon; then a fresh start
+					}
 				}
 				break;
 			case eventsub::Message::Type::Revocation:
@@ -695,6 +701,7 @@ bool TwitchConnection::RunEventSub()
 		if (successor && successorWelcomed) {
 			socket = std::move(successor); // the old one was read to the end above
 			successorWelcomed = false;
+			obs_log(LOG_INFO, "Twitch: EventSub moved to the new connection");
 		} else if (!open) {
 			if (revoked)
 				return false;
@@ -704,8 +711,10 @@ bool TwitchConnection::RunEventSub()
 		}
 
 		auto now = Clock::now();
-		if (successor && now > successorDeadline)
+		if (successor && now > successorDeadline) {
+			obs_log(LOG_WARNING, "Twitch: EventSub new connection sent no welcome in time");
 			successor.reset();
+		}
 		// Twitch sends something at least every keepalive interval; silence past it means a dead connection.
 		if (now > lastReceive + keepalive + std::chrono::seconds(10)) {
 			Notice("connection timed out");

@@ -348,7 +348,7 @@ SubscriberPoller::~SubscriberPoller()
 void SubscriberPoller::Run()
 {
 	SubscriberWatch watch;
-	CurlHttpClient http(&stop_);
+	CurlHttpClient http(&stop_, "YouTube subscribers");
 	while (!stop_) {
 		int waitSeconds = intervalSeconds_;
 		account_ = SharedAccounts().Load().google; // picks up a refresh the chat plugin made

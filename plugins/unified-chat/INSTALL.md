@@ -137,6 +137,9 @@ Versions up to 1.2.0 kept the sign-ins in `config.json`. The first start of a ne
 
 Every plugin log line starts with `[obs-unified-chat]`. Check **Help → Log Files → View Current Log**.
 
+- Every failed web request has its own line, e.g. `HTTP GET https://youtube.googleapis.com/youtube/v3/liveChat/messages/stream failed: curl 28, SSL/TLS connection timeout; after 10012 ms, new connection (…)`. It names the request, how long it took, and whether it opened a new connection; server errors include the start of the server's reply.
+- About once an hour while connected, `YouTube chat: last 60 min: …` (and `Twitch chat API`, `YouTube subscribers` in Stream Alerts) counts requests, new connections and failures. Many new connections, or failures every hour, point to a network or connection problem worth reporting.
+
 | Symptom | Fix |
 |---------|-----|
 | No **Unified Chat** entry under Docks | Look in the log for `compiled with newer libobs`: update OBS to 32.2 or newer. Otherwise check the DLL path from step 1. |

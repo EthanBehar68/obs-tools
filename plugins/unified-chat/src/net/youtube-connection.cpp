@@ -104,7 +104,7 @@ void YouTubeConnection::Run()
 		return;
 	}
 
-	CurlHttpClient http(&stop_);
+	CurlHttpClient http(&stop_, "YouTube chat");
 	youtube::ChatSession session(http, oauth::GoogleProvider(clientId_, clientSecret_), token_, video_,
 				     pollSeconds_ * 1000, [this](const oauth::Token &token) {
 					     // Google refresh tokens are reusable, so the session refreshes by itself; the store
