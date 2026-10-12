@@ -38,7 +38,11 @@ static constexpr int kQuotaRetryMs = 15 * 60 * 1000;
 static constexpr const char *kMessagesFields =
 	"&fields=nextPageToken,pollingIntervalMillis,offlineAt,"
 	"items(id,snippet(type,publishedAt,displayMessage,textMessageDetails/messageText,"
-	"userBannedDetails(bannedUserDetails(channelId,displayName),banType,banDurationSeconds)),"
+	"userBannedDetails(bannedUserDetails(channelId,displayName),banType,banDurationSeconds),"
+	"superChatDetails(amountDisplayString,userComment),"
+	"superStickerDetails(amountDisplayString,superStickerMetadata/altText),"
+	"newSponsorDetails/memberLevelName,memberMilestoneChatDetails(memberLevelName,memberMonth,userComment),"
+	"membershipGiftingDetails(giftMembershipsCount,giftMembershipsLevelName)),"
 	"authorDetails(displayName,channelId,isChatOwner,isChatModerator,isChatSponsor))";
 static constexpr const char *kBroadcastFields = "&fields=items(id,snippet/liveChatId)";
 static constexpr const char *kViewersFields = "&fields=items/liveStreamingDetails/concurrentViewers";
@@ -69,6 +73,59 @@ static bool BoolAt(const json &obj, const char *section, const char *key)
 	return value != it->end() && value->is_boolean() && value->get<bool>();
 }
 
+static int64_t Int64At(const json &obj, std::initializer_list<const char *> path);
+
+// Super Chats, Super Stickers and membership events; nullopt for anything else.
+static std::optional<YouTubeEvent> EventFromItem(const json &item)
+{
+	const std::string type = StringAt(item, {"snippet", "type"});
+	YouTubeEvent event;
+	if (type == "superChatEvent") {
+		event.kind = YouTubeEvent::Kind::SuperChat;
+		event.amount = StringAt(item, {"snippet", "superChatDetails", "amountDisplayString"});
+		event.message = StringAt(item, {"snippet", "superChatDetails", "userComment"});
+	} else if (type == "superStickerEvent") {
+		event.kind = YouTubeEvent::Kind::SuperSticker;
+		event.amount = StringAt(item, {"snippet", "superStickerDetails", "amountDisplayString"});
+		event.message = StringAt(item, {"snippet", "superStickerDetails", "superStickerMetadata", "altText"});
+	} else if (type == "newSponsorEvent") {
+		event.kind = YouTubeEvent::Kind::NewMember;
+		event.level = StringAt(item, {"snippet", "newSponsorDetails", "memberLevelName"});
+	} else if (type == "memberMilestoneChatEvent") {
+		event.kind = YouTubeEvent::Kind::MemberMilestone;
+		event.level = StringAt(item, {"snippet", "memberMilestoneChatDetails", "memberLevelName"});
+		event.months = Int64At(item, {"snippet", "memberMilestoneChatDetails", "memberMonth"});
+		event.message = StringAt(item, {"snippet", "memberMilestoneChatDetails", "userComment"});
+	} else if (type == "membershipGiftingEvent") {
+		event.kind = YouTubeEvent::Kind::GiftMemberships;
+		event.level = StringAt(item, {"snippet", "membershipGiftingDetails", "giftMembershipsLevelName"});
+		event.count = Int64At(item, {"snippet", "membershipGiftingDetails", "giftMembershipsCount"});
+	} else {
+		return std::nullopt;
+	}
+	event.id = StringAt(item, {"id"});
+	event.channelId = StringAt(item, {"authorDetails", "channelId"});
+	event.name = StringAt(item, {"authorDetails", "displayName"});
+	return event;
+}
+
+// What the chat line says when YouTube's own display text is missing.
+static std::string DescribeEvent(const YouTubeEvent &event)
+{
+	switch (event.kind) {
+	case YouTubeEvent::Kind::SuperChat:
+		return "sent a Super Chat (" + event.amount + ")";
+	case YouTubeEvent::Kind::SuperSticker:
+		return "sent a Super Sticker (" + event.amount + ")";
+	case YouTubeEvent::Kind::NewMember:
+		return "became a member";
+	case YouTubeEvent::Kind::MemberMilestone:
+		return "has been a member for " + std::to_string(event.months) + " months";
+	default:
+		return "gifted " + std::to_string(event.count) + " memberships";
+	}
+}
+
 static std::optional<ChatMessage> MessageFromItem(const json &item, std::string_view ownChannelId)
 {
 	if (!item.is_object())
@@ -83,6 +140,9 @@ static std::optional<ChatMessage> MessageFromItem(const json &item, std::string_
 	chat.text = StringAt(item, {"snippet", "displayMessage"});
 	if (chat.text.empty())
 		chat.text = StringAt(item, {"snippet", "textMessageDetails", "messageText"});
+	chat.youtubeEvent = EventFromItem(item);
+	if (chat.text.empty() && chat.youtubeEvent)
+		chat.text = DescribeEvent(*chat.youtubeEvent);
 	if (chat.text.empty())
 		return std::nullopt;
 
@@ -676,7 +736,7 @@ ModerationOutcome ChatSession::Moderate(const ModerationAction &action, int64_t 
 		return outcome;
 	}
 
-	HttpResponse res = Authorized(*request, now); // 50 quota units each
+	HttpResponse res = Authorized(*request, now); // 20 quota units for a delete, 200 for a ban or unban
 	if (!res.Ok()) {
 		const std::string reason = ModerationErrorMessage(res.body);
 		outcome.error = res.status == 0

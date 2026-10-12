@@ -139,7 +139,8 @@ TEST_CASE("Chat subscriptions: channel.ban replaces clear_user_messages for the 
 	};
 	auto viewer = BuildChatSubscriptions("s1", "100", "200", false);
 	CHECK(types(viewer) == std::vector<std::string>{"channel.chat.message", "channel.chat.message_delete",
-							"channel.chat.clear", "channel.chat.clear_user_messages"});
+							"channel.chat.clear", "channel.chat.notification",
+							"channel.chat.clear_user_messages"});
 	auto first = json::parse(viewer[0]);
 	CHECK(first["condition"]["broadcaster_user_id"] == "100");
 	CHECK(first["condition"]["user_id"] == "200");
@@ -220,4 +221,13 @@ TEST_CASE("Twitch's copy of a sent message updates its echo")
 	CHECK(merged.author == "me / MeOnYouTube");
 	CHECK(merged.color == "#ff0000");
 	CHECK(merged.badges.size() == 1);
+}
+
+TEST_CASE("Chat notifications show Twitch's line and the viewer's message")
+{
+	CHECK(NotificationText(json::parse(R"({"notice_type":"resub","system_message":"Fan subscribed for 10 months!",
+		"message":{"text":"hi all","fragments":[]}})")) == "Fan subscribed for 10 months! - hi all");
+	CHECK(NotificationText(json::parse(R"({"notice_type":"raid","system_message":"5 raiders from Pal have joined!",
+		"message":{"text":"","fragments":[]}})")) == "5 raiders from Pal have joined!");
+	CHECK(NotificationText(json::object()) == "");
 }

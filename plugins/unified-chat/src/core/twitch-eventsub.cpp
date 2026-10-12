@@ -36,7 +36,8 @@ std::vector<std::string> BuildChatSubscriptions(const std::string &sessionId, co
 	const std::vector<std::pair<std::string, std::string>> chat{{"broadcaster_user_id", broadcasterId},
 								    {"user_id", userId}};
 	std::vector<std::string> bodies;
-	for (const char *type : {"channel.chat.message", "channel.chat.message_delete", "channel.chat.clear"})
+	for (const char *type :
+	     {"channel.chat.message", "channel.chat.message_delete", "channel.chat.clear", "channel.chat.notification"})
 		bodies.push_back(eventsub::BuildSubscription(type, "1", chat, sessionId));
 	if (withBanEvents)
 		bodies.push_back(eventsub::BuildSubscription("channel.ban", "1",
@@ -176,6 +177,15 @@ std::optional<ModerationEvent> ModerationFromEvent(std::string_view type, const 
 		return std::nullopt;
 	}
 	return moderation;
+}
+
+std::string NotificationText(const json &event)
+{
+	std::string text = StringAt(event, {"system_message"});
+	const std::string message = StringAt(event, {"message", "text"});
+	if (!message.empty())
+		text += text.empty() ? message : " - " + message;
+	return text;
 }
 
 std::optional<std::string> BuildSendChatBody(const std::string &broadcasterId, const std::string &senderId,

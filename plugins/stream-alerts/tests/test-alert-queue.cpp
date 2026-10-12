@@ -92,3 +92,86 @@ TEST_CASE("Alerts config round trips and falls back to defaults")
 	CHECK(damaged.durationSeconds == 60);
 	CHECK(ParseAlertsConfig("not json").follow.message == "{name} just followed!");
 }
+
+TEST_CASE("Paid alerts and raids go ahead of waiting follows, every time, and never combine")
+{
+	AlertQueue queue;
+	for (int n = 1; n <= 12; ++n)
+		queue.Push(Follow(n)); // 10 individual + 1 combined
+	AlertEvent cheer{AlertKind::Cheer, "u1", "Cheerer"};
+	cheer.count = 100;
+	CHECK(queue.Push(cheer));
+	CHECK(queue.Push(cheer)); // the same person again: alerts again
+	CHECK(queue.Push({AlertKind::Raid, "r1", "Raider"}));
+	for (int n = 0; n < 20; ++n)
+		queue.Push({AlertKind::SuperChat, "c" + std::to_string(n), "Fan"}); // never limited or combined
+
+	auto first = queue.Pop();
+	REQUIRE(first);
+	CHECK(first->kind == AlertKind::Cheer);
+	CHECK(first->event.count == 100);
+	CHECK(queue.Pop()->kind == AlertKind::Cheer);
+	CHECK(queue.Pop()->kind == AlertKind::Raid); // in arrival order among themselves
+	for (int n = 0; n < 20; ++n) {
+		auto superChat = queue.Pop();
+		REQUIRE(superChat);
+		CHECK(superChat->kind == AlertKind::SuperChat);
+		CHECK_FALSE(superChat->combined);
+	}
+	CHECK(queue.Pop()->names.front() == "user1"); // then the follows, as before
+}
+
+TEST_CASE("Alert messages fill in each kind's details")
+{
+	const AlertsConfig config;
+	AlertEvent resub{AlertKind::TwitchSub, "1", "Fan"};
+	resub.variant = true;
+	resub.months = 14;
+	resub.message = "{name} love it"; // a viewer's text is never expanded
+	CHECK(FormatAlert({resub.kind, {resub.name}, false, resub}, config.twitchSub.variantMessage + " {message}",
+			  {}) == "Fan resubscribed for 14 months! {name} love it");
+
+	AlertEvent raid{AlertKind::Raid, "2", "Pal"};
+	raid.viewers = 25;
+	CHECK(FormatAlert({raid.kind, {raid.name}, false, raid}, config.raid.message, {}) ==
+	      "Pal is raiding with 25 viewers!");
+
+	AlertEvent superChat{AlertKind::SuperChat, "3", "@viewer"};
+	superChat.amount = "$5.00";
+	superChat.message = "great stream";
+	CHECK(FormatAlert({superChat.kind, {superChat.name}, false, superChat}, config.superChat.message, {}) ==
+	      "@viewer sent $5.00!\ngreat stream");
+}
+
+TEST_CASE("A kind is set up only with something to show")
+{
+	AlertsConfig config;
+	CHECK_FALSE(config.cheer.IsSetUp());
+	config.cheer.textSource = "Cheer Text";
+	CHECK(config.cheer.IsSetUp());
+	config.cheer.enabled = false;
+	CHECK_FALSE(config.cheer.IsSetUp());
+}
+
+TEST_CASE("Every kind, the minimums and variant messages round trip")
+{
+	AlertsConfig config;
+	for (AlertKind kind : kAllKinds)
+		config.For(kind).source = std::string("Source ") + KindKey(kind);
+	config.member.variantMessage = "{months}!";
+	config.minBits = 500;
+	config.minRaidViewers = 10;
+	AlertsConfig loaded = ParseAlertsConfig(SerializeAlertsConfig(config));
+	for (AlertKind kind : kAllKinds)
+		CHECK(loaded.For(kind).source == std::string("Source ") + KindKey(kind));
+	CHECK(loaded.member.variantMessage == "{months}!");
+	CHECK(loaded.minBits == 500);
+	CHECK(loaded.minRaidViewers == 10);
+
+	// A 0.1.0 config: only follow and subscriber; the new kinds get their defaults.
+	AlertsConfig old = ParseAlertsConfig(R"({"follow":{"source":"F"},"subscriber":{"source":"S"}})");
+	CHECK(old.follow.source == "F");
+	CHECK(old.giftSubs.message == "{name} gifted {count} subs!");
+	CHECK(old.minBits == 1);
+	CHECK(ParseAlertsConfig(R"({"min_bits":0})").minBits == 1);
+}

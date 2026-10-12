@@ -16,6 +16,8 @@ target_sources(
     src/core/secret-codec.hpp
     src/core/text-util.cpp
     src/core/text-util.hpp
+    src/core/youtube-events.cpp
+    src/core/youtube-events.hpp
 )
 target_include_directories(obs-tools-core PUBLIC src "${CMAKE_SOURCE_DIR}/dep/nlohmann-json")
 set_target_properties(obs-tools-core PROPERTIES POSITION_INDEPENDENT_CODE ON)
@@ -72,6 +74,7 @@ if(ENABLE_TESTS)
       tests/test-json-array-reader.cpp
       tests/test-oauth.cpp
       tests/test-text-util.cpp
+      tests/test-youtube-events.cpp
   )
   target_link_libraries(common-tests PRIVATE obs-tools-core obs-tools-test-main)
   _remove_output_before_link(common-tests)

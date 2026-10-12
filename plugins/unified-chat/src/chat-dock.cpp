@@ -25,6 +25,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "core/moderation.hpp"
 #include "core/text-util.hpp"
 #include "net/account-store.hpp"
+#include "ui/obs-tools-menu.hpp"
 
 #include <obs-frontend-api.h>
 #include <obs-module.h>
@@ -871,8 +872,12 @@ bool ChatDock::ConfirmModeration(ModerationAction &action, bool customTimeout)
 {
 	const QString name = QString::fromStdString(action.userName);
 	const QString platform = QString::fromUtf8(PlatformName(action.platform).data());
-	const QString quota = action.platform == Platform::YouTube ? QStringLiteral("\n\n") + Text("Mod.Quota")
-								   : QString();
+	// Google's quota table (checked 2026-10-12): deleting a message 20 units, a ban, timeout or unban 200.
+	const QString quota =
+		action.platform == Platform::YouTube
+			? QStringLiteral("\n\n") +
+				  Text("Mod.Quota").arg(action.kind == ModerationAction::Kind::DeleteMessage ? 20 : 200)
+			: QString();
 	auto ask = [&](const QString &question) {
 		return QMessageBox::question(this, Text("Mod.Title"), question + quota) == QMessageBox::Yes;
 	};
@@ -997,6 +1002,9 @@ void ChatDock::AppendMessages(const std::vector<ChatMessage> &messages)
 	std::vector<DisplayLine> lines;
 	lines.reserve(messages.size());
 	for (const auto &message : messages) {
+		// Super Chats and memberships only arrive in the chat: Stream Alerts alerts on them.
+		if (message.youtubeEvent)
+			NotifyYouTubeEvent(SerializeYouTubeEvent(*message.youtubeEvent));
 		auto released = merger_.Offer(message);
 		std::move(released.begin(), released.end(), std::back_inserter(lines));
 	}

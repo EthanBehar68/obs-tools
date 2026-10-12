@@ -56,6 +56,10 @@ std::optional<ChatMessage> ChatMessageFromEvent(const nlohmann::json &event, std
 // user doesn't say whether it was a timeout or a ban: durationSeconds is kRemovalUnknown.
 std::optional<ModerationEvent> ModerationFromEvent(std::string_view type, const nlohmann::json &event);
 
+// channel.chat.notification (subs, gifts, raids, announcements, ...): the line Twitch shows, then the viewer's own
+// message if any, as the dock's notice. Empty when there's nothing to show.
+std::string NotificationText(const nlohmann::json &event);
+
 // Send Chat Message. nullopt when there's nothing to send.
 std::optional<std::string> BuildSendChatBody(const std::string &broadcasterId, const std::string &senderId,
 					     std::string_view text, std::string_view replyParentId = {});

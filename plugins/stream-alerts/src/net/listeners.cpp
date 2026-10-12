@@ -98,19 +98,21 @@ bool Listener::Refresh(Service service)
 	return true;
 }
 
-// FollowListener
+// TwitchListener
 
-FollowListener::FollowListener(ListenerCallbacks callbacks) : Listener(std::move(callbacks))
+TwitchListener::TwitchListener(ListenerCallbacks callbacks, TwitchWants wants)
+	: Listener(std::move(callbacks)),
+	  wants_(wants)
 {
 	Start();
 }
 
-FollowListener::~FollowListener()
+TwitchListener::~TwitchListener()
 {
 	Stop();
 }
 
-FollowListener::Outcome FollowListener::Authorize(std::string &userId)
+TwitchListener::Outcome TwitchListener::Authorize(std::string &userId)
 {
 	account_ = SharedAccounts().Load().twitch;
 	if (!account_.token.IsValid() || account_.clientId.empty()) {
@@ -137,8 +139,27 @@ FollowListener::Outcome FollowListener::Authorize(std::string &userId)
 		auto user = ParseValidate(res.body);
 		if (!user)
 			return Outcome::Retry;
-		if (!user->HasScope(kFollowScope)) {
-			Status("sign in to Twitch again in Tools → OBS Tools → Accounts to allow follower alerts");
+		// Each kind needs its own permission; listen for what the sign-in allows and say what's missing.
+		allowed_ = wants_;
+		std::vector<std::string> missing;
+		if (wants_.follows && !user->HasScope(kFollowScope)) {
+			allowed_.follows = false;
+			missing.push_back("follows");
+		}
+		if (wants_.notifications && !user->HasScope(kChatScope)) {
+			allowed_.notifications = false;
+			missing.push_back("subs and raids");
+		}
+		if (wants_.cheers && !user->HasScope(kBitsScope)) {
+			allowed_.cheers = false;
+			missing.push_back("cheers");
+		}
+		missing_.clear();
+		for (const auto &kind : missing)
+			missing_ += (missing_.empty() ? "" : ", ") + kind;
+		if (!allowed_.follows && !allowed_.notifications && !allowed_.cheers) {
+			Status("sign in to Twitch again in Tools → OBS Tools → Accounts to allow " + missing_ +
+			       " alerts");
 			return Outcome::Stop;
 		}
 		userId = user->id;
@@ -147,31 +168,54 @@ FollowListener::Outcome FollowListener::Authorize(std::string &userId)
 	return Outcome::Retry;
 }
 
-FollowListener::Outcome FollowListener::Subscribe(const std::string &sessionId, const std::string &userId)
+TwitchListener::Outcome TwitchListener::Subscribe(const std::string &sessionId, const std::string &userId)
 {
 	CurlHttpClient http(&stop_);
-	for (int attempt = 0; attempt < 2; ++attempt) {
-		auto res = http.Post(eventsub::kSubscriptionsUrl,
-				     {"Authorization: Bearer " + account_.token.accessToken,
-				      "Client-Id: " + account_.clientId},
-				     BuildFollowSubscription(sessionId, userId), "application/json");
-		if (res.status == 401 && attempt == 0 && Refresh(Service::Twitch))
-			continue;
-		if (res.Ok() || res.status == 409) // 409: already subscribed on this session
-			return Outcome::Ok;
-		const std::string reason = ParseHelixMessage(res.body);
-		if (res.status == 401 || res.status == 403) {
-			Status("Twitch refused follower alerts (" + HttpError(res, reason) +
-			       "): sign in again in Tools → OBS Tools → Accounts");
-			return Outcome::Stop;
+	int subscribed = 0;
+	std::string failure;
+	for (const auto &body : BuildTwitchSubscriptions(sessionId, userId, allowed_)) {
+		HttpResponse res;
+		for (int attempt = 0; attempt < 2; ++attempt) {
+			res = http.Post(eventsub::kSubscriptionsUrl,
+					{"Authorization: Bearer " + account_.token.accessToken,
+					 "Client-Id: " + account_.clientId},
+					body, "application/json");
+			if (res.status == 401 && attempt == 0 && Refresh(Service::Twitch))
+				continue;
+			break;
 		}
-		Status("couldn't subscribe to follows (" + HttpError(res, reason) + "), retrying");
-		return Outcome::Retry;
+		if (res.Ok() || res.status == 409) { // 409: already subscribed on this session
+			++subscribed;
+			continue;
+		}
+		failure = HttpError(res, ParseHelixMessage(res.body));
+		if (res.status != 401 && res.status != 403)
+			break; // a network or server problem: try the whole session again
 	}
+	if (subscribed > 0 && failure.empty())
+		return Outcome::Ok;
+	if (subscribed > 0) {
+		Status("some Twitch alerts were refused (" + failure + ")");
+		return Outcome::Ok;
+	}
+	Status("Twitch refused the alerts (" + failure + "), retrying");
 	return Outcome::Retry;
 }
 
-FollowListener::Outcome FollowListener::Session(const std::string &url, bool resumed, const std::string &userId,
+void TwitchListener::Handle(const std::string &type, const nlohmann::json &event)
+{
+	std::optional<AlertEvent> alert;
+	if (type == "channel.follow")
+		alert = FollowFromEvent(event);
+	else if (type == "channel.chat.notification")
+		alert = NotificationFromEvent(event);
+	else if (type == "channel.cheer")
+		alert = CheerFromEvent(event);
+	if (alert && callbacks_.onEvent)
+		callbacks_.onEvent(std::move(*alert));
+}
+
+TwitchListener::Outcome TwitchListener::Session(const std::string &url, bool resumed, const std::string &userId,
 						std::string &reconnectUrl)
 {
 	EventSubSocket socket(&stop_);
@@ -210,20 +254,29 @@ FollowListener::Outcome FollowListener::Session(const std::string &url, bool res
 					if (outcome != Outcome::Ok)
 						return outcome;
 				}
-				Status("listening for follows");
+				{
+					std::string what;
+					for (auto [on, name] : {std::pair{allowed_.follows, "follows"},
+								std::pair{allowed_.notifications, "subs, gifts, raids"},
+								std::pair{allowed_.cheers, "cheers"}}) {
+						if (on)
+							what += (what.empty() ? "" : ", ") + std::string(name);
+					}
+					Status("listening for " + what +
+					       (missing_.empty() ? std::string()
+								 : "; sign in to Twitch again for " + missing_));
+				}
 				break;
 			}
 			case eventsub::Message::Type::Notification:
-				if (parsed->subscriptionType == "channel.follow" && callbacks_.onEvent) {
-					if (auto follow = FollowFromEvent(parsed->event))
-						callbacks_.onEvent(std::move(*follow));
-				}
+				Handle(parsed->subscriptionType, parsed->event);
 				break;
 			case eventsub::Message::Type::Reconnect:
 				reconnectUrl = parsed->reconnectUrl;
 				return reconnectUrl.empty() ? Outcome::Retry : Outcome::Reconnect;
 			case eventsub::Message::Type::Revocation:
-				Status("Twitch ended follower alerts (" + parsed->status + ")");
+				Status("Twitch stopped sending " + parsed->subscriptionType + " (" + parsed->status +
+				       ")");
 				return parsed->status == "authorization_revoked" || parsed->status == "user_removed"
 					       ? Outcome::Stop
 					       : Outcome::Retry;
@@ -245,7 +298,7 @@ FollowListener::Outcome FollowListener::Session(const std::string &url, bool res
 	return Outcome::Stop;
 }
 
-void FollowListener::Run()
+void TwitchListener::Run()
 {
 	int backoffMs = 1000;
 	std::string userId;

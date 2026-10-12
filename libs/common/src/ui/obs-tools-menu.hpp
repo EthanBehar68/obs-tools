@@ -44,4 +44,10 @@ void SetAlertHandler(std::function<void(bool follow, const std::string &name, bo
 void ClearAlertHandler();
 void NotifyAlert(bool follow, const std::string &name, bool test);
 
+// Unified Chat passes on YouTube Super Chats, Super Stickers and memberships from the live chat (core/youtube-events
+// JSON), so Stream Alerts can alert on them. Emitted and handled on the UI thread.
+void SetYouTubeEventHandler(std::function<void(const std::string &eventJson)> handler);
+void ClearYouTubeEventHandler();
+void NotifyYouTubeEvent(const std::string &eventJson);
+
 } // namespace unified_chat

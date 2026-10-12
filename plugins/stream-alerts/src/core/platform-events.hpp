@@ -19,6 +19,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #pragma once
 
 #include "core/alert-queue.hpp"
+#include "core/youtube-events.hpp"
 
 #include <json.hpp>
 #include <optional>
@@ -35,6 +36,26 @@ constexpr const char *kFollowScope = "moderator:read:followers";
 std::string BuildFollowSubscription(const std::string &sessionId, const std::string &userId);
 // A channel.follow event: who followed. nullopt without a user id.
 std::optional<AlertEvent> FollowFromEvent(const nlohmann::json &event);
+
+constexpr const char *kChatScope = "user:read:chat"; // channel.chat.notification: subs, gifts, raids
+constexpr const char *kBitsScope = "bits:read";      // channel.cheer
+
+// The EventSub subscriptions for what the Twitch listener should report, in the signed-in user's own channel.
+struct TwitchWants {
+	bool follows = false;
+	bool notifications = false; // subs, gift subs, raids
+	bool cheers = false;
+};
+std::vector<std::string> BuildTwitchSubscriptions(const std::string &sessionId, const std::string &userId,
+						  const TwitchWants &wants);
+
+// channel.chat.notification: a sub, resub, gift (a gift bomb once, not per recipient) or raid; nullopt for other
+// notices.
+std::optional<AlertEvent> NotificationFromEvent(const nlohmann::json &event);
+// channel.cheer
+std::optional<AlertEvent> CheerFromEvent(const nlohmann::json &event);
+// What Unified Chat passes on from YouTube chat.
+AlertEvent FromYouTubeEvent(const unified_chat::YouTubeEvent &event);
 
 struct TwitchUser {
 	std::string id;

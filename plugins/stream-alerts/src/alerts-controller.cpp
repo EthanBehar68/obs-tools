@@ -18,6 +18,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include "alerts-controller.hpp"
 #include "alerts-dialog.hpp"
+#include "core/platform-events.hpp"
+#include "core/youtube-events.hpp"
 #include "ui/obs-tools-menu.hpp"
 
 #include <obs-frontend-api.h>
@@ -38,7 +40,26 @@ static QString Text(const char *key)
 
 static const char *KindName(AlertKind kind)
 {
-	return kind == AlertKind::Follow ? "Twitch follows" : "YouTube subscribers";
+	switch (kind) {
+	case AlertKind::Follow:
+		return "Twitch follow";
+	case AlertKind::TwitchSub:
+		return "Twitch sub";
+	case AlertKind::GiftSubs:
+		return "Twitch gift subs";
+	case AlertKind::Cheer:
+		return "Twitch cheer";
+	case AlertKind::Raid:
+		return "Twitch raid";
+	case AlertKind::Subscriber:
+		return "YouTube subscriber";
+	case AlertKind::SuperChat:
+		return "YouTube Super Chat";
+	case AlertKind::Member:
+		return "YouTube member";
+	default:
+		return "YouTube gifted memberships";
+	}
 }
 
 // Writes the message into a text source (Text (GDI+) and FreeType both use "text").
@@ -103,7 +124,7 @@ AlertsController::AlertsController(QObject *parent) : QObject(parent)
 	timer_->setSingleShot(true);
 	connect(timer_, &QTimer::timeout, this, [this]() { OnTimer(); });
 	LoadConfig();
-	followStatus_ = subscriberStatus_ = Text("Status.Off");
+	twitchStatus_ = subscriberStatus_ = Text("Status.Off");
 }
 
 AlertsController::~AlertsController()
@@ -169,32 +190,44 @@ void AlertsController::SaveConfig()
 	bfree(dir);
 }
 
+TwitchWants AlertsController::Wants() const
+{
+	TwitchWants wants;
+	wants.follows = config_.follow.enabled;
+	wants.notifications = config_.twitchSub.IsSetUp() || config_.giftSubs.IsSetUp() || config_.raid.IsSetUp();
+	wants.cheers = config_.cheer.IsSetUp();
+	return wants;
+}
+
+static bool operator!=(const TwitchWants &a, const TwitchWants &b)
+{
+	return a.follows != b.follows || a.notifications != b.notifications || a.cheers != b.cheers;
+}
+
 void AlertsController::ApplyConfig(const AlertsConfig &config, bool save)
 {
-	const bool followChanged = config.follow.enabled != config_.follow.enabled;
+	const TwitchWants before = Wants();
 	const bool subscriberChanged = config.subscriber.enabled != config_.subscriber.enabled;
 	config_ = config;
 	if (save)
 		SaveConfig();
-	if (streaming_ && (followChanged || subscriberChanged))
-		StartListeners(followChanged, subscriberChanged);
+	const bool twitchChanged = Wants() != before;
+	if (streaming_ && (twitchChanged || subscriberChanged))
+		StartListeners(twitchChanged, subscriberChanged);
 }
 
-ListenerCallbacks AlertsController::MakeCallbacks(AlertKind kind)
+ListenerCallbacks AlertsController::MakeCallbacks(bool twitch)
 {
 	ListenerCallbacks callbacks;
 	callbacks.onEvent = [this](AlertEvent event) {
 		QMetaObject::invokeMethod(
 			this, [this, event = std::move(event)]() { Push(event); }, Qt::QueuedConnection);
 	};
-	callbacks.onStatus = [this, kind](const std::string &status) {
-		obs_log(LOG_INFO, "%s: %s", KindName(kind), status.c_str());
+	callbacks.onStatus = [this, twitch](const std::string &status) {
+		obs_log(LOG_INFO, "%s: %s", twitch ? "Twitch" : "YouTube subscribers", status.c_str());
 		QString text = QString::fromStdString(status);
 		QMetaObject::invokeMethod(
-			this,
-			[this, kind, text]() {
-				(kind == AlertKind::Follow ? followStatus_ : subscriberStatus_) = text;
-			},
+			this, [this, twitch, text]() { (twitch ? twitchStatus_ : subscriberStatus_) = text; },
 			Qt::QueuedConnection);
 	};
 	return callbacks;
@@ -203,16 +236,17 @@ ListenerCallbacks AlertsController::MakeCallbacks(AlertKind kind)
 void AlertsController::StartListeners(bool twitch, bool google)
 {
 	if (twitch) {
-		follows_.reset();
-		if (config_.follow.enabled)
-			follows_ = std::make_unique<FollowListener>(MakeCallbacks(AlertKind::Follow));
+		twitch_.reset();
+		const TwitchWants wants = Wants();
+		if (wants.follows || wants.notifications || wants.cheers)
+			twitch_ = std::make_unique<TwitchListener>(MakeCallbacks(true), wants);
 		else
-			followStatus_ = Text("Status.Disabled");
+			twitchStatus_ = Text("Status.Disabled");
 	}
 	if (google) {
 		subscribers_.reset();
 		if (config_.subscriber.enabled)
-			subscribers_ = std::make_unique<SubscriberPoller>(MakeCallbacks(AlertKind::Subscriber));
+			subscribers_ = std::make_unique<SubscriberPoller>(MakeCallbacks(false));
 		else
 			subscriberStatus_ = Text("Status.Disabled");
 	}
@@ -220,29 +254,97 @@ void AlertsController::StartListeners(bool twitch, bool google)
 
 void AlertsController::StopListeners()
 {
-	follows_.reset();
+	twitch_.reset();
 	subscribers_.reset();
-	followStatus_ = subscriberStatus_ = Text("Status.Off");
+	twitchStatus_ = subscriberStatus_ = Text("Status.Off");
 }
 
 QString AlertsController::StatusText(AlertKind kind) const
 {
-	return kind == AlertKind::Follow ? followStatus_ : subscriberStatus_;
+	if (IsTwitch(kind))
+		return twitchStatus_;
+	if (kind == AlertKind::Subscriber)
+		return subscriberStatus_;
+	return Text(streaming_ ? "Status.FromChat" : "Status.Off");
 }
 
-void AlertsController::Test(AlertKind kind)
+void AlertsController::OnYouTubeEvent(const std::string &eventJson)
 {
-	const char *name = kind == AlertKind::Follow ? "TestFollower" : "TestSubscriber";
-	Push({kind, "test-" + std::to_string(++testCount_), name}, true);
+	if (!streaming_)
+		return; // alerts run only while streaming (chat may be connected anyway, in its "Always" mode)
+	if (auto event = unified_chat::ParseYouTubeEvent(eventJson))
+		Push(FromYouTubeEvent(*event));
+}
+
+// Made-up details, so every placeholder shows something.
+static AlertEvent TestEvent(AlertKind kind, bool variant, int n)
+{
+	AlertEvent event;
+	event.kind = kind;
+	event.id = "test-" + std::to_string(n);
+	event.variant = variant;
+	event.months = variant ? 12 : 1;
+	event.message = "Thanks for the stream!";
+	switch (kind) {
+	case AlertKind::Follow:
+		event.name = "TestFollower";
+		break;
+	case AlertKind::Subscriber:
+		event.name = "TestSubscriber";
+		break;
+	case AlertKind::GiftSubs:
+		event.name = "TestGifter";
+		event.count = 5;
+		break;
+	case AlertKind::Cheer:
+		event.name = "TestCheerer";
+		event.count = 100;
+		event.amount = "100";
+		break;
+	case AlertKind::Raid:
+		event.name = "TestRaider";
+		event.viewers = 25;
+		event.message.clear();
+		break;
+	case AlertKind::SuperChat:
+		event.name = "TestViewer";
+		event.amount = "$5.00";
+		break;
+	case AlertKind::GiftMemberships:
+		event.name = "TestGifter";
+		event.count = 5;
+		event.level = "Member";
+		break;
+	default:
+		event.name = kind == AlertKind::Member ? "TestMember" : "TestSub";
+		event.level = "Member";
+	}
+	return event;
+}
+
+void AlertsController::Test(AlertKind kind, bool variant)
+{
+	Push(TestEvent(kind, variant, ++testCount_), true);
 }
 
 void AlertsController::Push(const AlertEvent &event, bool test)
 {
+	if (IsPriority(event.kind)) {
+		// Not set up: it would show nothing and only hold up the others. Tests skip the minimums.
+		if (!config_.For(event.kind).IsSetUp())
+			return;
+		if (!test && event.kind == AlertKind::Cheer && event.count < config_.minBits)
+			return;
+		if (!test && event.kind == AlertKind::Raid && event.viewers < config_.minRaidViewers)
+			return;
+	}
 	if (!queue_.Push(event))
 		return;
 	obs_log(LOG_INFO, "%s: %s", KindName(event.kind), event.name.c_str());
-	// The chat dock shows everyone as they arrive, including those a combined alert will cover.
-	unified_chat::NotifyAlert(event.kind == AlertKind::Follow, event.name, test);
+	// The chat dock shows each follower and subscriber as they arrive, including those a combined alert will
+	// cover. Subs, cheers and the rest are already in the chat.
+	if (!IsPriority(event.kind))
+		unified_chat::NotifyAlert(event.kind == AlertKind::Follow, event.name, test);
 	if (phase_ == Phase::Idle)
 		ShowNext();
 }
@@ -255,8 +357,10 @@ void AlertsController::ShowNext()
 		return;
 	}
 	const AlertSettings &settings = config_.For(alert->kind);
+	const std::string &message = alert->event.variant && !settings.variantMessage.empty() ? settings.variantMessage
+											      : settings.message;
 	if (!settings.textSource.empty())
-		SetSourceText(settings.textSource, FormatAlert(*alert, settings.message, settings.overflowMessage));
+		SetSourceText(settings.textSource, FormatAlert(*alert, message, settings.overflowMessage));
 	shownSource_ = settings.source;
 	if (!shownSource_.empty())
 		SetSourceVisible(shownSource_, true);

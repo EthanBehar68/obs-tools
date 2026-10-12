@@ -32,7 +32,7 @@ class QWidget;
 
 namespace stream_alerts {
 
-// Runs on the UI thread. Listens for follows and subscribers while OBS streams, and plays alerts one at a time by
+// Runs on the UI thread. Listens for Twitch and YouTube events while OBS streams, and plays alerts one at a time by
 // writing the message into the text source and showing the alert source for the configured time.
 class AlertsController : public QObject {
 public:
@@ -43,12 +43,15 @@ public:
 	void Shutdown();
 	void OnStreamingChanged(bool streaming);
 	void OnAccountsChanged(bool twitch, bool google);
+	// A Super Chat or membership from Unified Chat's YouTube chat (core/youtube-events JSON).
+	void OnYouTubeEvent(const std::string &eventJson);
 	void OpenSettings(QWidget *parent);
 
 	const AlertsConfig &Config() const { return config_; }
 	// save = false: the settings window trying values out (Test), undone on Cancel.
 	void ApplyConfig(const AlertsConfig &config, bool save);
-	void Test(AlertKind kind);
+	// variant: a resub / member milestone instead of a new sub / member.
+	void Test(AlertKind kind, bool variant = false);
 	QString StatusText(AlertKind kind) const;
 
 private:
@@ -58,16 +61,17 @@ private:
 	void SaveConfig();
 	void StartListeners(bool twitch, bool google);
 	void StopListeners();
-	ListenerCallbacks MakeCallbacks(AlertKind kind);
+	ListenerCallbacks MakeCallbacks(bool twitch);
+	TwitchWants Wants() const;
 	void Push(const AlertEvent &event, bool test = false);
 	void ShowNext();
 	void OnTimer();
 
 	AlertsConfig config_;
 	AlertQueue queue_;
-	std::unique_ptr<FollowListener> follows_;
+	std::unique_ptr<TwitchListener> twitch_;
 	std::unique_ptr<SubscriberPoller> subscribers_;
-	QString followStatus_;
+	QString twitchStatus_;
 	QString subscriberStatus_;
 	QTimer *timer_;
 	Phase phase_ = Phase::Idle;

@@ -135,6 +135,50 @@ TEST_CASE("ParseMessagesPage extracts messages, token and interval")
 	CHECK(page->messages[1].color == "#ffd600");
 }
 
+TEST_CASE("ParseMessagesPage reads Super Chats, Super Stickers and membership events")
+{
+	auto page = ParseMessagesPage(R"({"items":[
+		{"id":"sc1","snippet":{"type":"superChatEvent","displayMessage":"$5.00 from Fan: great stream",
+			"superChatDetails":{"amountDisplayString":"$5.00","userComment":"great stream"}},
+			"authorDetails":{"displayName":"@fan","channelId":"UC1"}},
+		{"id":"st1","snippet":{"type":"superStickerEvent",
+			"superStickerDetails":{"amountDisplayString":"$2.00","superStickerMetadata":{"altText":"Cat waving"}}},
+			"authorDetails":{"displayName":"@cat","channelId":"UC2"}},
+		{"id":"m1","snippet":{"type":"newSponsorEvent","displayMessage":"Welcome to Gold!",
+			"newSponsorDetails":{"memberLevelName":"Gold"}},"authorDetails":{"displayName":"@new","channelId":"UC3"}},
+		{"id":"m2","snippet":{"type":"memberMilestoneChatEvent",
+			"memberMilestoneChatDetails":{"memberLevelName":"Gold","memberMonth":12,"userComment":""}},
+			"authorDetails":{"displayName":"@old","channelId":"UC4"}},
+		{"id":"g1","snippet":{"type":"membershipGiftingEvent","displayMessage":"gifted 5 memberships",
+			"membershipGiftingDetails":{"giftMembershipsCount":5,"giftMembershipsLevelName":"Gold"}},
+			"authorDetails":{"displayName":"@giver","channelId":"UC5"}},
+		{"id":"t1","snippet":{"type":"textMessageEvent","displayMessage":"hi"},
+			"authorDetails":{"displayName":"@plain","channelId":"UC6"}}]})");
+	REQUIRE(page);
+	REQUIRE(page->messages.size() == 6);
+	const auto &superChat = page->messages[0];
+	REQUIRE(superChat.youtubeEvent);
+	CHECK(superChat.youtubeEvent->kind == YouTubeEvent::Kind::SuperChat);
+	CHECK(superChat.youtubeEvent->amount == "$5.00");
+	CHECK(superChat.youtubeEvent->message == "great stream");
+	CHECK(superChat.youtubeEvent->name == "@fan");
+	CHECK(superChat.youtubeEvent->channelId == "UC1");
+	CHECK(superChat.text == "$5.00 from Fan: great stream");
+
+	const auto &sticker = page->messages[1];
+	REQUIRE(sticker.youtubeEvent);
+	CHECK(sticker.youtubeEvent->kind == YouTubeEvent::Kind::SuperSticker);
+	CHECK(sticker.youtubeEvent->message == "Cat waving");
+	CHECK(sticker.text == "sent a Super Sticker ($2.00)"); // no display text: described
+
+	CHECK(page->messages[2].youtubeEvent->kind == YouTubeEvent::Kind::NewMember);
+	CHECK(page->messages[2].youtubeEvent->level == "Gold");
+	CHECK(page->messages[3].youtubeEvent->months == 12);
+	CHECK(page->messages[3].text == "has been a member for 12 months");
+	CHECK(page->messages[4].youtubeEvent->count == 5);
+	CHECK_FALSE(page->messages[5].youtubeEvent);
+}
+
 TEST_CASE("ParseMessagesPage detects the end of chat")
 {
 	auto offline = ParseMessagesPage(R"({"offlineAt":"2026-09-23T00:00:00Z","items":[]})");

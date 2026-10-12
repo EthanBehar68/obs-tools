@@ -29,17 +29,35 @@ struct AlertSettings {
 	std::string source;     // shown for the alert, then hidden again (e.g. a group or scene with media + text)
 	std::string textSource; // gets the message; optional
 	std::string message;
-	std::string overflowMessage;
+	std::string overflowMessage; // Follow, Subscriber: past kMaxQueued waiting
+	std::string variantMessage;  // TwitchSub: a resub; Member: a milestone
+
+	// An alert with neither source shows nothing, so it isn't queued (it would only hold up the others).
+	bool IsSetUp() const { return enabled && (!source.empty() || !textSource.empty()); }
 };
 
 struct AlertsConfig {
 	AlertSettings follow{true, {}, {}, "{name} just followed!", "+{count} more new followers!"};
+	AlertSettings twitchSub{
+		true, {}, {}, "{name} just subscribed!", {}, "{name} resubscribed for {months} months!"};
+	AlertSettings giftSubs{true, {}, {}, "{name} gifted {count} subs!"};
+	AlertSettings cheer{true, {}, {}, "{name} cheered {amount} bits!"};
+	AlertSettings raid{true, {}, {}, "{name} is raiding with {viewers} viewers!"};
 	AlertSettings subscriber{true, {}, {}, "{name} just subscribed!", "+{count} more new subscribers!"};
+	AlertSettings superChat{true, {}, {}, "{name} sent {amount}!\n{message}"};
+	AlertSettings member{
+		true, {}, {}, "{name} just became a member!", {}, "{name} has been a member for {months} months!"};
+	AlertSettings giftMemberships{true, {}, {}, "{name} gifted {count} memberships!"};
+	int minBits = 1;        // smaller cheers don't alert
+	int minRaidViewers = 1; // nor smaller raids
 	int durationSeconds = 5;
 
-	AlertSettings &For(AlertKind kind) { return kind == AlertKind::Follow ? follow : subscriber; }
-	const AlertSettings &For(AlertKind kind) const { return kind == AlertKind::Follow ? follow : subscriber; }
+	AlertSettings &For(AlertKind kind);
+	const AlertSettings &For(AlertKind kind) const { return const_cast<AlertsConfig *>(this)->For(kind); }
 };
+
+// The JSON key of a kind's settings: "follow", "twitch_sub", ...
+const char *KindKey(AlertKind kind);
 
 constexpr int kGapMs = 1000;                 // between two alerts
 constexpr int kSubscriberCheckSeconds = 120; // 30 YouTube quota units an hour, only while streaming

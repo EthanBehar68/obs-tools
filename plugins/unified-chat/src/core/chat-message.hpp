@@ -18,7 +18,10 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #pragma once
 
+#include "core/youtube-events.hpp"
+
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -56,6 +59,7 @@ struct ChatMessage {
 	std::string authorId;           // Twitch user-id, YouTube channel ID; lets a ban find the author's lines
 	std::vector<EmoteRange> emotes; // Twitch emotes from the IRC tag
 	std::vector<Badge> badges;      // role badges to show, in display order
+	std::optional<YouTubeEvent> youtubeEvent; // a Super Chat, Super Sticker or membership event
 };
 
 // ModerationEvent::durationSeconds when a user's messages were cleared without saying whether it was a timeout or

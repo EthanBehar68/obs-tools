@@ -31,7 +31,8 @@ static json ToJson(const AlertSettings &settings)
 		{"source", settings.source},
 		{"text_source", settings.textSource},
 		{"message", settings.message},
-		{"overflow_message", settings.overflowMessage}};
+		{"overflow_message", settings.overflowMessage},
+		{"variant_message", settings.variantMessage}};
 }
 
 static void FromJson(const json &obj, const char *key, AlertSettings &settings)
@@ -51,13 +52,64 @@ static void FromJson(const json &obj, const char *key, AlertSettings &settings)
 	text("text_source", settings.textSource);
 	text("message", settings.message);
 	text("overflow_message", settings.overflowMessage);
+	text("variant_message", settings.variantMessage);
+}
+
+AlertSettings &AlertsConfig::For(AlertKind kind)
+{
+	switch (kind) {
+	case AlertKind::Follow:
+		return follow;
+	case AlertKind::TwitchSub:
+		return twitchSub;
+	case AlertKind::GiftSubs:
+		return giftSubs;
+	case AlertKind::Cheer:
+		return cheer;
+	case AlertKind::Raid:
+		return raid;
+	case AlertKind::Subscriber:
+		return subscriber;
+	case AlertKind::SuperChat:
+		return superChat;
+	case AlertKind::Member:
+		return member;
+	default:
+		return giftMemberships;
+	}
+}
+
+const char *KindKey(AlertKind kind)
+{
+	switch (kind) {
+	case AlertKind::Follow:
+		return "follow";
+	case AlertKind::TwitchSub:
+		return "twitch_sub";
+	case AlertKind::GiftSubs:
+		return "gift_subs";
+	case AlertKind::Cheer:
+		return "cheer";
+	case AlertKind::Raid:
+		return "raid";
+	case AlertKind::Subscriber:
+		return "subscriber";
+	case AlertKind::SuperChat:
+		return "super_chat";
+	case AlertKind::Member:
+		return "member";
+	default:
+		return "gift_memberships";
+	}
 }
 
 std::string SerializeAlertsConfig(const AlertsConfig &config)
 {
-	json obj = {{"follow", ToJson(config.follow)},
-		    {"subscriber", ToJson(config.subscriber)},
-		    {"duration_seconds", config.durationSeconds}};
+	json obj = {{"duration_seconds", config.durationSeconds},
+		    {"min_bits", config.minBits},
+		    {"min_raid_viewers", config.minRaidViewers}};
+	for (AlertKind kind : kAllKinds)
+		obj[KindKey(kind)] = ToJson(config.For(kind));
 	return obj.dump(4);
 }
 
@@ -67,11 +119,16 @@ AlertsConfig ParseAlertsConfig(const std::string &text)
 	json obj = json::parse(text, nullptr, false);
 	if (!obj.is_object())
 		return config;
-	FromJson(obj, "follow", config.follow);
-	FromJson(obj, "subscriber", config.subscriber);
-	auto duration = obj.find("duration_seconds");
-	if (duration != obj.end() && duration->is_number_integer())
-		config.durationSeconds = std::clamp(duration->get<int>(), 1, 60);
+	for (AlertKind kind : kAllKinds)
+		FromJson(obj, KindKey(kind), config.For(kind));
+	auto number = [&](const char *key, int &out, int low, int high) {
+		auto it = obj.find(key);
+		if (it != obj.end() && it->is_number_integer())
+			out = std::clamp(it->get<int>(), low, high);
+	};
+	number("duration_seconds", config.durationSeconds, 1, 60);
+	number("min_bits", config.minBits, 1, 1000000);
+	number("min_raid_viewers", config.minRaidViewers, 1, 1000000);
 	return config;
 }
 

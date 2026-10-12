@@ -528,6 +528,14 @@ void TwitchConnection::HandleNotification(const eventsub::Message &message, std:
 			callbacks_.onEchoUpdate(std::move(*chat));
 		return;
 	}
+	if (message.subscriptionType == "channel.chat.notification") {
+		// Subs, gifts, raids: notices, as IRC showed them.
+		if (std::string text = twitch::NotificationText(message.event); !text.empty()) {
+			flush();
+			Notice(text);
+		}
+		return;
+	}
 	if (auto moderation = twitch::ModerationFromEvent(message.subscriptionType, message.event)) {
 		flush();
 		if (callbacks_.onModeration)

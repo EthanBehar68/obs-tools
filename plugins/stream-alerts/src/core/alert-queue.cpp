@@ -24,7 +24,15 @@ namespace stream_alerts {
 
 bool AlertQueue::Push(const AlertEvent &event)
 {
-	const std::string key = (event.kind == AlertKind::Follow ? "f:" : "s:") + event.id;
+	if (IsPriority(event.kind)) {
+		// Ahead of the first waiting follow or subscriber, behind other priority alerts.
+		auto at = std::find_if(queue_.begin(), queue_.end(),
+				       [](const Alert &alert) { return !IsPriority(alert.kind); });
+		queue_.insert(at, {event.kind, {event.name}, false, event});
+		return true;
+	}
+
+	const std::string key = std::to_string((int)event.kind) + ":" + event.id;
 	if (!seen_.insert(key).second)
 		return false;
 
@@ -33,10 +41,10 @@ bool AlertQueue::Push(const AlertEvent &event)
 	if (combined != queue_.end()) {
 		combined->names.push_back(event.name);
 	} else if (individual_ < kMaxQueued) {
-		queue_.push_back({event.kind, {event.name}, false});
+		queue_.push_back({event.kind, {event.name}, false, event});
 		++individual_;
 	} else {
-		queue_.push_back({event.kind, {event.name}, true});
+		queue_.push_back({event.kind, {event.name}, true, {}});
 	}
 	return true;
 }
@@ -47,7 +55,7 @@ std::optional<Alert> AlertQueue::Pop()
 		return std::nullopt;
 	Alert alert = std::move(queue_.front());
 	queue_.pop_front();
-	if (!alert.combined)
+	if (!alert.combined && !IsPriority(alert.kind))
 		--individual_;
 	return alert;
 }
@@ -69,8 +77,17 @@ static std::string ReplaceAll(std::string text, const std::string &from, const s
 std::string FormatAlert(const Alert &alert, const std::string &single, const std::string &combined,
 			size_t maxNamesLength)
 {
-	if (!alert.combined)
-		return ReplaceAll(single, "{name}", alert.names.empty() ? std::string() : alert.names.front());
+	if (!alert.combined) {
+		const AlertEvent &event = alert.event;
+		std::string text =
+			ReplaceAll(single, "{name}", alert.names.empty() ? std::string() : alert.names.front());
+		text = ReplaceAll(text, "{months}", std::to_string(event.months));
+		text = ReplaceAll(text, "{count}", std::to_string(event.count));
+		text = ReplaceAll(text, "{viewers}", std::to_string(event.viewers));
+		text = ReplaceAll(text, "{amount}", event.amount);
+		text = ReplaceAll(text, "{level}", event.level);
+		return ReplaceAll(text, "{message}", event.message); // last: the viewer's text is never expanded
+	}
 
 	std::string text = ReplaceAll(combined, "{count}", std::to_string(alert.names.size()));
 	std::string names;

@@ -6,6 +6,9 @@
 - **Twitch chat now uses EventSub and the Twitch API**, the connection Twitch recommends over IRC. Sign in to Twitch again once (Tools → OBS Tools → Accounts… → Sign in) to allow it; until then, and whenever you're signed out, chat keeps using IRC. Settings → Twitch → Chat connection switches back to IRC if ever needed.
 - **Twitch's own emotes now show in your sent messages too:** your line appears at once and fills in emotes, badges and colour when Twitch's copy arrives.
 - **A message Twitch refuses says why** (e.g. a duplicate message, or follower-only mode) instead of quietly not appearing.
+- **Twitch subs, gifts, raids and announcements** show as notices, as they did over IRC.
+- **YouTube Super Chats, Super Stickers and memberships** are passed on to Stream Alerts, which can now alert on them.
+- **YouTube quota numbers corrected** to Google's current table: a poll costs 5 units, a sent message 20, a deleted message 20, a ban, timeout or unban 200 (the moderation confirmation shows the right number).
 - **In your own channel, timeouts and bans keep their tags** (*(timed out 10 minutes)*, *(banned)*). In someone else's channel Twitch doesn't say which, so those lines get *(removed)*.
 
 ## 1.3.0 (2026-09-27)

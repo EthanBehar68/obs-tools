@@ -23,19 +23,22 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QDialog>
 #include <QStringList>
 
+#include <map>
+
 class QCheckBox;
 class QComboBox;
-class QGroupBox;
 class QLabel;
+class QListWidget;
 class QPlainTextEdit;
 class QSpinBox;
+class QWidget;
 
 namespace stream_alerts {
 
 class AlertsController;
 
-// Tools > OBS Tools > Stream Alerts...: what each alert shows, plus Test buttons that play one right away with the
-// values as entered. Cancel puts the previous settings back.
+// Tools > OBS Tools > Stream Alerts...: the alert kinds in a list, and the selected kind's settings beside it, with
+// Test buttons that play one right away with the values as entered. Cancel puts the previous settings back.
 class AlertsDialog : public QDialog {
 public:
 	AlertsDialog(AlertsController *controller, QWidget *parent);
@@ -44,25 +47,25 @@ public:
 	void reject() override;
 
 private:
-	struct Row {
+	struct Page {
 		QCheckBox *enabled = nullptr;
 		QComboBox *source = nullptr;
 		QComboBox *textSource = nullptr;
 		QPlainTextEdit *message = nullptr;
-		QPlainTextEdit *overflow = nullptr;
+		QPlainTextEdit *overflow = nullptr; // Follow, Subscriber
+		QPlainTextEdit *variant = nullptr;  // TwitchSub, Member
+		QSpinBox *minimum = nullptr;        // Cheer: bits; Raid: viewers
 		QLabel *status = nullptr;
 	};
 
-	QGroupBox *MakeGroup(AlertKind kind, const char *titleKey, const QStringList &sources,
-			     const QStringList &textSources);
-	Row &RowFor(AlertKind kind) { return kind == AlertKind::Follow ? follow_ : subscriber_; }
+	QWidget *MakePage(AlertKind kind, const QStringList &sources, const QStringList &textSources);
 	AlertsConfig Current() const;
 	void UpdateStatus();
 
 	AlertsController *controller_;
 	AlertsConfig original_;
-	Row follow_;
-	Row subscriber_;
+	std::map<AlertKind, Page> pages_;
+	QListWidget *kinds_;
 	QSpinBox *duration_;
 };
 

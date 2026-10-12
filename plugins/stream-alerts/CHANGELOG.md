@@ -2,7 +2,13 @@
 
 ## Unreleased
 
-- Internal: the EventSub WebSocket code is shared with Unified Chat (no change in behaviour).
+- **New alert kinds.** Twitch: subs and resubs, gift subs (a gift bomb is one alert), cheers, raids. YouTube: Super Chats and Super Stickers, new members and milestones, gifted memberships (these come from Unified Chat's YouTube chat, at no extra quota).
+- Each kind has its own source, text source and message, with placeholders such as `{months}`, `{count}`, `{amount}`, `{viewers}`, `{message}` and `{level}`; subs and members have a second message for resubs and milestones.
+- Paid alerts and raids always play, each on its own and every time, ahead of waiting follows and subscribers. Cheers and raids have a minimum (bits / viewers), 1 by default.
+- A kind with no source set is skipped.
+- The settings window lists the kinds on the left, with the selected one's settings and Test buttons beside it.
+- Sign in to Twitch again once: the sign-in now also asks for chat (`user:read:chat`) and bits (`bits:read`) access.
+- Internal: the EventSub WebSocket code is shared with Unified Chat.
 
 ## 0.1.0 (2026-09-27)
 

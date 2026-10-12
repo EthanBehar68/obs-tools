@@ -26,12 +26,13 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QFormLayout>
-#include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QListWidget>
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QSpinBox>
+#include <QStackedWidget>
 #include <QStringList>
 #include <QTimer>
 #include <QVBoxLayout>
@@ -106,15 +107,28 @@ AlertsDialog::AlertsDialog(AlertsController *controller, QWidget *parent)
 	  original_(controller->Config())
 {
 	setWindowTitle(Text("Alerts.Title"));
-	setMinimumWidth(520);
+	setMinimumWidth(720);
 
 	const SourceNames names = ListSources();
 	auto layout = new QVBoxLayout(this);
 	auto intro = new QLabel(Text("Alerts.Intro"), this);
 	intro->setWordWrap(true);
 	layout->addWidget(intro);
-	layout->addWidget(MakeGroup(AlertKind::Follow, "Alerts.Follows", names.all, names.text));
-	layout->addWidget(MakeGroup(AlertKind::Subscriber, "Alerts.Subscribers", names.all, names.text));
+
+	// The kinds on the left, the selected one's settings on the right: nine stacked groups would be far too tall.
+	auto middle = new QHBoxLayout();
+	kinds_ = new QListWidget(this);
+	auto pages = new QStackedWidget(this);
+	for (AlertKind kind : kAllKinds) {
+		kinds_->addItem(Text((std::string("Kind.") + KindKey(kind)).c_str()));
+		pages->addWidget(MakePage(kind, names.all, names.text));
+	}
+	kinds_->setFixedWidth(kinds_->sizeHintForColumn(0) + 24);
+	connect(kinds_, &QListWidget::currentRowChanged, pages, &QStackedWidget::setCurrentIndex);
+	kinds_->setCurrentRow(0);
+	middle->addWidget(kinds_);
+	middle->addWidget(pages, 1);
+	layout->addLayout(middle);
 
 	auto general = new QFormLayout();
 	duration_ = new QSpinBox(this);
@@ -142,60 +156,92 @@ AlertsDialog::AlertsDialog(AlertsController *controller, QWidget *parent)
 	UpdateStatus();
 }
 
-QGroupBox *AlertsDialog::MakeGroup(AlertKind kind, const char *titleKey, const QStringList &sources,
-				   const QStringList &textSources)
+QWidget *AlertsDialog::MakePage(AlertKind kind, const QStringList &sources, const QStringList &textSources)
 {
 	const AlertSettings &settings = original_.For(kind);
-	Row &row = RowFor(kind);
-	auto group = new QGroupBox(Text(titleKey), this);
-	auto form = new QFormLayout(group);
+	const std::string key = KindKey(kind);
+	Page &page = pages_[kind];
+	auto widget = new QWidget(this);
+	auto form = new QFormLayout(widget);
+	form->setContentsMargins(0, 0, 0, 0);
 
-	row.enabled = new QCheckBox(Text("Alerts.Enabled"), group);
-	row.enabled->setChecked(settings.enabled);
-	form->addRow(QString(), row.enabled);
+	auto about = new QLabel(Text(("About." + key).c_str()), widget);
+	about->setWordWrap(true);
+	form->addRow(about);
 
-	row.source = MakeSourceCombo(sources, settings.source, group);
-	row.source->setToolTip(Text("Alerts.SourceHint"));
-	form->addRow(Text("Alerts.Source"), row.source);
+	page.enabled = new QCheckBox(Text("Alerts.Enabled"), widget);
+	page.enabled->setChecked(settings.enabled);
+	form->addRow(QString(), page.enabled);
 
-	row.textSource = MakeSourceCombo(textSources, settings.textSource, group);
-	row.textSource->setToolTip(Text("Alerts.TextSourceHint"));
-	form->addRow(Text("Alerts.TextSource"), row.textSource);
+	page.source = MakeSourceCombo(sources, settings.source, widget);
+	page.source->setToolTip(Text("Alerts.SourceHint"));
+	form->addRow(Text("Alerts.Source"), page.source);
 
-	row.message = MakeMessageEdit(settings.message, group);
-	row.message->setToolTip(Text("Alerts.MessageHint"));
-	form->addRow(Text("Alerts.Message"), row.message);
+	page.textSource = MakeSourceCombo(textSources, settings.textSource, widget);
+	page.textSource->setToolTip(Text("Alerts.TextSourceHint"));
+	form->addRow(Text("Alerts.TextSource"), page.textSource);
 
-	row.overflow = MakeMessageEdit(settings.overflowMessage, group);
-	row.overflow->setToolTip(Text("Alerts.OverflowHint"));
-	form->addRow(Text("Alerts.Overflow"), row.overflow);
+	page.message = MakeMessageEdit(settings.message, widget);
+	form->addRow(Text("Alerts.Message"), page.message);
 
-	row.status = new QLabel(group);
-	row.status->setWordWrap(true);
-	auto test = new QPushButton(Text("Alerts.Test"), group);
-	auto statusRow = new QHBoxLayout();
-	statusRow->addWidget(row.status, 1);
-	statusRow->addWidget(test);
-	form->addRow(Text("Alerts.Status"), statusRow);
+	const bool hasVariant = kind == AlertKind::TwitchSub || kind == AlertKind::Member;
+	if (hasVariant) {
+		page.variant = MakeMessageEdit(settings.variantMessage, widget);
+		form->addRow(Text(kind == AlertKind::TwitchSub ? "Alerts.Resub" : "Alerts.Milestone"), page.variant);
+	}
+	if (!IsPriority(kind)) {
+		page.overflow = MakeMessageEdit(settings.overflowMessage, widget);
+		page.overflow->setToolTip(Text("Alerts.OverflowHint"));
+		form->addRow(Text("Alerts.Overflow"), page.overflow);
+	}
+	auto placeholders = new QLabel(Text(("Placeholders." + key).c_str()), widget);
+	placeholders->setWordWrap(true);
+	form->addRow(QString(), placeholders);
 
-	connect(test, &QPushButton::clicked, this, [this, kind]() {
-		controller_->ApplyConfig(Current(), false); // try the values as entered
-		controller_->Test(kind);
-	});
-	return group;
+	if (kind == AlertKind::Cheer || kind == AlertKind::Raid) {
+		page.minimum = new QSpinBox(widget);
+		page.minimum->setRange(1, 1000000);
+		page.minimum->setValue(kind == AlertKind::Cheer ? original_.minBits : original_.minRaidViewers);
+		page.minimum->setSuffix(Text(kind == AlertKind::Cheer ? "Alerts.BitsSuffix" : "Alerts.ViewersSuffix"));
+		form->addRow(Text("Alerts.Minimum"), page.minimum);
+	}
+
+	page.status = new QLabel(widget);
+	page.status->setWordWrap(true);
+	form->addRow(Text("Alerts.Status"), page.status);
+
+	auto tests = new QHBoxLayout();
+	auto addTest = [&](const char *labelKey, bool variant) {
+		auto test = new QPushButton(Text(labelKey), widget);
+		connect(test, &QPushButton::clicked, this, [this, kind, variant]() {
+			controller_->ApplyConfig(Current(), false); // try the values as entered
+			controller_->Test(kind, variant);
+		});
+		tests->addWidget(test);
+	};
+	addTest("Alerts.Test", false);
+	if (hasVariant)
+		addTest(kind == AlertKind::TwitchSub ? "Alerts.TestResub" : "Alerts.TestMilestone", true);
+	tests->addStretch();
+	form->addRow(QString(), tests);
+	return widget;
 }
 
 AlertsConfig AlertsDialog::Current() const
 {
 	AlertsConfig config = original_;
-	for (AlertKind kind : {AlertKind::Follow, AlertKind::Subscriber}) {
-		const Row &row = kind == AlertKind::Follow ? follow_ : subscriber_;
+	for (const auto &[kind, page] : pages_) {
 		AlertSettings &settings = config.For(kind);
-		settings.enabled = row.enabled->isChecked();
-		settings.source = ToStd(row.source->currentText());
-		settings.textSource = ToStd(row.textSource->currentText());
-		settings.message = ToStd(row.message->toPlainText());
-		settings.overflowMessage = ToStd(row.overflow->toPlainText());
+		settings.enabled = page.enabled->isChecked();
+		settings.source = ToStd(page.source->currentText());
+		settings.textSource = ToStd(page.textSource->currentText());
+		settings.message = ToStd(page.message->toPlainText());
+		if (page.overflow)
+			settings.overflowMessage = ToStd(page.overflow->toPlainText());
+		if (page.variant)
+			settings.variantMessage = ToStd(page.variant->toPlainText());
+		if (page.minimum)
+			(kind == AlertKind::Cheer ? config.minBits : config.minRaidViewers) = page.minimum->value();
 	}
 	config.durationSeconds = duration_->value();
 	return config;
@@ -203,8 +249,8 @@ AlertsConfig AlertsDialog::Current() const
 
 void AlertsDialog::UpdateStatus()
 {
-	follow_.status->setText(controller_->StatusText(AlertKind::Follow));
-	subscriber_.status->setText(controller_->StatusText(AlertKind::Subscriber));
+	for (auto &[kind, page] : pages_)
+		page.status->setText(controller_->StatusText(kind));
 }
 
 void AlertsDialog::accept()

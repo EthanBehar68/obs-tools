@@ -64,6 +64,10 @@ bool obs_module_load(void)
 		if (s_controller)
 			s_controller->OnAccountsChanged(twitch, google);
 	});
+	unified_chat::SetYouTubeEventHandler([](const std::string &eventJson) {
+		if (s_controller)
+			s_controller->OnYouTubeEvent(eventJson);
+	});
 	obs_log(LOG_INFO, "plugin loaded successfully (version %s)", PLUGIN_VERSION);
 	return true;
 }
@@ -71,11 +75,12 @@ bool obs_module_load(void)
 void obs_module_unload(void)
 {
 	unified_chat::ClearAccountsChangedHandler();
+	unified_chat::ClearYouTubeEventHandler();
 	obs_frontend_remove_event_callback(OnFrontendEvent, nullptr);
 	obs_log(LOG_INFO, "plugin unloaded");
 }
 
 const char *obs_module_description(void)
 {
-	return "Twitch follower and YouTube subscriber alerts";
+	return "Twitch and YouTube alerts: follows, subscribers, subs, gifts, cheers, raids, Super Chats, memberships";
 }

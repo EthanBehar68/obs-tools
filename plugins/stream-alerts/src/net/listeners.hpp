@@ -20,6 +20,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include "core/accounts.hpp"
 #include "core/alert-queue.hpp"
+#include "core/platform-events.hpp"
 
 #include <atomic>
 #include <condition_variable>
@@ -65,12 +66,13 @@ private:
 	std::thread thread_;
 };
 
-// Twitch follows of the signed-in account's channel: EventSub channel.follow over a WebSocket. The thread sleeps
-// until Twitch sends something (a keepalive at least once a minute).
-class FollowListener : public Listener {
+// Twitch events in the signed-in account's channel over one EventSub WebSocket: follows (channel.follow), subs,
+// gift subs and raids (channel.chat.notification), cheers (channel.cheer), as wanted. The thread sleeps until
+// Twitch sends something (a keepalive at least once a minute).
+class TwitchListener : public Listener {
 public:
-	explicit FollowListener(ListenerCallbacks callbacks);
-	~FollowListener() override;
+	TwitchListener(ListenerCallbacks callbacks, TwitchWants wants);
+	~TwitchListener() override;
 
 private:
 	enum class Outcome { Ok, Retry, Reconnect, Stop };
@@ -78,6 +80,11 @@ private:
 	Outcome Authorize(std::string &userId);
 	Outcome Session(const std::string &url, bool resumed, const std::string &userId, std::string &reconnectUrl);
 	Outcome Subscribe(const std::string &sessionId, const std::string &userId);
+	void Handle(const std::string &subscriptionType, const nlohmann::json &event);
+
+	TwitchWants wants_;   // what the user turned on
+	TwitchWants allowed_; // of that, what the sign-in allows
+	std::string missing_; // for the status: what a new sign-in would add
 };
 
 // New YouTube subscribers: the recent-subscribers feed every kSubscriberCheckSeconds, compared with the last one.

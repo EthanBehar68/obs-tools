@@ -34,6 +34,8 @@ static constexpr const char *kChangedSignal = "obs_tools_accounts_changed";
 static constexpr const char *kChangedSignalDecl = "void obs_tools_accounts_changed(bool twitch, bool google)";
 static constexpr const char *kAlertSignal = "obs_tools_alert";
 static constexpr const char *kAlertSignalDecl = "void obs_tools_alert(bool follow, string name, bool test)";
+static constexpr const char *kYouTubeEventSignal = "obs_tools_youtube_event";
+static constexpr const char *kYouTubeEventSignalDecl = "void obs_tools_youtube_event(string event)";
 
 static void PublishMenu(void *data, calldata_t *cd)
 {
@@ -70,6 +72,7 @@ QMenu *ObsToolsMenu()
 		proc_handler_add(obs_get_proc_handler(), kMenuProcDecl, PublishMenu, created);
 		signal_handler_add(obs_get_signal_handler(), kChangedSignalDecl);
 		signal_handler_add(obs_get_signal_handler(), kAlertSignalDecl);
+		signal_handler_add(obs_get_signal_handler(), kYouTubeEventSignalDecl);
 		return created;
 	}();
 	return menu;
@@ -151,6 +154,41 @@ void NotifyAlert(bool follow, const std::string &name, bool test)
 	calldata_set_string(&cd, "name", name.c_str());
 	calldata_set_bool(&cd, "test", test);
 	signal_handler_signal(obs_get_signal_handler(), kAlertSignal, &cd);
+	calldata_free(&cd);
+}
+
+static std::function<void(const std::string &)> &YouTubeEventHandler()
+{
+	static std::function<void(const std::string &)> handler;
+	return handler;
+}
+
+static void OnYouTubeEvent(void *, calldata_t *cd)
+{
+	const char *event = calldata_string(cd, "event");
+	if (YouTubeEventHandler() && event)
+		YouTubeEventHandler()(event);
+}
+
+void SetYouTubeEventHandler(std::function<void(const std::string &eventJson)> handler)
+{
+	ObsToolsMenu(); // declares the signal if this plugin is the first
+	YouTubeEventHandler() = std::move(handler);
+	signal_handler_connect(obs_get_signal_handler(), kYouTubeEventSignal, OnYouTubeEvent, nullptr);
+}
+
+void ClearYouTubeEventHandler()
+{
+	signal_handler_disconnect(obs_get_signal_handler(), kYouTubeEventSignal, OnYouTubeEvent, nullptr);
+	YouTubeEventHandler() = nullptr;
+}
+
+void NotifyYouTubeEvent(const std::string &eventJson)
+{
+	calldata_t cd;
+	calldata_init(&cd);
+	calldata_set_string(&cd, "event", eventJson.c_str());
+	signal_handler_signal(obs_get_signal_handler(), kYouTubeEventSignal, &cd);
 	calldata_free(&cd);
 }
 

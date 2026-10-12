@@ -62,20 +62,20 @@ YouTube requires a Google Cloud project with the YouTube Data API enabled, for b
 
 ### YouTube API quota
 
-Google gives each project a free daily quota (10,000 units by default). Per [Google's quota table](https://developers.google.com/youtube/v3/determine_quota_cost), each chat poll costs **1 unit** and each message you send to YouTube costs **50 units**, including messages sent with the switch on Both. Finding your broadcast and your channel name costs 1 unit each, once per connection.
+Google gives each project a free daily quota (10,000 units by default). Per [Google's quota table](https://developers.google.com/youtube/v3/determine_quota_cost), each chat poll costs **5 units** and each message you send to YouTube costs **20 units**, including messages sent with the switch on Both (checked 2026-10-12; Google has changed these before). Finding your broadcast and your channel name costs 1 unit each, once per connection.
 
 **Chat delivery** (Settings → YouTube) chooses how messages arrive:
 
-- **Streaming (the default).** YouTube pushes each message about 2 seconds after it's posted. The server ends each stream after about 10 seconds and the plugin reopens it at once. Each stream costs **5 units** (measured; streams aren't listed in Google's table), so about **1,700 units an hour** while you're live. Sending a message briefly interrupts the stream so the message goes out immediately, which adds one extra stream (5 units) per message. If streaming stops working, the plugin switches to polling for the rest of that broadcast and says so in the dock.
-- **Polling.** The plugin asks for new messages every **Minimum poll interval**. It's cheaper, but messages appear up to one interval late.
+- **Streaming (the default).** YouTube pushes each message about 2 seconds after it's posted. The server ends each stream after about 10 seconds and the plugin reopens it at once. Each stream costs **5 units** (Google's table, and what we measured), so about **1,700 units an hour** while you're live. Sending a message briefly interrupts the stream so the message goes out immediately, which adds one extra stream (5 units) per message. If streaming stops working, the plugin switches to polling for the rest of that broadcast and says so in the dock.
+- **Polling.** The plugin asks for new messages every **Minimum poll interval**. Messages appear up to one interval late, and below about 11 seconds it costs more than streaming.
 
 | Delivery | Delay after a message is posted | Units per hour | Hours per day, reading only | Hours per day, also sending 10 YouTube messages an hour |
 |---|---|---|---|---|
-| Streaming (default) | ~2 s | ~1,700 | ~5.9 h | ~4.4 h |
-| Polling every 3 s | ~2 s + up to 3 s | 1,200 | ~8 h | ~5.9 h |
-| Polling every 5 s | ~2 s + up to 5 s | 720 | ~14 h | ~8.2 h |
-| Polling every 8 s | ~2 s + up to 8 s | 450 | ~22 h | ~10.5 h |
-| Polling every 15 s | ~2 s + up to 15 s | 240 | all day | ~13.5 h |
+| Streaming (default) | ~2 s | ~1,700 | ~5.9 h | ~5.1 h |
+| Polling every 3 s | ~2 s + up to 3 s | 6,000 | ~1.7 h | ~1.6 h |
+| Polling every 5 s | ~2 s + up to 5 s | 3,600 | ~2.8 h | ~2.6 h |
+| Polling every 8 s | ~2 s + up to 8 s | 2,250 | ~4.4 h | ~4.1 h |
+| Polling every 15 s | ~2 s + up to 15 s | 1,200 | ~8.3 h | ~7.1 h |
 
 If your streams are longer than streaming's budget allows, switch to polling, or ask Google for a higher quota (free, through the Cloud Console quota page). When polling, YouTube may ask for a longer interval than yours, and the plugin always waits at least as long as YouTube asks. Your actual usage is under **APIs & Services → YouTube Data API v3 → Quotas** in the Cloud Console. When the quota runs out, the dock says so and pauses YouTube for 15 minutes. Quota resets at midnight Pacific time.
 
@@ -111,7 +111,7 @@ If YouTube goes live some other way (another app, or a multistream output with a
   - Your own sent messages show at once and fill in Twitch's emotes, your badges and colour a moment later, when Twitch's copy arrives (EventSub). Over IRC, Twitch's own emotes in your messages stay as words, because IRC doesn't send your message back.
 - **Moderate from the dock:** right-click someone's line for **Delete message**, **Timeout** (1 minute, 10 minutes, 1 hour, 24 hours or Custom…), **Ban…** (with an optional reason on Twitch) and, on lines already marked timed out or banned, **Unban**. Every action asks first. You must be the broadcaster or a moderator of that chat.
   - **Twitch:** after updating to this version, **sign in to Twitch again once** (Tools → OBS Tools → Accounts… → Sign in). The new sign-in adds the moderation permissions. Until then the dock tells you when you try.
-  - **YouTube:** each action uses **50 quota units** (the confirmation says so). YouTube can only lift bans made from the dock during this session; use YouTube Studio for older ones.
+  - **YouTube:** deleting a message uses **20 quota units**; a timeout, ban or unban **200** (the confirmation says so). YouTube can only lift bans made from the dock during this session; use YouTube Studio for older ones.
 - **Moderation stays visible.** Nothing a moderator removes disappears from the dock. The message text is struck through and dimmed, but you can still read it, and a coloured tag says why:
   - *(deleted)*, grey: a single message was deleted (Twitch only; YouTube no longer reports single deletions).
   - *(timed out 10 minutes)*, amber: the author was timed out, and all their lines get the tag.
@@ -148,5 +148,5 @@ Every plugin log line starts with `[obs-unified-chat]`. Check **Help → Log Fil
 | YouTube sign-in fails with `invalid_client` or `unauthorized_client` | The Google client type must be **TVs and Limited Input devices**, and the secret must belong to that client. |
 | YouTube sign-in blocked with "access denied" | Add your account under **Test users**, or publish the app (step 3). |
 | `YouTube: waiting for a live broadcast` while you're live | YouTube can take up to a minute to mark the broadcast live. If it never connects, paste the stream URL into **Video**. |
-| `YouTube: API quota exceeded` | Send fewer messages to YouTube (each costs 50 polls' worth), raise the poll interval, or wait for the daily reset. |
+| `YouTube: API quota exceeded` | Send fewer messages to YouTube (20 units each), avoid YouTube bans and timeouts from the dock (200 each), use streaming or a longer poll interval, or wait for the daily reset. |
 | `YouTube: request failed (HTTP 403, forbidden)` | The signed-in account doesn't own or moderate that live chat. |

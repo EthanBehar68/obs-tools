@@ -69,3 +69,91 @@ TEST_CASE("Recent subscribers: the first list is the baseline, later ones give w
 	CHECK_FALSE(ParseRecentSubscribers("<html>"));
 	CHECK(RecentSubscribersUrl().find("myRecentSubscribers=true") != std::string::npos);
 }
+
+using json = nlohmann::json;
+
+TEST_CASE("Twitch subscriptions follow what's wanted")
+{
+	auto types = [](const std::vector<std::string> &bodies) {
+		std::vector<std::string> out;
+		for (const auto &body : bodies)
+			out.push_back(json::parse(body)["type"].get<std::string>());
+		return out;
+	};
+	CHECK(types(BuildTwitchSubscriptions("s", "1", {true, true, true})) ==
+	      std::vector<std::string>{"channel.follow", "channel.chat.notification", "channel.cheer"});
+	CHECK(types(BuildTwitchSubscriptions("s", "1", {false, false, true})) ==
+	      std::vector<std::string>{"channel.cheer"});
+	auto notification = json::parse(BuildTwitchSubscriptions("s", "1", {false, true, false})[0]);
+	CHECK(notification["condition"]["broadcaster_user_id"] == "1");
+	CHECK(notification["condition"]["user_id"] == "1");
+}
+
+TEST_CASE("Chat notifications become sub, gift and raid alerts")
+{
+	auto sub = NotificationFromEvent(json::parse(R"({"notice_type":"sub","chatter_user_name":"Fan",
+		"chatter_is_anonymous":false,"message_id":"m1","message":{"text":""},"sub":{"sub_tier":"1000"}})"));
+	REQUIRE(sub);
+	CHECK(sub->kind == AlertKind::TwitchSub);
+	CHECK_FALSE(sub->variant);
+	CHECK(sub->name == "Fan");
+
+	auto resub = NotificationFromEvent(json::parse(R"({"notice_type":"resub","chatter_user_name":"Fan",
+		"message":{"text":"hi"},"resub":{"cumulative_months":14,"duration_months":1}})"));
+	REQUIRE(resub);
+	CHECK(resub->variant);
+	CHECK(resub->months == 14);
+	CHECK(resub->message == "hi");
+
+	auto bomb = NotificationFromEvent(json::parse(R"({"notice_type":"community_sub_gift",
+		"chatter_user_name":"Giver","community_sub_gift":{"id":"g1","total":5,"sub_tier":"1000"}})"));
+	REQUIRE(bomb);
+	CHECK(bomb->kind == AlertKind::GiftSubs);
+	CHECK(bomb->count == 5);
+	// Each recipient of that gift bomb: already covered.
+	CHECK_FALSE(NotificationFromEvent(json::parse(R"({"notice_type":"sub_gift","chatter_user_name":"Giver",
+		"sub_gift":{"recipient_user_name":"Lucky","community_gift_id":"g1"}})")));
+	auto single = NotificationFromEvent(json::parse(R"({"notice_type":"sub_gift","chatter_is_anonymous":true,
+		"sub_gift":{"recipient_user_name":"Lucky","community_gift_id":null}})"));
+	REQUIRE(single);
+	CHECK(single->count == 1);
+	CHECK(single->name == "Anonymous");
+
+	auto raid = NotificationFromEvent(json::parse(R"({"notice_type":"raid","chatter_user_name":"Pal",
+		"raid":{"user_name":"Pal","user_login":"pal","viewer_count":25}})"));
+	REQUIRE(raid);
+	CHECK(raid->kind == AlertKind::Raid);
+	CHECK(raid->viewers == 25);
+
+	CHECK_FALSE(NotificationFromEvent(json::parse(R"({"notice_type":"announcement"})")));
+}
+
+TEST_CASE("Cheers give bits and the message; anonymous cheers have no name")
+{
+	auto cheer = CheerFromEvent(json::parse(R"({"is_anonymous":false,"user_id":"7","user_login":"fan",
+		"user_name":"Fan","broadcaster_user_id":"1","message":"cheer100 nice","bits":100})"));
+	REQUIRE(cheer);
+	CHECK(cheer->kind == AlertKind::Cheer);
+	CHECK(cheer->count == 100);
+	CHECK(cheer->amount == "100");
+	CHECK(cheer->message == "cheer100 nice");
+	CHECK(CheerFromEvent(json::parse(R"({"is_anonymous":true,"user_name":null,"bits":5})"))->name == "Anonymous");
+	CHECK_FALSE(CheerFromEvent(json::parse(R"({"user_name":"x"})")));
+}
+
+TEST_CASE("YouTube events from the chat become alerts")
+{
+	unified_chat::YouTubeEvent milestone;
+	milestone.kind = unified_chat::YouTubeEvent::Kind::MemberMilestone;
+	milestone.name = "@old";
+	milestone.months = 12;
+	auto alert = FromYouTubeEvent(milestone);
+	CHECK(alert.kind == AlertKind::Member);
+	CHECK(alert.variant);
+	CHECK(alert.months == 12);
+
+	unified_chat::YouTubeEvent sticker;
+	sticker.kind = unified_chat::YouTubeEvent::Kind::SuperSticker;
+	sticker.amount = "$2.00";
+	CHECK(FromYouTubeEvent(sticker).kind == AlertKind::SuperChat);
+}
