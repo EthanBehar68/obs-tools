@@ -168,7 +168,7 @@ Create `plugins\<name>\` with a `plugin.json` (`name`, `version`) and a `CMakeLi
 Sign-ins come from `SharedAccounts()`. Twitch refresh tokens are single-use, so never refresh a token yourself: call `AccountStore::Refresh(service, staleToken)`, which either returns the token another plugin already refreshed or refreshes it under a system-wide lock and saves it before returning. Only a `Rejected` result may sign the user out (`Invalidate`); `Transient` means retry later. Add the plugin's Twitch scopes to `oauth::TwitchProvider`, and handle `SetAccountsChangedHandler` to reconnect when the user signs in or out.
 
 Also:
-- Call `RegisterObsToolsPlugin(name, PLUGIN_VERSION)` in `obs_module_load`, add the plugin to `kKnownPlugins` in `ui/obs-tools-menu.cpp`, and call `CheckObsToolsPlugins()` at `OBS_FRONTEND_EVENT_FINISHED_LOADING`.
+- Call `RegisterObsToolsPlugin(name, PLUGIN_NAME, PLUGIN_VERSION)` in `obs_module_load` and `CheckObsToolsPlugins()` at `OBS_FRONTEND_EVENT_FINISHED_LOADING`. Write the shared API as `obs_tools::…` in plugin code.
 - `obs-tools-net` and `obs-tools-ui` are static libraries built into each plugin: they log with the including plugin's `obs_log` prefix and keep files under its `obs_module_config_path`.
 - Twitch allows 3 EventSub WebSockets per user and client ID; Unified Chat and Stream Alerts use 2. A third plugin that needs EventSub would use the last one.
 
@@ -177,7 +177,8 @@ Also:
 Separately installed plugins talk through the shared accounts file, the Twitch scopes, libobs signals and procs, and the JSON those carry. `kObsToolsProtocol` (`ui/obs-tools-menu.hpp`) versions all of it; each plugin publishes its version, protocol and scopes at load and logs a warning (and the Accounts window shows one) when another plugin's protocol differs.
 
 - **New signals** carry one JSON string with `"v"` and `"kind"`: `void obs_tools_<topic>(string <name>)`, declared through `DeclareSignals()`. (`obs_tools_alert` and `obs_tools_accounts_changed` predate this and keep their shape.)
-- **The accounts file** keeps keys a plugin doesn't know, so an older plugin never deletes a newer one's fields.
+- **The accounts file** keeps keys a plugin doesn't know, so an older plugin never deletes a newer one's fields. Its `"version"` may only rise for additions an older writer can't break (it rewrites only the fields it knows); a change to those fields needs a new file name.
+- **Plugins find each other** through a registry (`obs_tools_register` / `obs_tools_plugins` procs, owned by whichever plugin registered first), so a new plugin is seen by the others without changing them.
 - **Release rule:** when a change in `libs/common` alters anything above, bump `kObsToolsProtocol`, bump and tag *both* plugins, and say in each CHANGELOG which version of the other it needs. A change that only touches one plugin releases only that plugin.
 
 ### Design notes

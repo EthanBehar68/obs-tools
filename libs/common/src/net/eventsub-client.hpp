@@ -27,7 +27,9 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 namespace obs_tools {
 
-// What the caller does with one EventSub session. All of it runs on the calling thread.
+// What the caller does with one EventSub session. All of it runs on the calling thread, inside the read loop: keep
+// each call short. subscribe in particular must finish within Twitch's 10 s of the welcome, and nothing is read
+// while a handler runs.
 struct EventSubHandlers {
 	// Welcomed: subscribe on sessionId (Twitch closes the socket after 10 s without a subscription). False ends
 	// the session.

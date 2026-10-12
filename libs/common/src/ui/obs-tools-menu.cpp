@@ -24,6 +24,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <obs-module.h>
 #include <plugin-support.h>
 
+#include <algorithm>
+
 #include <QAction>
 #include <QMainWindow>
 #include <QMenu>
@@ -61,13 +63,72 @@ static void DeclareSignals()
 		signal_handler_add(obs_get_signal_handler(), decl);
 }
 
-// Every OBS Tools plugin: its proc suffix and its module (DLL) name.
+struct KnownPluginEntry {
+	std::string name;   // proc suffix, e.g. "unified_chat"
+	std::string module; // DLL name, e.g. "obs-unified-chat"
+};
+
+// The plugins released before the handshake (Unified Chat 1.3.0, Stream Alerts 0.1.0) can't register. They're
+// found by module name so an outdated install is flagged. Newer plugins register instead and don't go here.
 struct KnownPlugin {
 	const char *name;
 	const char *module;
 };
-static constexpr KnownPlugin kKnownPlugins[] = {{"unified_chat", "obs-unified-chat"},
-						{"stream_alerts", "obs-stream-alerts"}};
+static constexpr KnownPlugin kPreHandshakePlugins[] = {{"unified_chat", "obs-unified-chat"},
+						       {"stream_alerts", "obs-stream-alerts"}};
+
+// The registry: every OBS Tools plugin adds itself, so one added later is found without changing the others. The
+// first plugin to register owns the list; the others reach it through these procs.
+static constexpr const char *kRegisterProc = "obs_tools_register";
+static constexpr const char *kRegisterProcDecl = "void obs_tools_register(in string name, in string module)";
+static constexpr const char *kPluginsProc = "obs_tools_plugins";
+static constexpr const char *kPluginsProcDecl = "void obs_tools_plugins(out string plugins)";
+
+static std::vector<KnownPluginEntry> &Registry()
+{
+	static std::vector<KnownPluginEntry> registry;
+	return registry;
+}
+
+static void RegisterProc(void *, calldata_t *cd)
+{
+	const char *name = calldata_string(cd, "name");
+	const char *module = calldata_string(cd, "module");
+	if (name && module)
+		Registry().push_back({name, module});
+}
+
+static void PluginsProc(void *, calldata_t *cd)
+{
+	std::string list; // "name module;name module"
+	for (const auto &entry : Registry())
+		list += (list.empty() ? "" : ";") + entry.name + " " + entry.module;
+	calldata_set_string(cd, "plugins", list.c_str());
+}
+
+static std::vector<KnownPluginEntry> RegisteredPlugins()
+{
+	std::vector<KnownPluginEntry> plugins;
+	calldata_t cd;
+	calldata_init(&cd);
+	if (proc_handler_call(obs_get_proc_handler(), kPluginsProc, &cd)) {
+		const char *text = calldata_string(&cd, "plugins");
+		std::string list = text ? text : "";
+		size_t at = 0;
+		while (at < list.size()) {
+			size_t end = list.find(';', at);
+			if (end == std::string::npos)
+				end = list.size();
+			const std::string entry = list.substr(at, end - at);
+			at = end + 1;
+			const size_t space = entry.find(' ');
+			if (space != std::string::npos)
+				plugins.push_back({entry.substr(0, space), entry.substr(space + 1)});
+		}
+	}
+	calldata_free(&cd);
+	return plugins;
+}
 
 struct PluginInfo {
 	std::string name;
@@ -89,45 +150,61 @@ static void PublishInfo(void *, calldata_t *cd)
 	calldata_set_string(cd, "twitch_scopes", info.twitchScopes.c_str());
 }
 
-void RegisterObsToolsPlugin(const char *name, const char *version)
+void RegisterObsToolsPlugin(const char *name, const char *module, const char *version)
 {
 	PluginInfo &info = OwnInfo();
 	info = {name, version, kObsToolsProtocol, oauth::TwitchProvider({}).scope};
 	const std::string decl = std::string("void obs_tools_plugin_") + name +
 				 "(out string version, out int protocol, out string twitch_scopes)";
 	proc_handler_add(obs_get_proc_handler(), decl.c_str(), PublishInfo, nullptr);
+
+	calldata_t cd;
+	calldata_init(&cd);
+	if (!proc_handler_call(obs_get_proc_handler(), kPluginsProc, &cd)) {
+		proc_handler_add(obs_get_proc_handler(), kRegisterProcDecl, RegisterProc, nullptr);
+		proc_handler_add(obs_get_proc_handler(), kPluginsProcDecl, PluginsProc, nullptr);
+	}
+	calldata_free(&cd);
+	calldata_init(&cd);
+	calldata_set_string(&cd, "name", name);
+	calldata_set_string(&cd, "module", module);
+	proc_handler_call(obs_get_proc_handler(), kRegisterProc, &cd);
+	calldata_free(&cd);
 	DeclareSignals();
 }
 
 struct Peer {
 	std::string module;
-	bool loaded = false;
-	bool answered = false; // false while loaded: a release from before the handshake
+	bool answered = false; // false: loaded, but a release from before the handshake
 	PluginInfo info;
 };
 static std::vector<Peer> Peers()
 {
+	std::vector<KnownPluginEntry> candidates = RegisteredPlugins();
+	for (const KnownPlugin &known : kPreHandshakePlugins) {
+		auto same = [&](const KnownPluginEntry &entry) {
+			return entry.name == known.name;
+		};
+		if (std::none_of(candidates.begin(), candidates.end(), same) && obs_get_module(known.module))
+			candidates.push_back({known.name, known.module});
+	}
 	std::vector<Peer> peers;
-	for (const KnownPlugin &known : kKnownPlugins) {
-		if (OwnInfo().name == known.name)
+	for (const auto &candidate : candidates) {
+		if (candidate.name == OwnInfo().name)
 			continue;
 		Peer peer;
-		peer.module = known.module;
-		peer.loaded = obs_get_module(known.module) != nullptr;
+		peer.module = candidate.module;
 		calldata_t cd;
 		calldata_init(&cd);
-		if (proc_handler_call(obs_get_proc_handler(), (std::string("obs_tools_plugin_") + known.name).c_str(),
-				      &cd)) {
+		if (proc_handler_call(obs_get_proc_handler(), ("obs_tools_plugin_" + candidate.name).c_str(), &cd)) {
 			peer.answered = true;
-			peer.loaded = true;
 			const char *version = calldata_string(&cd, "version");
 			const char *scopes = calldata_string(&cd, "twitch_scopes");
-			peer.info = {known.name, version ? version : "", calldata_int(&cd, "protocol"),
+			peer.info = {candidate.name, version ? version : "", calldata_int(&cd, "protocol"),
 				     scopes ? scopes : ""};
 		}
 		calldata_free(&cd);
-		if (peer.loaded)
-			peers.push_back(std::move(peer));
+		peers.push_back(std::move(peer));
 	}
 	return peers;
 }

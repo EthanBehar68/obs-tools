@@ -59,7 +59,7 @@ bool obs_module_load(void)
 	if (mainwin == nullptr)
 		return false;
 
-	obs_tools::RegisterObsToolsPlugin("stream_alerts", PLUGIN_VERSION);
+	obs_tools::RegisterObsToolsPlugin("stream_alerts", PLUGIN_NAME, PLUGIN_VERSION);
 	s_controller = new AlertsController(mainwin); // deleted with the main window
 	obs_frontend_add_event_callback(OnFrontendEvent, nullptr);
 	obs_tools::AddObsToolsMenuEntry(QString::fromUtf8(obs_module_text("Tools.StreamAlerts")), [mainwin]() {

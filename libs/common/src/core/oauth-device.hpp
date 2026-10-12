@@ -81,6 +81,14 @@ PollResult ParseTokenResponse(long httpStatus, const std::string &json, int64_t 
 enum class RefreshOutcome { Granted, Rejected, Transient };
 RefreshOutcome ClassifyRefresh(long httpStatus, const PollResult &parsed);
 
+// What a token check (Twitch oauth2/validate) says: Expired only on HTTP 401. Unknown (offline, a server error, a rate
+// limit) says nothing about the token: keep it.
+enum class TokenCheck { Valid, Expired, Unknown };
+TokenCheck ClassifyValidate(long httpStatus);
+// After a check said Expired: sign out only when the refresh was refused, or the token had only just come from a
+// refresh. A refresh that failed for now keeps the sign-in.
+bool ShouldSignOut(RefreshOutcome refresh, bool tokenJustRefreshed);
+
 constexpr const char *kTwitchValidateUrl = "https://id.twitch.tv/oauth2/validate";
 // The login from a Twitch validate response, or an empty string.
 std::string ParseTwitchLogin(const std::string &json);

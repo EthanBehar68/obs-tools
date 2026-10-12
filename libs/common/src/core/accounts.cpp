@@ -55,6 +55,8 @@ std::string SerializeAccounts(const Accounts &accounts, const SecretCodec *codec
 	json obj = json::parse(previous, nullptr, false);
 	if (!obj.is_object())
 		obj = json::object();
+	// "version" may only rise for changes an older writer can't break: it keeps the other keys and rewrites only
+	// the fields below, so a version that needs those fields written differently has to be a new file name.
 	if (!obj.contains("version"))
 		obj["version"] = 1; // a newer plugin's higher version stays
 	for (const char *service : {"twitch", "google"}) {

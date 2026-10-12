@@ -176,8 +176,10 @@ AccountStore::RefreshResult AccountStore::Refresh(Service service, const oauth::
 		oauth::ParseTokenResponse(res.status, res.body, (int64_t)std::time(nullptr), stored.token.refreshToken);
 	const RefreshOutcome outcome = oauth::ClassifyRefresh(res.status, parsed);
 	if (outcome != RefreshOutcome::Granted) {
-		obs_log(LOG_WARNING, "%s sign-in refresh %s (%s)", service == Service::Twitch ? "Twitch" : "Google",
-			outcome == RefreshOutcome::Rejected ? "rejected" : "failed for now", parsed.error.c_str());
+		const bool badClient = parsed.error.find("client") != std::string::npos; // invalid_client, ...
+		obs_log(LOG_WARNING, "%s sign-in refresh %s (%s)%s", service == Service::Twitch ? "Twitch" : "Google",
+			outcome == RefreshOutcome::Rejected ? "rejected" : "failed for now", parsed.error.c_str(),
+			badClient ? ": the client ID (or secret) in Tools > OBS Tools > Accounts isn't accepted" : "");
 		return {outcome, {}};
 	}
 	if (!ReplaceIfCurrent(service, stored.token, parsed.token))

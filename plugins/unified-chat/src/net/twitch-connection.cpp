@@ -33,6 +33,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <algorithm>
 #include <chrono>
 #include <ctime>
+#include <optional>
 #include <random>
 
 #ifdef _WIN32
@@ -220,23 +221,29 @@ bool TwitchConnection::RefreshToken(bool *rejected)
 
 bool TwitchConnection::ValidateToken(bool allowRefresh)
 {
+	using oauth::RefreshOutcome;
 	if (!token_.IsValid())
 		return false;
-	// A refresh that fails for now (network, server) keeps the sign-in; only Twitch refusing it signs out.
-	bool rejected = false;
-	if (token_.NeedsRefresh(UnixNow()) && !RefreshToken(&rejected) && rejected)
-		allowRefresh = false;
+	// About to expire: refresh first. Its outcome also decides what a rejection below means.
+	auto refresh = [this]() {
+		bool rejected = false;
+		if (RefreshToken(&rejected))
+			return RefreshOutcome::Granted;
+		return rejected ? RefreshOutcome::Rejected : RefreshOutcome::Transient;
+	};
+	std::optional<RefreshOutcome> early;
+	if (token_.NeedsRefresh(UnixNow()))
+		early = refresh();
 
 	CurlHttpClient http(&stop_);
 	auto res = http.Get(twitch::kValidateUrl, {"Authorization: OAuth " + token_.accessToken});
-	if (res.status == 0)
-		return true; // offline; the IRC login will report a bad token
-	if (!res.Ok() && res.status != 401) {
-		// A server error or rate limit says nothing about the token: keep it, check again next time.
-		Notice("couldn't check the sign-in (HTTP " + std::to_string(res.status) + "), keeping it");
+	switch (oauth::ClassifyValidate(res.status)) {
+	case oauth::TokenCheck::Unknown:
+		// Offline (the login will report a bad token), or a server error or rate limit: keep the token.
+		if (res.status != 0)
+			Notice("couldn't check the sign-in (HTTP " + std::to_string(res.status) + "), keeping it");
 		return true;
-	}
-	if (res.Ok()) {
+	case oauth::TokenCheck::Valid: {
 		std::string login = twitch::ParseValidateLogin(res.body);
 		// Keeps the user id and granted scopes too: moderation needs both.
 		if (auto identity = ParseTwitchIdentity(res.body))
@@ -248,9 +255,18 @@ bool TwitchConnection::ValidateToken(bool allowRefresh)
 		}
 		return true;
 	}
-	if (allowRefresh && RefreshToken(&rejected))
-		return ValidateToken(false);
-	if (allowRefresh && !rejected) {
+	case oauth::TokenCheck::Expired:
+		break;
+	}
+
+	// Rejected: refresh, unless that was just tried.
+	RefreshOutcome outcome = early.value_or(RefreshOutcome::Transient);
+	if (allowRefresh && !early) {
+		outcome = refresh();
+		if (outcome == RefreshOutcome::Granted)
+			return ValidateToken(false);
+	}
+	if (!oauth::ShouldSignOut(outcome, !allowRefresh || early == RefreshOutcome::Granted)) {
 		Notice("the sign-in needs refreshing and Twitch couldn't be reached for it, trying again shortly");
 		return false; // kept: the next connection attempt validates again
 	}
@@ -704,8 +720,7 @@ bool TwitchConnection::RunEventSub()
 		Notice("connection failed: " + result.error);
 		return false;
 	case EventSubResult::End::SubscribeFailed:
-		Notice("couldn't start chat");
-		return false;
+		return false; // SubscribeChat said why
 	case EventSubResult::End::TimedOut:
 		Notice("connection timed out");
 		break;

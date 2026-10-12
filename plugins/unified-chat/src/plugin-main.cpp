@@ -36,7 +36,7 @@ static void OnFrontendEvent(enum obs_frontend_event event, void *private_data)
 {
 	auto dock = static_cast<unified_chat::ChatDock *>(private_data);
 	if (event == OBS_FRONTEND_EVENT_FINISHED_LOADING) {
-		unified_chat::CheckObsToolsPlugins();
+		obs_tools::CheckObsToolsPlugins();
 		dock->Start();
 	} else if (event == OBS_FRONTEND_EVENT_EXIT)
 		dock->Shutdown();
@@ -54,7 +54,7 @@ bool obs_module_load(void)
 	if (mainwin == nullptr)
 		return false;
 
-	unified_chat::RegisterObsToolsPlugin("unified_chat", PLUGIN_VERSION);
+	obs_tools::RegisterObsToolsPlugin("unified_chat", PLUGIN_NAME, PLUGIN_VERSION);
 	auto dock = new unified_chat::ChatDock();
 	dock->setObjectName(kDockId);
 	if (!obs_frontend_add_dock_by_id(kDockId, obs_module_text("Title"), dock)) {
@@ -66,15 +66,15 @@ bool obs_module_load(void)
 	obs_frontend_add_event_callback(OnFrontendEvent, dock);
 
 	QPointer<unified_chat::ChatDock> guarded(dock);
-	unified_chat::AddObsToolsMenuEntry(QString::fromUtf8(obs_module_text("Tools.UnifiedChat")), [guarded]() {
+	obs_tools::AddObsToolsMenuEntry(QString::fromUtf8(obs_module_text("Tools.UnifiedChat")), [guarded]() {
 		if (guarded)
 			guarded->OpenSettings();
 	});
-	unified_chat::SetAccountsChangedHandler([guarded](bool twitch, bool google) {
+	obs_tools::SetAccountsChangedHandler([guarded](bool twitch, bool google) {
 		if (guarded)
 			guarded->OnAccountsChanged(twitch, google);
 	});
-	unified_chat::SetAlertHandler([guarded](bool follow, const std::string &name, bool test) {
+	obs_tools::SetAlertHandler([guarded](bool follow, const std::string &name, bool test) {
 		if (guarded)
 			guarded->OnAlert(follow, name, test);
 	});
@@ -84,8 +84,8 @@ bool obs_module_load(void)
 
 void obs_module_unload(void)
 {
-	unified_chat::ClearAccountsChangedHandler();
-	unified_chat::ClearAlertHandler();
+	obs_tools::ClearAccountsChangedHandler();
+	obs_tools::ClearAlertHandler();
 	if (s_dock)
 		obs_frontend_remove_event_callback(OnFrontendEvent, s_dock);
 	s_dock = nullptr;

@@ -83,13 +83,16 @@ EventSubResult RunEventSub(const std::string &url, const std::atomic<bool> &stop
 		}
 	};
 
+	// The old socket closed before the new one said welcome: keep waiting for the welcome until its deadline.
+	bool oldClosed = false;
+
 	while (!stop) {
 		if (h.work && !h.work()) {
 			result.end = EventSubResult::End::CallerEnded;
 			return result;
 		}
 
-		const bool open = drain(*socket, false);
+		const bool open = oldClosed || drain(*socket, false);
 		const bool wasReconnecting = session.Reconnecting();
 		if (successor && !drain(*successor, true)) {
 			successor.reset();
@@ -103,8 +106,11 @@ EventSubResult RunEventSub(const std::string &url, const std::atomic<bool> &stop
 		}
 		if (successor && wasReconnecting && !session.Reconnecting()) {
 			socket = std::move(successor); // the old one was read to the end above
+			oldClosed = false;
 			obs_log(LOG_INFO, "%s: EventSub moved to the new connection", name);
-		} else if (!open) {
+		} else if (!open && successor && session.Reconnecting()) {
+			oldClosed = true; // Twitch closed it a little early
+		} else if (!open || (oldClosed && !successor)) {
 			result.end = stop ? EventSubResult::End::Stopped : EventSubResult::End::Closed;
 			return result;
 		}
@@ -114,6 +120,10 @@ EventSubResult RunEventSub(const std::string &url, const std::atomic<bool> &stop
 			obs_log(LOG_WARNING, "%s: EventSub new connection sent no welcome in time", name);
 			successor.reset();
 			session.AbandonReconnect();
+			if (oldClosed) {
+				result.end = EventSubResult::End::Closed;
+				return result;
+			}
 		}
 		if (now > session.Deadline()) {
 			result.end = EventSubResult::End::TimedOut;
@@ -126,7 +136,8 @@ EventSubResult RunEventSub(const std::string &url, const std::atomic<bool> &stop
 		auto waitMs = std::chrono::duration_cast<std::chrono::milliseconds>(due - Clock::now()).count() + 1;
 		if (successor)
 			waitMs = (std::min)(waitMs, 100LL); // two sockets for a few seconds: check both often
-		socket->Wait(wakeEvent, (int)std::clamp<long long>(waitMs, 0, 60 * 60 * 1000));
+		EventSubSocket &waitOn = oldClosed && successor ? *successor : *socket;
+		waitOn.Wait(wakeEvent, (int)std::clamp<long long>(waitMs, 0, 60 * 60 * 1000));
 	}
 	result.end = EventSubResult::End::Stopped;
 	return result;

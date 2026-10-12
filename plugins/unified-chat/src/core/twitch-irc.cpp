@@ -290,6 +290,10 @@ void IrcSession::HandleLine(std::string_view line, SessionOutput &out)
 		}
 		out.moderation.push_back(std::move(event));
 	} else if (msg.command == "USERNOTICE") {
+		// One recipient of a gift bomb: the submysterygift notice already said it, and 100 lines would mean 100
+		// relayouts. msg-param-community-gift-id is undocumented; without it every line shows, as before.
+		if (msg.Tag("msg-id") == "subgift" && !msg.Tag("msg-param-community-gift-id").empty())
+			return;
 		std::string notice = msg.Tag("system-msg");
 		if (msg.params.size() >= 2 && !msg.params[1].empty())
 			notice += notice.empty() ? msg.params[1] : " - " + msg.params[1];

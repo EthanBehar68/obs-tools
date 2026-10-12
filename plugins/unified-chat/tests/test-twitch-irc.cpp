@@ -154,6 +154,15 @@ TEST_CASE("Session reports USERNOTICE system messages")
 	CHECK(out.notices.empty()); // viewers' text: shown, but not logged like other notices
 	REQUIRE(out.eventNotices.size() == 1);
 	CHECK(out.eventNotices[0] == "Fan subscribed for 3 months! - hype");
+
+	twitch::SessionOutput bomb;
+	session.HandleLine("@msg-id=subgift;msg-param-community-gift-id=123;system-msg=Fan\\sgifted\\sa\\ssub "
+			   ":tmi.twitch.tv USERNOTICE #streamer",
+			   bomb);
+	CHECK(bomb.eventNotices.empty()); // one recipient of a gift bomb
+	session.HandleLine("@msg-id=subgift;system-msg=Fan\\sgifted\\sa\\ssub :tmi.twitch.tv USERNOTICE #streamer",
+			   bomb);
+	CHECK(bomb.eventNotices.size() == 1); // a single gift
 }
 
 TEST_CASE("Session becomes sendable after USERSTATE and echoes with display name")

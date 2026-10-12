@@ -151,6 +151,18 @@ RefreshOutcome ClassifyRefresh(long httpStatus, const PollResult &parsed)
 	return httpStatus == 400 || httpStatus == 401 ? RefreshOutcome::Rejected : RefreshOutcome::Transient;
 }
 
+TokenCheck ClassifyValidate(long httpStatus)
+{
+	if (httpStatus >= 200 && httpStatus < 300)
+		return TokenCheck::Valid;
+	return httpStatus == 401 ? TokenCheck::Expired : TokenCheck::Unknown;
+}
+
+bool ShouldSignOut(RefreshOutcome refresh, bool tokenJustRefreshed)
+{
+	return tokenJustRefreshed || refresh == RefreshOutcome::Rejected;
+}
+
 PollResult ParseTokenResponse(long httpStatus, const std::string &body, int64_t now,
 			      const std::string &previousRefreshToken)
 {

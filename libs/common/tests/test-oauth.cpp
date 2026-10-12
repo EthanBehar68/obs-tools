@@ -100,6 +100,18 @@ TEST_CASE("Only a refused refresh signs out; network and server failures are tem
 	CHECK(classify(500, R"({"error":"internal"})") == RefreshOutcome::Transient);
 }
 
+TEST_CASE("A token check signs out only when the token really is gone")
+{
+	CHECK(ClassifyValidate(200) == TokenCheck::Valid);
+	CHECK(ClassifyValidate(401) == TokenCheck::Expired);
+	CHECK(ClassifyValidate(0) == TokenCheck::Unknown);   // offline
+	CHECK(ClassifyValidate(503) == TokenCheck::Unknown); // Twitch having a bad moment
+	CHECK(ClassifyValidate(429) == TokenCheck::Unknown);
+	CHECK(ShouldSignOut(RefreshOutcome::Rejected, false));
+	CHECK_FALSE(ShouldSignOut(RefreshOutcome::Transient, false)); // e.g. the PC woke before the network did
+	CHECK(ShouldSignOut(RefreshOutcome::Transient, true));        // a token straight from a refresh, refused
+}
+
 TEST_CASE("Scope lists merge without repeats, in order")
 {
 	CHECK(MergeScopes("chat:read user:read:chat", "user:read:chat bits:read") ==
