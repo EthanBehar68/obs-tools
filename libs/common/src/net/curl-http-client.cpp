@@ -199,7 +199,7 @@ HttpResponse CurlHttpClient::Perform(const std::string &url, const std::vector<s
 	const bool cancelled = cancel_ && cancel_->load();
 	const bool failed = !response.interrupted && !cancelled &&
 			    (response.status == 0 || (response.status >= 400 && response.status != 401));
-	if (failed && logFailures_) {
+	if (failed && logFailures_ && (logNotFound_ || response.status != 404)) {
 		const char *method = deleteMethod ? "DELETE" : body ? "POST" : "GET";
 		const std::string connection =
 			connects > 0 ? "new connection (connect " + std::to_string(connectUs / 1000) +

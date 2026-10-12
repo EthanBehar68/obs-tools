@@ -46,6 +46,7 @@ void AssetLoader::Get(std::string url, std::vector<std::string> headers, Done do
 void AssetLoader::Run()
 {
 	CurlHttpClient http(&stop_);
+	http.SetLogNotFound(false); // BTTV / FFZ / 7TV answer 404 for a channel that doesn't use them
 	while (!stop_) {
 		Job job;
 		{

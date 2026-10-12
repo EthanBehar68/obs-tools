@@ -29,6 +29,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include <QTimer>
 
+#include <algorithm>
 #include <vector>
 
 namespace stream_alerts {
@@ -132,11 +133,30 @@ AlertsController::~AlertsController()
 	StopListeners();
 }
 
+void AlertsController::HideAllAlertSources()
+{
+	std::vector<std::string> hidden;
+	for (AlertKind kind : kAllKinds) {
+		const std::string &source = config_.For(kind).source;
+		if (source.empty() || std::find(hidden.begin(), hidden.end(), source) != hidden.end())
+			continue;
+		SetSourceVisible(source, false);
+		hidden.push_back(source);
+	}
+}
+
+void AlertsController::HideShownAlert()
+{
+	if (phase_ == Phase::Showing && !shownSource_.empty())
+		SetSourceVisible(shownSource_, false);
+}
+
 void AlertsController::Start()
 {
 	if (started_)
 		return;
 	started_ = true;
+	HideAllAlertSources();
 	if (obs_frontend_streaming_active()) // the plugin may load while already live
 		OnStreamingChanged(true);
 }

@@ -42,6 +42,10 @@ public:
 	void Start(); // OBS finished loading
 	void Shutdown();
 	void OnStreamingChanged(bool streaming);
+	// OBS saves the scene collection before plugins hear of shutdown, so an alert on screen at that moment is saved
+	// visible. Every alert source is hidden again at load, and the one showing before a collection switch.
+	void HideAllAlertSources();
+	void HideShownAlert();
 	void OnAccountsChanged(bool twitch, bool google);
 	// A Super Chat or membership from Unified Chat's YouTube chat (core/youtube-events JSON).
 	void OnYouTubeEvent(const std::string &eventJson);

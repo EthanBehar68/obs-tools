@@ -52,6 +52,8 @@ public:
 	HttpResponse Delete(const std::string &url, const std::vector<std::string> &headers) override;
 	// Off for requests that fail by design, such as the sign-in's "still waiting" polls.
 	void SetLogFailures(bool enabled) { logFailures_ = enabled; }
+	// Off where 404 is an ordinary answer (e.g. a channel that doesn't use an emote service).
+	void SetLogNotFound(bool enabled) { logNotFound_ = enabled; }
 	HttpResponse GetStream(const std::string &url, const std::vector<std::string> &headers,
 			       const std::function<bool(std::string_view)> &onData,
 			       const std::function<bool()> &interrupt) override;
@@ -66,6 +68,7 @@ private:
 	const std::atomic<bool> *cancel_;
 	std::string logName_;
 	bool logFailures_ = true;
+	bool logNotFound_ = true;
 	void *curl_ = nullptr; // CURL *
 
 	// For the hourly summary.

@@ -46,6 +46,10 @@ static void OnFrontendEvent(enum obs_frontend_event event, void *)
 		s_controller->OnStreamingChanged(true);
 	else if (event == OBS_FRONTEND_EVENT_STREAMING_STOPPED)
 		s_controller->OnStreamingChanged(false);
+	else if (event == OBS_FRONTEND_EVENT_SCENE_COLLECTION_CHANGING)
+		s_controller->HideShownAlert(); // before OBS saves the collection being left
+	else if (event == OBS_FRONTEND_EVENT_SCENE_COLLECTION_CHANGED)
+		s_controller->HideAllAlertSources();
 }
 
 bool obs_module_load(void)
