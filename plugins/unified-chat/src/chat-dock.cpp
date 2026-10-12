@@ -18,7 +18,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include "chat-dock.hpp"
 #include "platform-icons.hpp"
-#include "secret-store.hpp"
+#include "net/secret-store.hpp"
 #include "settings-dialog.hpp"
 #include "target-switch.hpp"
 #include "core/chat-format.hpp"

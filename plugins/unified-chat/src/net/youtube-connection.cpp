@@ -105,18 +105,20 @@ void YouTubeConnection::Run()
 	}
 
 	CurlHttpClient http(&stop_, "YouTube chat");
-	youtube::ChatSession session(http, oauth::GoogleProvider(clientId_, clientSecret_), token_, video_,
-				     pollSeconds_ * 1000, [this](const oauth::Token &token) {
-					     // Google refresh tokens are reusable, so the session refreshes by itself; the store
-					     // keeps the result unless another plugin has saved a newer token.
-					     if (token.IsValid())
-						     SharedAccounts().Replace(Service::Google, token_, token);
-					     else
-						     SharedAccounts().Invalidate(Service::Google, token_);
-					     token_ = token;
-					     if (callbacks_.onTokenChanged)
-						     callbacks_.onTokenChanged(token, {});
-				     });
+	youtube::ChatSession session(
+		http, oauth::GoogleProvider(clientId_, clientSecret_), token_, video_, pollSeconds_ * 1000,
+		[this](const oauth::Token &token) {
+			// Google refresh tokens are reusable, so the session refreshes by itself; the store
+			// keeps the result unless another plugin has saved a newer token. Never copy this for
+			// Twitch: its refresh tokens work once, so they only go through AccountStore::Refresh.
+			if (token.IsValid())
+				SharedAccounts().Replace(Service::Google, token_, token);
+			else
+				SharedAccounts().Invalidate(Service::Google, token_);
+			token_ = token;
+			if (callbacks_.onTokenChanged)
+				callbacks_.onTokenChanged(token, {});
+		});
 
 	session.SetStreaming(stream_);
 	session.SetViewerChecks(int64_t(viewerCheckMinutes_) * 60);

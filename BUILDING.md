@@ -90,7 +90,8 @@ libs\
 ├── common\src\      shared by every plugin (namespace obs_tools; Unified Chat pulls it in via core\obs-tools.hpp)
 │   ├── core\        no libobs, no Qt, no I/O  -> static library obs-tools-core (tested)
 │   │   ├── accounts.*           the shared sign-ins: accounts.json format, which plugin may refresh, 1.2.0 migration
-│   │   ├── eventsub.*           Twitch EventSub WebSocket messages and subscription requests
+│   │   ├── eventsub.*           Twitch EventSub messages, subscription requests, and Session: the tested protocol
+│   │   │                        state (welcome, keepalive, duplicates, moving to a new socket)
 │   │   ├── oauth-device.*       RFC 8628 device flow for Twitch and Google; the Twitch scopes of every plugin
 │   │   ├── json-array-reader.*  splits a chunked JSON array into complete objects
 │   │   ├── text-util.*          UTF-8, escaping, URL encoding
@@ -102,8 +103,10 @@ libs\
 │   │   │                        Refresh() lets only one plugin spend a Twitch refresh token
 │   │   ├── curl-http-client.*   HttpClient over the libcurl that ships with OBS
 │   │   ├── eventsub-socket.*    one EventSub WebSocket (curl CONNECT_ONLY 2): whole messages, sleep until data
+│   │   ├── eventsub-client.*    RunEventSub: drives eventsub::Session over one or two sockets for both plugins
+│   │   ├── secret-store.*       DPAPI SecretCodec, one entropy per file
+│   │   ├── socket-wait.*        sleep on a socket and a wake event (WSAEventSelect)
 │   │   └── device-login.*       sign-in flow
-│   ├── secret-store.*  DPAPI SecretCodec, one entropy per file                -> obs-tools-net
 │   └── ui\           -> obs-tools-ui (Qt, obs-frontend-api)
 │       ├── obs-tools-menu.*     Tools > OBS Tools: the first plugin loaded creates it and publishes it through the
 │       │                        libobs proc handler; the accounts-changed signal
@@ -143,13 +146,16 @@ plugins\stream-alerts\
 ├── plugin.json
 ├── src\
 │   ├── core\        no libobs, no Qt, no I/O  -> static library stream-alerts-core
-│   │   ├── alert-queue.*      one at a time, once per person per stream, "+N more" past 10; message formatting
-│   │   ├── platform-events.*  EventSub messages, follow subscription, validate; recent subscribers + SubscriberWatch
-│   │   └── alerts-config.*    config.json
-│   ├── net\listeners.*   FollowListener (EventSub channel.follow over curl's WebSocket, CONNECT_ONLY 2) and
-│   │                     SubscriberPoller (every 2 minutes); both only while OBS streams
-│   ├── alerts-controller.*   plays alerts: text source "text", scene item visibility in every scene and group
-│   ├── alerts-dialog.*       Tools > OBS Tools > Stream Alerts...
+│   │   ├── alert-queue.*      9 kinds; follows/subscribers once per person per stream and "+N more" past 10;
+│   │   │                      paid alerts and raids every time, never combined, ahead of follows; placeholders
+│   │   ├── platform-events.*  Twitch subscriptions and follow / chat notification / cheer events, YouTube events
+│   │   │                      from Unified Chat, validate; recent subscribers + SubscriberWatch
+│   │   └── alerts-config.*    config.json: per-kind settings, minimums, subscriber check interval
+│   ├── net\listeners.*   TwitchListener (one EventSub session via libs/common RunEventSub) and SubscriberPoller
+│   │                     (every "Check every", 2 minutes by default); both only while OBS streams
+│   ├── alerts-controller.*   plays alerts: text source "text", scene item visibility in every scene and group;
+│   │                         hides every alert source at load and around scene collection switches
+│   ├── alerts-dialog.*       Tools > OBS Tools > Stream Alerts…: the kinds in a list, the selected one's settings
 │   └── plugin-main.cpp
 ├── data\locale\en-US.ini
 └── tests\
@@ -159,7 +165,20 @@ plugins\stream-alerts\
 
 Create `plugins\<name>\` with a `plugin.json` (`name`, `version`) and a `CMakeLists.txt` that starts with `plugin_project()` and calls `set_target_properties_plugin(${PROJECT_NAME} ...)`, then add it to the root `CMakeLists.txt`. `plugin_project()` makes the plugin's name and version the ones used for its DLL, version resource and `obs_log` prefix. Call `plugin_merge_data()` before `set_target_properties_plugin` when the plugin links `obs-tools-ui`, so the shared strings reach its locale file.
 
-Sign-ins come from `SharedAccounts()`. Twitch refresh tokens are single-use, so never refresh a token yourself: call `AccountStore::Refresh(service, staleToken)`, which either returns the token another plugin already refreshed or refreshes it under a system-wide lock and saves it before returning. Add the plugin's Twitch scopes to `oauth::TwitchProvider`, and handle `SetAccountsChangedHandler` to reconnect when the user signs in or out.
+Sign-ins come from `SharedAccounts()`. Twitch refresh tokens are single-use, so never refresh a token yourself: call `AccountStore::Refresh(service, staleToken)`, which either returns the token another plugin already refreshed or refreshes it under a system-wide lock and saves it before returning. Only a `Rejected` result may sign the user out (`Invalidate`); `Transient` means retry later. Add the plugin's Twitch scopes to `oauth::TwitchProvider`, and handle `SetAccountsChangedHandler` to reconnect when the user signs in or out.
+
+Also:
+- Call `RegisterObsToolsPlugin(name, PLUGIN_VERSION)` in `obs_module_load`, add the plugin to `kKnownPlugins` in `ui/obs-tools-menu.cpp`, and call `CheckObsToolsPlugins()` at `OBS_FRONTEND_EVENT_FINISHED_LOADING`.
+- `obs-tools-net` and `obs-tools-ui` are static libraries built into each plugin: they log with the including plugin's `obs_log` prefix and keep files under its `obs_module_config_path`.
+- Twitch allows 3 EventSub WebSockets per user and client ID; Unified Chat and Stream Alerts use 2. A third plugin that needs EventSub would use the last one.
+
+### What the plugins share, and releasing
+
+Separately installed plugins talk through the shared accounts file, the Twitch scopes, libobs signals and procs, and the JSON those carry. `kObsToolsProtocol` (`ui/obs-tools-menu.hpp`) versions all of it; each plugin publishes its version, protocol and scopes at load and logs a warning (and the Accounts window shows one) when another plugin's protocol differs.
+
+- **New signals** carry one JSON string with `"v"` and `"kind"`: `void obs_tools_<topic>(string <name>)`, declared through `DeclareSignals()`. (`obs_tools_alert` and `obs_tools_accounts_changed` predate this and keep their shape.)
+- **The accounts file** keeps keys a plugin doesn't know, so an older plugin never deletes a newer one's fields.
+- **Release rule:** when a change in `libs/common` alters anything above, bump `kObsToolsProtocol`, bump and tag *both* plugins, and say in each CHANGELOG which version of the other it needs. A change that only touches one plugin releases only that plugin.
 
 ### Design notes
 

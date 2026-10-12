@@ -39,9 +39,9 @@ target_sources(
     src/net/eventsub-socket.cpp
     src/net/eventsub-socket.hpp
     src/net/socket-wait.cpp
+    src/net/secret-store.cpp
+    src/net/secret-store.hpp
     src/net/socket-wait.hpp
-    src/secret-store.cpp
-    src/secret-store.hpp
 )
 find_package(libobs REQUIRED)
 find_package(CURL REQUIRED)
