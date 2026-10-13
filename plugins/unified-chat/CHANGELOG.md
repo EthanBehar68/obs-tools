@@ -5,6 +5,7 @@
 ### Twitch chat over EventSub
 - **Twitch chat now uses EventSub and the Twitch API**, the connection Twitch recommends over IRC. Sign in to Twitch again once (Tools → OBS Tools → Accounts… → Sign in) to allow it; until then, and whenever you're signed out, chat keeps using IRC. Settings → Twitch → Chat connection switches back to IRC if ever needed.
 - **Twitch's own emotes now show in your sent messages too:** your line appears at once and fills in emotes, badges and colour when Twitch's copy arrives.
+- **`/me` messages are italic again** over EventSub (they showed as plain text), your own included.
 - **A message Twitch refuses says why** (e.g. a duplicate message, or follower-only mode) instead of quietly not appearing.
 - **Twitch subs, gifts, raids and announcements** show as notices, as they did over IRC.
 - **YouTube Super Chats, Super Stickers and memberships** are passed on to Stream Alerts, which can now alert on them.

@@ -3,6 +3,7 @@
 #include "core/chat-format.hpp"
 #include "core/echo-merger.hpp"
 #include "core/twitch-eventsub.hpp"
+#include "core/twitch-irc.hpp"
 
 using namespace unified_chat;
 using namespace unified_chat::twitch;
@@ -67,6 +68,43 @@ TEST_CASE("Emote fragments give ranges in characters, like the IRC tag")
 	auto plain = ChatMessageFromEvent(json::parse(R"({"message_id":"m2","message":{"text":"hi"}})"), "");
 	REQUIRE(plain);
 	CHECK(plain->text == "hi");
+}
+
+TEST_CASE("A /me message is an action, whether or not the fragments carry the ACTION wrapper")
+{
+	// Twitch's form: the wrapper only in message.text, the fragments plain.
+	auto chat = ChatMessageFromEvent(json::parse(R"({"message_id":"a1","chatter_user_login":"fan",
+		"message":{"text":"\u0001ACTION waves Kappa\u0001","fragments":[
+			{"type":"text","text":"waves "},{"type":"emote","text":"Kappa","emote":{"id":"25"}}]}})"),
+					 "");
+	REQUIRE(chat);
+	CHECK(chat->isAction);
+	CHECK(chat->text == "waves Kappa");
+	REQUIRE(chat->emotes.size() == 1);
+	CHECK(chat->emotes[0].start == 6);
+
+	// The wrapper in the fragments too: removed, emotes moved back with it.
+	chat = ChatMessageFromEvent(json::parse(R"({"message_id":"a2","message":{"text":"\u0001ACTION hi Kappa\u0001",
+		"fragments":[{"type":"text","text":"\u0001ACTION hi "},{"type":"emote","text":"Kappa","emote":{"id":"25"}},
+			{"type":"text","text":"\u0001"}]}})"),
+				    "");
+	REQUIRE(chat);
+	CHECK(chat->isAction);
+	CHECK(chat->text == "hi Kappa");
+	REQUIRE(chat->emotes.size() == 1);
+	CHECK(chat->emotes[0].start == 3);
+
+	CHECK_FALSE(ChatMessageFromEvent(json::parse(kRegularMessage), "")->isAction);
+
+	// Your own /me: Twitch's copy keeps the italics on the line shown when you sent it.
+	ChatMessage echo = MakeLocalEcho("/me waves Kappa", {}, "Me", "me", "#ff0000", {});
+	REQUIRE(echo.isAction);
+	ChatMessage copy = *ChatMessageFromEvent(json::parse(R"({"message_id":"a3",
+		"message":{"text":"\u0001ACTION waves Kappa\u0001","fragments":[{"type":"text","text":"waves Kappa"}]}})"),
+						 "");
+	ApplyPlatformCopy(echo, copy, true);
+	CHECK(echo.isAction);
+	CHECK(echo.text == "waves Kappa");
 }
 
 TEST_CASE("A reply names its parent and drops the leading @parent, moving emotes with it")

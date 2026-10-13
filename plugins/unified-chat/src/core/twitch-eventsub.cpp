@@ -110,13 +110,17 @@ std::optional<ChatMessage> ChatMessageFromEvent(const json &event, std::string_v
 		chat.text = StringAt(event, {"message", "text"});
 	}
 
+	// /me: message.text keeps IRC's "\x01ACTION ...\x01" wrapper, while the fragments are the plain text (as in the
+	// example on Twitch's developer forum; not in the reference). Either form is read.
+	if (StringAt(event, {"message", "text"}).rfind(kActionPrefix, 0) == 0)
+		chat.isAction = true;
 	if (chat.text.rfind(kActionPrefix, 0) == 0) {
 		chat.isAction = true;
 		chat.text.erase(0, kActionPrefix.size());
 		DropFront(chat.emotes, (int)kActionPrefix.size());
-		if (!chat.text.empty() && chat.text.back() == '\x01')
-			chat.text.pop_back();
 	}
+	if (chat.isAction && !chat.text.empty() && chat.text.back() == '\x01')
+		chat.text.pop_back();
 
 	auto badges = event.find("badges");
 	if (badges != event.end() && badges->is_array()) {
