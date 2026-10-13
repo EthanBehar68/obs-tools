@@ -21,6 +21,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "alert-queue.hpp"
 
 #include <string>
+#include <string_view>
+#include <vector>
 
 namespace stream_alerts {
 
@@ -65,6 +67,13 @@ const char *KindKey(AlertKind kind);
 constexpr int kGapMs = 1000; // between two alerts
 constexpr int kMinSubscriberCheckSeconds = 30;
 constexpr int kMaxSubscriberCheckSeconds = 900;
+
+// The {placeholders} a kind's messages can use, e.g. {"{name}", "{amount}", "{message}"}; overflow: the "more than
+// 10 wait" message, which has only {count}. Keep in step with what FormatAlert fills in for each kind's events.
+std::vector<std::string> UsablePlaceholders(AlertKind kind, bool overflow);
+// The {word}s in text the kind won't fill in (another kind's, or a typo), each once, in order. They would show
+// as typed, or blank for another kind's: the settings window won't save until they're fixed.
+std::vector<std::string> UnusablePlaceholders(std::string_view text, AlertKind kind, bool overflow);
 
 std::string SerializeAlertsConfig(const AlertsConfig &config);
 // Missing or malformed fields fall back to the defaults.

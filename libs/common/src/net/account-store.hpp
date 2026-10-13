@@ -34,9 +34,11 @@ class AccountStore {
 public:
 	explicit AccountStore(std::string dir);
 
-	Accounts Load(SecretReport *report = nullptr) const;
+	// cancel (on worker threads): stop waiting for the lock once it's set, so closing OBS never waits behind
+	// another plugin. The read or write still happens, unlocked, as after a lock timeout.
+	Accounts Load(SecretReport *report = nullptr, const std::atomic<bool> *cancel = nullptr) const;
 	// Read, change and write under the lock, so another plugin's write in between isn't lost.
-	void Update(const std::function<void(Accounts &)> &change);
+	void Update(const std::function<void(Accounts &)> &change, const std::atomic<bool> *cancel = nullptr);
 
 	struct RefreshResult {
 		oauth::RefreshOutcome outcome = oauth::RefreshOutcome::Transient;
@@ -55,7 +57,8 @@ public:
 	void Replace(Service service, const oauth::Token &stale, const oauth::Token &next);
 
 private:
-	bool ReplaceIfCurrent(Service service, const oauth::Token &stale, const oauth::Token &next);
+	bool ReplaceIfCurrent(Service service, const oauth::Token &stale, const oauth::Token &next,
+			      const std::atomic<bool> *cancel = nullptr);
 
 	std::string dir_;
 	std::string path_;

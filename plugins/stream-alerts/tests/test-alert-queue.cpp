@@ -215,3 +215,27 @@ TEST_CASE("Raising a minimum drops waiting cheers below it, nothing else")
 		queue.Push(Follow(n)); // removing kept the individual count right: still 10, then combined
 	CHECK(queue.Size() == AlertQueue::kMaxQueued + 1);
 }
+
+TEST_CASE("Placeholders another kind would fill in, or typos, are found")
+{
+	// Every default message uses only what its kind fills in.
+	const AlertsConfig defaults;
+	for (AlertKind kind : kAllKinds) {
+		CAPTURE(KindKey(kind));
+		const AlertSettings &settings = defaults.For(kind);
+		CHECK(UnusablePlaceholders(settings.message, kind, false).empty());
+		CHECK(UnusablePlaceholders(settings.variantMessage, kind, false).empty());
+		CHECK(UnusablePlaceholders(settings.overflowMessage, kind, true).empty());
+	}
+
+	CHECK(UnusablePlaceholders("{name} raided with {viewers}! {viewers} {nmae}", AlertKind::Cheer, false) ==
+	      std::vector<std::string>{"{viewers}", "{nmae}"});
+	CHECK(UnusablePlaceholders("+{count} more, thanks {name}", AlertKind::Follow, true) ==
+	      std::vector<std::string>{"{name}"});
+	CHECK(UnusablePlaceholders("{count} gifts", AlertKind::Follow, false) == std::vector<std::string>{"{count}"});
+	// Braces that aren't a placeholder are left alone.
+	CHECK(UnusablePlaceholders("{ } {two words} { {name}} {", AlertKind::Follow, false).empty());
+	CHECK(UnusablePlaceholders("{Name}", AlertKind::Follow, false) == std::vector<std::string>{"{Name}"});
+	CHECK(UnusablePlaceholders("{name} sent {count} × {gift} ({amount} Jewels) {level}", AlertKind::Jewels,
+				   false) == std::vector<std::string>{"{level}"});
+}
