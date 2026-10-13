@@ -165,6 +165,7 @@ void AlertsController::Start()
 
 void AlertsController::Shutdown()
 {
+	delete dialog_.data(); // without Cancel: values tried out with Test were never saved
 	StopListeners();
 	timer_->stop();
 	started_ = false;
@@ -435,8 +436,19 @@ void AlertsController::OnTimer()
 
 void AlertsController::OpenSettings(QWidget *parent)
 {
-	AlertsDialog dialog(this, parent);
-	dialog.exec();
+	if (!dialog_) {
+		dialog_ = new AlertsDialog(this, parent);
+		dialog_->setAttribute(Qt::WA_DeleteOnClose);
+	}
+	dialog_->show();
+	dialog_->raise();
+	dialog_->activateWindow();
+}
+
+void AlertsController::AssignSelected(AlertKind kind, QWidget *parent)
+{
+	OpenSettings(parent);
+	dialog_->UseSelected(kind);
 }
 
 } // namespace stream_alerts

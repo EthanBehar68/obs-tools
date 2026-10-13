@@ -35,7 +35,7 @@ Close OBS and extract `obs-stream-alerts-<version>-windows-x64.zip` into `C:\Pro
 
    **Hide the group** (the eye icon). The plugin shows it for each alert and hides it again. The same source can sit in several scenes; all of its copies are shown.
 2. Open **Tools → OBS Tools → Stream Alerts…**. Pick an alert kind on the left, then:
-   - **Show source:** the group (or any source or nested scene) to show.
+   - **Show source:** the group (or any source or nested scene) to show. Or select it in OBS's Sources list and press **Use selected**: the window can stay open while you do. A group with one text source in it fills in the text source too.
    - **Text source:** the text source that gets the message. Optional.
    - **Message:** the placeholders under it are replaced, e.g. `{name}`, `{months}`, `{count}`, `{amount}`, `{viewers}`, `{message}`, `{level}`. Press Enter for a new line (Text (GDI+) shows it as typed). Subs and members have a second message for resubs and milestones.
    - **When more than 10 wait** (follows and subscribers): `{count}` is replaced by how many more.
@@ -43,6 +43,8 @@ Close OBS and extract `obs-stream-alerts-<version>-windows-x64.zip` into `C:\Pro
    - **Test alert** plays one straight away with the values as entered and made-up details, so you can try the look without a real event. Cancel puts the previous settings back.
 
    Each kind can use its own group, or several can share one.
+
+   Quicker: select the group in Sources, then **Tools → OBS Tools → Assign selected source to alert → <kind>**. The window opens on that kind with the group (and its text source) filled in; press OK to keep it. (OBS doesn't let plugins add to the Sources right-click menu.)
 3. **Show each alert for:** 5 seconds by default.
 
 The **Status** line shows what that kind's side is doing: *Off until you start streaming*, *listening for follows, subs, gifts, raids, cheers*, *watching for subscribers*, or a problem such as *sign in to Twitch again…*. The same lines appear in the OBS log, prefixed `[obs-stream-alerts]`.

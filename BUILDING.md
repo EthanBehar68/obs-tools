@@ -160,6 +160,7 @@ plugins\stream-alerts\
 │   ├── alerts-controller.*   plays alerts: text source "text", scene item visibility in every scene and group;
 │   │                         hides every alert source at load and around scene collection switches
 │   ├── alerts-dialog.*       Tools > OBS Tools > Stream Alerts…: the kinds in a list, the selected one's settings
+│   ├── scene-selection.*     the item selected in OBS's Sources list, for "Use selected" and the Tools menu
 │   └── plugin-main.cpp
 ├── data\locale\en-US.ini
 └── tests\

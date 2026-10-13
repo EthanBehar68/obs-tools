@@ -36,6 +36,8 @@ target_sources(
     src/net/listeners.cpp
     src/net/listeners.hpp
     src/plugin-main.cpp
+    src/scene-selection.cpp
+    src/scene-selection.hpp
 )
 
 if(WIN32)

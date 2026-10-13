@@ -38,10 +38,14 @@ namespace stream_alerts {
 class AlertsController;
 
 // Tools > OBS Tools > Stream Alerts...: the alert kinds in a list, and the selected kind's settings beside it, with
-// Test buttons that play one right away with the values as entered. Cancel puts the previous settings back.
+// Test buttons that play one right away with the values as entered. Cancel puts the previous settings back. Not
+// modal, so a group can be selected in OBS's Sources list while it's open and taken with "Use selected".
 class AlertsDialog : public QDialog {
 public:
 	AlertsDialog(AlertsController *controller, QWidget *parent);
+
+	// Shows a kind with the selected source (and its text source) filled in and the kind turned on, not yet saved.
+	void UseSelected(AlertKind kind);
 
 	void accept() override;
 	void reject() override;
@@ -66,6 +70,9 @@ private:
 	QString Problems(AlertKind kind) const;
 	// False, with the kind shown and a warning, when one (or, without only, any kind) has problems.
 	bool CheckMessages(const AlertKind *only = nullptr);
+	// The item selected in OBS's Sources list into a kind's source (text: its text source); false, with a message,
+	// when nothing (or, for text, no Text source) is selected.
+	bool FillFromSelection(AlertKind kind, bool text);
 	void UpdateStatus();
 
 	AlertsController *controller_;

@@ -11,6 +11,7 @@
 - The settings window lists the kinds on the left, with the selected one's settings and Test buttons beside it.
 - Sign in to Twitch again once: the sign-in now also asks for chat (`user:read:chat`) and bits (`bits:read`) access.
 - **YouTube Jewels gifts** (needs the matching Unified Chat): one alert per gift, or per batch of a combo, with `{gift}`, `{count}` and `{amount}` (Jewels); a second message for several gifts at once, and a minimum in Jewels.
+- **Use selected:** pick an alert's source or text source by selecting it in OBS's Sources list. A group with one text source sets both. **Tools → OBS Tools → Assign selected source to alert** does the same from the menu. The settings window no longer blocks OBS while it's open.
 - Internal: the EventSub WebSocket code is shared with Unified Chat.
 
 ## 0.1.0 (2026-09-27)
