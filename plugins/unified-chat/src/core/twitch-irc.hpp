@@ -21,6 +21,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "obs-tools.hpp"
 
 #include "chat-message.hpp"
+#include "highlights.hpp"
 #include "core/oauth-device.hpp"
 
 #include <map>
@@ -80,7 +81,8 @@ struct SessionOutput {
 	std::vector<ChatMessage> messages;
 	std::vector<ModerationEvent> moderation;
 	std::vector<std::string> notices;
-	std::vector<std::string> eventNotices; // USERNOTICE (subs, raids): carry viewers' text
+	std::vector<std::string> eventNotices; // other USERNOTICEs (announcements, ...): carry viewers' text
+	std::vector<ChatEvent> events;         // subs, resubs, gift subs, raids
 	std::string channelId;                 // set once the channel's numeric id is known (ROOMSTATE)
 	bool reconnect = false;
 	bool authFailed = false;

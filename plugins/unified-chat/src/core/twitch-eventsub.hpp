@@ -21,6 +21,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "obs-tools.hpp"
 
 #include "chat-message.hpp"
+#include "highlights.hpp"
 
 #include <json.hpp>
 #include <optional>
@@ -61,6 +62,9 @@ std::optional<ModerationEvent> ModerationFromEvent(std::string_view type, const 
 // channel.chat.notification (subs, gifts, raids, announcements, ...): the line Twitch shows, then the viewer's own
 // message if any, as the dock's notice. Empty when there's nothing to show.
 std::string NotificationText(const nlohmann::json &event);
+// The same notification as an event line, for subs, resubs, gift subs and raids (Twitch's own wording, then the
+// viewer's message); nullopt for other notices (announcements, ...), which stay plain notices.
+std::optional<ChatEvent> NotificationEvent(const nlohmann::json &event);
 
 // Send Chat Message. nullopt when there's nothing to send.
 std::optional<std::string> BuildSendChatBody(const std::string &broadcasterId, const std::string &senderId,

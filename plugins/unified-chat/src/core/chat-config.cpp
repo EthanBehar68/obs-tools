@@ -34,6 +34,8 @@ template<typename T> static T Get(const json &obj, const char *key, T fallback)
 		return fallback;
 	if constexpr (std::is_same_v<T, std::string>) {
 		return it->is_string() ? it->get<std::string>() : fallback;
+	} else if constexpr (std::is_same_v<T, bool>) {
+		return it->is_boolean() ? it->get<bool>() : fallback;
 	} else {
 		return it->is_number_integer() ? it->get<T>() : fallback;
 	}
@@ -75,6 +77,32 @@ std::string JoinNameList(const std::vector<std::string> &names)
 	return text;
 }
 
+static json HighlightsToJson(const Highlights &highlights)
+{
+	json obj = json::object();
+	for (size_t i = 0; i < kHighlightKinds; ++i) {
+		const Highlight &h = highlights.kinds[i];
+		obj[HighlightKey((HighlightKind)i)] = {{"show", h.show}, {"color", h.color}, {"icon", h.icon}};
+	}
+	return obj;
+}
+
+// Kinds missing from the file keep their defaults; a bad colour falls back to the default colour.
+static void HighlightsFromJson(const json &obj, Highlights &highlights)
+{
+	for (size_t i = 0; i < kHighlightKinds; ++i) {
+		auto it = obj.find(HighlightKey((HighlightKind)i));
+		if (it == obj.end() || !it->is_object())
+			continue;
+		Highlight &h = highlights.kinds[i];
+		h.show = Get<bool>(*it, "show", h.show);
+		const std::string color = Get<std::string>(*it, "color", h.color);
+		if (color.empty() || !SanitizeColor(color).empty())
+			h.color = SanitizeColor(color);
+		h.icon = SanitizeIcon(Get<std::string>(*it, "icon", h.icon));
+	}
+}
+
 std::string SerializeConfig(const ChatConfig &config)
 {
 	json obj = {
@@ -90,6 +118,7 @@ std::string SerializeConfig(const ChatConfig &config)
 		{"viewer_check_minutes", config.viewerCheckMinutes},
 		{"merge_bots", config.mergeBots},
 		{"show_alerts", config.showAlerts},
+		{"highlights", HighlightsToJson(config.highlights)},
 	};
 	return obj.dump(4);
 }
@@ -130,6 +159,8 @@ ChatConfig ParseConfig(const std::string &text, Accounts *legacy, const SecretCo
 	config.maxMessages = std::clamp(Get<int>(obj, "max_messages", 500), 50, 10000);
 	config.viewerCheckMinutes = std::clamp(Get<int>(obj, "viewer_check_minutes", 5), 0, 60);
 
+	if (auto highlights = obj.find("highlights"); highlights != obj.end() && highlights->is_object())
+		HighlightsFromJson(*highlights, config.highlights);
 	auto showAlerts = obj.find("show_alerts");
 	if (showAlerts != obj.end() && showAlerts->is_boolean())
 		config.showAlerts = showAlerts->get<bool>();

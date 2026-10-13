@@ -22,7 +22,9 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include "core/chat-config.hpp"
 #include "core/bot-merger.hpp"
+#include "core/chatter-log.hpp"
 #include "core/echo-merger.hpp"
+#include "core/highlights.hpp"
 #include "core/emotes.hpp"
 #include "core/mentions.hpp"
 #include "core/name-color.hpp"
@@ -35,6 +37,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QString>
 #include <QWidget>
 
+#include <array>
 #include <deque>
 #include <memory>
 #include <optional>
@@ -98,7 +101,7 @@ private:
 	struct HtmlLine {
 		QString html;
 		int lineId = -1;              // tags the line so ReplaceLine can find it later
-		bool highlight = false;       // mentions you
+		QColor background;            // a highlighted line's tint; invalid: none
 		std::optional<LineInfo> info; // chat lines only, not notices
 	};
 
@@ -120,6 +123,13 @@ private:
 	void AppendLines(const std::vector<DisplayLine> &lines);
 	void ScheduleEchoTimer();
 	void AppendNotice(const QString &text);
+	// An alert as a line of its own (follow, sub, raid...): the kind's colour and emoji, if the kind is shown.
+	void AppendEvent(const ChatEvent &event);
+	// The chat background, re-read after a theme change, and every highlight colour derived from it.
+	void RefreshTheme();
+	void UpdateHighlightStyles();
+	void LoadChatters();
+	void SaveChatters();
 	// Inserts all lines in one edit block, so the view lays out and scrolls once per batch.
 	void AppendHtml(const std::vector<HtmlLine> &lines);
 	bool ReplaceLine(int lineId, const QString &html, const DisplayLine &line, int textLength);
@@ -193,7 +203,9 @@ private:
 	};
 	std::deque<OwnLine> ownLines_;
 	bool backgroundStale_ = true; // the theme's stylesheet sets the view's real background at polish time
-	QColor highlightColor_;
+	QColor highlightColor_;       // the theme's own mention tint, used while the mention colour is the default
+	std::array<HighlightStyle, kHighlightKinds> highlightStyles_;
+	ChatterLog chatterLog_; // who has chatted before, for first-time chatters
 
 	// Twitch emote services and badges. Everything is fetched once per session (lists per channel) and images are
 	// kept in memory; lines are laid out with the images' final size, so arrivals don't move the chat.

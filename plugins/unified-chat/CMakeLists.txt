@@ -14,8 +14,12 @@ target_sources(
     src/core/chat-message.hpp
     src/core/chat-router.cpp
     src/core/chat-router.hpp
+    src/core/chatter-log.cpp
+    src/core/chatter-log.hpp
     src/core/echo-merger.cpp
     src/core/echo-merger.hpp
+    src/core/highlights.cpp
+    src/core/highlights.hpp
     src/core/emotes.cpp
     src/core/emotes.hpp
     src/core/mentions.cpp
@@ -97,6 +101,7 @@ if(ENABLE_TESTS)
       tests/test-bot-merger.cpp
       tests/test-echo-merger.cpp
       tests/test-emotes.cpp
+      tests/test-highlights.cpp
       tests/test-mentions.cpp
       tests/test-moderation.cpp
       tests/test-name-color.cpp

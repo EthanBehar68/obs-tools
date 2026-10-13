@@ -179,6 +179,12 @@ void TwitchConnection::CheckViewers(const std::string &channelId, HttpClient &ht
 		callbacks_.onViewers(*viewers);
 }
 
+void TwitchConnection::Event(ChatEvent event)
+{
+	if (callbacks_.onChatEvent)
+		callbacks_.onChatEvent(std::move(event));
+}
+
 void TwitchConnection::EventNotice(const std::string &text)
 {
 	if (callbacks_.onEventNotice)
@@ -377,8 +383,8 @@ void TwitchConnection::RunSession(void *handle)
 					SendLine(curl, sock, reply);
 				for (auto &message : out.messages)
 					batch.push_back(std::move(message));
-				if (!out.notices.empty() || !out.eventNotices.empty() || !out.moderation.empty() ||
-				    out.authFailed || out.reconnect)
+				if (!out.notices.empty() || !out.eventNotices.empty() || !out.events.empty() ||
+				    !out.moderation.empty() || out.authFailed || out.reconnect)
 					flush();
 				for (auto &event : out.moderation) {
 					if (callbacks_.onModeration)
@@ -390,6 +396,8 @@ void TwitchConnection::RunSession(void *handle)
 					Notice(notice);
 				for (const auto &notice : out.eventNotices)
 					EventNotice(notice);
+				for (auto &event : out.events)
+					Event(std::move(event));
 				if (out.authFailed) {
 					bool rejected = false;
 					if (!RefreshToken(&rejected) && !rejected) {
@@ -581,10 +589,11 @@ void TwitchConnection::HandleNotification(const eventsub::Message &message, std:
 		if (eventsub::StringAt(message.event, {"notice_type"}) == "sub_gift" &&
 		    !eventsub::StringAt(message.event, {"sub_gift", "community_gift_id"}).empty())
 			return;
-		if (std::string text = twitch::NotificationText(message.event); !text.empty()) {
-			flush();
+		flush();
+		if (auto event = twitch::NotificationEvent(message.event))
+			Event(std::move(*event));
+		else if (std::string text = twitch::NotificationText(message.event); !text.empty())
 			EventNotice(text);
-		}
 		return;
 	}
 	if (auto moderation = twitch::ModerationFromEvent(message.subscriptionType, message.event)) {

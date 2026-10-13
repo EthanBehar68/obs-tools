@@ -61,6 +61,8 @@ struct ChatMessage {
 	std::vector<EmoteRange> emotes; // Twitch emotes from the IRC tag
 	std::vector<Badge> badges;      // role badges to show, in display order
 	std::optional<YouTubeEvent> youtubeEvent; // a Super Chat, Super Sticker or membership event
+	int64_t bits = 0;                         // Twitch: bits cheered with this message
+	bool firstMessage = false;                // Twitch says it's the author's first message in the channel
 };
 
 // ModerationEvent::durationSeconds when a user's messages were cleared without saying whether it was a timeout or

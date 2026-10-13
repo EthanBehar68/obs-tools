@@ -249,6 +249,7 @@ void ChatDock::Start()
 	obsStreaming_ = obs_frontend_streaming_active(); // the plugin may load while already live
 	historyCutoff_ = (int64_t)std::time(nullptr) - kHistoryGraceSeconds;
 	LoadConfig();
+	LoadChatters();
 	Connect();
 }
 
@@ -258,6 +259,7 @@ void ChatDock::Shutdown()
 		return;
 	Disconnect();
 	SaveConfig();
+	SaveChatters();
 	started_ = false;
 }
 
@@ -345,6 +347,10 @@ ConnectionCallbacks ChatDock::MakeCallbacks(Platform platform)
 		QString qtext = QString::fromStdString(text);
 		QMetaObject::invokeMethod(this, [this, qtext]() { AppendNotice(qtext); }, Qt::QueuedConnection);
 	};
+	callbacks.onChatEvent = [this](ChatEvent event) {
+		QMetaObject::invokeMethod(
+			this, [this, event = std::move(event)]() { AppendEvent(event); }, Qt::QueuedConnection);
+	};
 	callbacks.onEventNotice = [this](const std::string &text) {
 		QString qtext = QString::fromStdString(text);
 		QMetaObject::invokeMethod(this, [this, qtext]() { AppendNotice(qtext); }, Qt::QueuedConnection);
@@ -429,6 +435,8 @@ void ChatDock::OnStreamingChanged(bool streaming)
 	if (obsStreaming_ == streaming)
 		return;
 	obsStreaming_ = streaming;
+	if (!streaming && started_)
+		SaveChatters(); // a stream's chatters, kept even if OBS doesn't close cleanly
 	if (streaming)
 		historyCutoff_ =
 			(int64_t)std::time(nullptr) - kHistoryGraceSeconds; // chat before going live is history
@@ -467,11 +475,13 @@ void ChatDock::Disconnect()
 
 void ChatDock::OpenSettings()
 {
-	SettingsDialog dialog(config_, this);
+	RefreshTheme();
+	SettingsDialog dialog(config_, nameColors_.Background(), this);
 	if (dialog.exec() != QDialog::Accepted)
 		return;
 
 	config_ = dialog.Result();
+	UpdateHighlightStyles();
 	view_->document()->setMaximumBlockCount(config_.maxMessages);
 	botMerger_.SetBots(config_.mergeBots);
 	UpdateMentionNames();
@@ -534,9 +544,6 @@ void ChatDock::AppendHtml(const std::vector<HtmlLine> &lines)
 	QScrollBar *bar = view_->verticalScrollBar();
 	const bool atBottom = bar->value() >= bar->maximum() - 4;
 
-	QTextBlockFormat highlighted;
-	highlighted.setBackground(highlightColor_);
-
 	// The document relayouts the changed range and trims to the maximum block count once, at endEditBlock.
 	QTextCursor cursor(view_->document());
 	cursor.movePosition(QTextCursor::End);
@@ -545,7 +552,10 @@ void ChatDock::AppendHtml(const std::vector<HtmlLine> &lines)
 		if (!empty_)
 			cursor.insertBlock();
 		// A new block inherits the previous block's format, so set it every time.
-		cursor.setBlockFormat(line.highlight ? highlighted : QTextBlockFormat());
+		QTextBlockFormat format;
+		if (line.background.isValid())
+			format.setBackground(line.background);
+		cursor.setBlockFormat(format);
 		cursor.insertHtml(line.html);
 		cursor.block().setUserState(line.lineId);
 		if (line.info)
@@ -1033,21 +1043,16 @@ void ChatDock::AppendLines(const std::vector<DisplayLine> &lines)
 		ScheduleEchoTimer();
 		return;
 	}
-	if (backgroundStale_) {
-		backgroundStale_ = false;
-		view_->ensurePolished();
-		const QColor base = view_->palette().color(QPalette::Base);
-		const std::string previous = nameColors_.Background();
-		nameColors_.SetBackground(base.name().toStdString());
-		if (nameColors_.Background() != previous)
-			obs_log(LOG_INFO, "name colors: chat background is %s", nameColors_.Background().c_str());
-		// A step lighter on dark themes, darker on light ones: visible, but names stay readable.
-		highlightColor_ = base.lightness() < 128 ? base.lighter(140) : base.darker(112);
-	}
-	auto format = [this](const DisplayLine &line, int &textLength) {
+	RefreshTheme();
+	auto format = [this](const DisplayLine &line, int &textLength, std::string_view nameIcon = {}) {
 		EnsureLineImages(line.message); // placeholders first, so nothing shows as a broken image
 		return QString::fromStdString(FormatMessageHtml(line.message, iconSize_, line.platforms, &nameColors_,
-								&emotes_, emoteHeight_, &textLength));
+								&emotes_, emoteHeight_, &textLength, nameIcon));
+	};
+	const Highlights &highlights = config_.highlights;
+	auto tint = [this](HighlightKind kind) {
+		const std::string &color = highlightStyles_[(size_t)kind].background;
+		return color.empty() ? QColor() : QColor(QString::fromStdString(color));
 	};
 
 	const int64_t now = QDateTime::currentMSecsSinceEpoch();
@@ -1059,7 +1064,31 @@ void ChatDock::AppendLines(const std::vector<DisplayLine> &lines)
 			LearnOwnName(message);
 		else
 			chatters_.Add(message.platform, message.mention);
-		const bool highlight = !message.isSelf && !mentions_.Empty() && mentions_.Matches(message.text);
+		const bool mentionsYou = !message.isSelf && !mentions_.Empty() && mentions_.Matches(message.text) &&
+					 highlights[HighlightKind::Mention].show;
+		// Learn every chatter; a first-time one is one the platform says is new, or the list hasn't met yet.
+		const bool unknown = !message.isSelf && chatterLog_.Add(message.platform, message.authorId);
+		const bool firstTime = !message.isSelf && (message.firstMessage || unknown) &&
+				       highlights[HighlightKind::FirstChatter].show;
+		QColor background;
+		if (mentionsYou) // the one you need to act on wins the tint
+			background = highlights[HighlightKind::Mention].color.empty() ? highlightColor_
+										      : tint(HighlightKind::Mention);
+		else if (firstTime)
+			background = tint(HighlightKind::FirstChatter);
+
+		// A cheer, Super Chat or membership: an event line instead of a chat line.
+		if (auto event = EventFromMessage(message);
+		    event && config_.showAlerts && highlights[event->kind].show) {
+			const auto &style = highlightStyles_[(size_t)event->kind];
+			int textLength = 0;
+			QString eventHtml = QString::fromStdString(FormatEventHtml(*event, highlights[event->kind].icon,
+										   style.text, iconSize_, &textLength));
+			html.push_back({std::move(eventHtml), -1, tint(event->kind), MakeLineInfo(line, textLength)});
+			continue;
+		}
+		const std::string_view nameIcon =
+			firstTime ? std::string_view(highlights[HighlightKind::FirstChatter].icon) : std::string_view();
 
 		int lineId = -1;
 		if (message.isSelf && message.platform == Platform::Twitch && !message.id.empty()) {
@@ -1075,15 +1104,15 @@ void ChatDock::AppendLines(const std::vector<DisplayLine> &lines)
 				QString mergedHtml = format(merged->line, mergedLength);
 				if (!ReplaceLine(merged->lineId, mergedHtml, merged->line, mergedLength))
 					html.push_back(
-						{mergedHtml, -1, highlight, MakeLineInfo(merged->line, mergedLength)});
+						{mergedHtml, -1, background, MakeLineInfo(merged->line, mergedLength)});
 				continue;
 			}
 			lineId = NextLineId();
 			botMerger_.Remember(message, lineId, now);
 		}
 		int textLength = 0;
-		QString lineHtml = format(line, textLength);
-		html.push_back({std::move(lineHtml), lineId, highlight, MakeLineInfo(line, textLength)});
+		QString lineHtml = format(line, textLength, nameIcon);
+		html.push_back({std::move(lineHtml), lineId, background, MakeLineInfo(line, textLength)});
 	}
 	AppendHtml(html);
 	ScheduleEchoTimer();
@@ -1325,10 +1354,79 @@ void ChatDock::changeEvent(QEvent *event)
 
 void ChatDock::OnAlert(bool follow, const std::string &name, bool test)
 {
-	if (!started_ || !config_.showAlerts)
+	if (!started_)
 		return;
-	const Platform platform = follow ? Platform::Twitch : Platform::YouTube;
-	AppendHtml({{QString::fromStdString(FormatAlertHtml(platform, name, test, iconSize_, &nameColors_))}});
+	AppendEvent({follow ? Platform::Twitch : Platform::YouTube,
+		     follow ? HighlightKind::Follow : HighlightKind::Subscriber,
+		     name + (follow ? " followed" : " subscribed") + (test ? " (test)" : ""),
+		     {}});
+}
+
+void ChatDock::AppendEvent(const ChatEvent &event)
+{
+	const Highlight &highlight = config_.highlights[event.kind];
+	if (!config_.showAlerts || !highlight.show)
+		return;
+	RefreshTheme();
+	const HighlightStyle &style = highlightStyles_[(size_t)event.kind];
+	QColor background = style.background.empty() ? QColor() : QColor(QString::fromStdString(style.background));
+	AppendHtml({{QString::fromStdString(FormatEventHtml(event, highlight.icon, style.text, iconSize_)), -1,
+		     background}});
+}
+
+void ChatDock::RefreshTheme()
+{
+	if (!backgroundStale_)
+		return;
+	backgroundStale_ = false;
+	view_->ensurePolished();
+	const QColor base = view_->palette().color(QPalette::Base);
+	const std::string previous = nameColors_.Background();
+	nameColors_.SetBackground(base.name().toStdString());
+	if (nameColors_.Background() != previous)
+		obs_log(LOG_INFO, "name colors: chat background is %s", nameColors_.Background().c_str());
+	// A step lighter on dark themes, darker on light ones: visible, but names stay readable.
+	highlightColor_ = base.lightness() < 128 ? base.lighter(140) : base.darker(112);
+	UpdateHighlightStyles();
+}
+
+void ChatDock::UpdateHighlightStyles()
+{
+	for (size_t i = 0; i < kHighlightKinds; ++i)
+		highlightStyles_[i] =
+			ComputeHighlightStyle(config_.highlights.kinds[i].color, nameColors_.Background());
+}
+
+static std::string ChattersPath()
+{
+	char *path = obs_module_config_path("chatters.json");
+	std::string out = path ? path : "";
+	bfree(path);
+	return out;
+}
+
+void ChatDock::LoadChatters()
+{
+	const std::string path = ChattersPath();
+	char *text = path.empty() ? nullptr : os_quick_read_utf8_file(path.c_str());
+	chatterLog_ = ChatterLog::Parse(text ? text : "");
+	bfree(text);
+}
+
+void ChatDock::SaveChatters()
+{
+	chatterLog_.EndSession();
+	if (!chatterLog_.Dirty())
+		return;
+	char *dir = obs_module_config_path("");
+	if (dir)
+		os_mkdirs(dir);
+	bfree(dir);
+	const std::string path = ChattersPath();
+	const std::string text = chatterLog_.Serialize();
+	if (path.empty() ||
+	    !os_quick_write_utf8_file_safe(path.c_str(), text.c_str(), text.size(), false, "tmp", "bak"))
+		obs_log(LOG_WARNING, "failed to save the chatter list");
 }
 
 void ChatDock::AppendNotice(const QString &text)
