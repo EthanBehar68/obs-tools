@@ -103,6 +103,50 @@ const char *KindKey(AlertKind kind)
 	}
 }
 
+std::vector<std::string> UsablePlaceholders(AlertKind kind, bool overflow)
+{
+	if (overflow)
+		return {"{count}"};
+	switch (kind) {
+	case AlertKind::TwitchSub:
+		return {"{name}", "{months}", "{message}"};
+	case AlertKind::GiftSubs:
+		return {"{name}", "{count}"};
+	case AlertKind::Cheer:
+	case AlertKind::SuperChat:
+		return {"{name}", "{amount}", "{message}"};
+	case AlertKind::Raid:
+		return {"{name}", "{viewers}"};
+	case AlertKind::Member:
+		return {"{name}", "{level}", "{months}", "{message}"};
+	case AlertKind::GiftMemberships:
+		return {"{name}", "{count}", "{level}"};
+	default: // Follow, Subscriber
+		return {"{name}"};
+	}
+}
+
+std::vector<std::string> UnusablePlaceholders(std::string_view text, AlertKind kind, bool overflow)
+{
+	const std::vector<std::string> usable = UsablePlaceholders(kind, overflow);
+	auto isWordChar = [](char c) {
+		return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_';
+	};
+	std::vector<std::string> unusable;
+	for (size_t open = text.find('{'); open != std::string_view::npos; open = text.find('{', open + 1)) {
+		size_t end = open + 1;
+		while (end < text.size() && isWordChar(text[end]))
+			++end;
+		if (end == open + 1 || end >= text.size() || text[end] != '}')
+			continue; // "{", "{ }", "{two words}": not a placeholder
+		const std::string token(text.substr(open, end - open + 1));
+		if (std::find(usable.begin(), usable.end(), token) == usable.end() &&
+		    std::find(unusable.begin(), unusable.end(), token) == unusable.end())
+			unusable.push_back(token);
+	}
+	return unusable;
+}
+
 std::string SerializeAlertsConfig(const AlertsConfig &config)
 {
 	json obj = {{"duration_seconds", config.durationSeconds},

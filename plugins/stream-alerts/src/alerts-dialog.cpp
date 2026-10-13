@@ -29,6 +29,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QListWidget>
+#include <QMessageBox>
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QSpinBox>
@@ -189,14 +190,32 @@ QWidget *AlertsDialog::MakePage(AlertKind kind, const QStringList &sources, cons
 		page.variant = MakeMessageEdit(settings.variantMessage, widget);
 		form->addRow(Text(kind == AlertKind::TwitchSub ? "Alerts.Resub" : "Alerts.Milestone"), page.variant);
 	}
-	if (!IsPriority(kind)) {
-		page.overflow = MakeMessageEdit(settings.overflowMessage, widget);
-		page.overflow->setToolTip(Text("Alerts.OverflowHint"));
-		form->addRow(Text("Alerts.Overflow"), page.overflow);
-	}
 	auto placeholders = new QLabel(Text(("Placeholders." + key).c_str()), widget);
 	placeholders->setWordWrap(true);
 	form->addRow(QString(), placeholders);
+	if (!IsPriority(kind)) {
+		page.overflow = MakeMessageEdit(settings.overflowMessage, widget);
+		form->addRow(Text("Alerts.Overflow"), page.overflow);
+		auto overflowHelp = new QLabel(Text("Alerts.OverflowPlaceholders"), widget);
+		overflowHelp->setWordWrap(true);
+		form->addRow(QString(), overflowHelp);
+	}
+
+	page.warning = new QLabel(widget);
+	page.warning->setWordWrap(true);
+	page.warning->setProperty("class", "text-danger"); // OBS themes' error colour
+	page.warning->hide();
+	form->addRow(QString(), page.warning);
+	auto showProblems = [this, kind]() {
+		const QString problems = Problems(kind);
+		pages_[kind].warning->setText(problems);
+		pages_[kind].warning->setVisible(!problems.isEmpty());
+	};
+	for (QPlainTextEdit *edit : {page.message, page.variant, page.overflow}) {
+		if (edit)
+			connect(edit, &QPlainTextEdit::textChanged, this, showProblems);
+	}
+	showProblems(); // a message saved before this check existed
 
 	if (kind == AlertKind::Cheer || kind == AlertKind::Raid) {
 		page.minimum = new QSpinBox(widget);
@@ -232,6 +251,8 @@ QWidget *AlertsDialog::MakePage(AlertKind kind, const QStringList &sources, cons
 	auto addTest = [&](const char *labelKey, bool variant) {
 		auto test = new QPushButton(Text(labelKey), widget);
 		connect(test, &QPushButton::clicked, this, [this, kind, variant]() {
+			if (!CheckMessages(&kind))
+				return;
 			controller_->ApplyConfig(Current(), false); // try the values as entered
 			controller_->Test(kind, variant);
 		});
@@ -267,6 +288,47 @@ AlertsConfig AlertsDialog::Current() const
 	return config;
 }
 
+QString AlertsDialog::Problems(AlertKind kind) const
+{
+	const Page &page = pages_.at(kind);
+	auto join = [](const std::vector<std::string> &items) {
+		QStringList list;
+		for (const auto &item : items)
+			list.append(QString::fromStdString(item));
+		return list.join(", ");
+	};
+	QStringList lines;
+	auto check = [&](const QPlainTextEdit *edit, const QString &label, bool overflow) {
+		if (!edit)
+			return;
+		const auto unusable = UnusablePlaceholders(ToStd(edit->toPlainText()), kind, overflow);
+		if (!unusable.empty())
+			lines.append(Text("Alerts.Unusable")
+					     .arg(label, join(unusable), join(UsablePlaceholders(kind, overflow))));
+	};
+	check(page.message, Text("Alerts.Message"), false);
+	check(page.variant, Text(kind == AlertKind::TwitchSub ? "Alerts.Resub" : "Alerts.Milestone"), false);
+	check(page.overflow, Text("Alerts.Overflow"), true);
+	return lines.join("\n");
+}
+
+bool AlertsDialog::CheckMessages(const AlertKind *only)
+{
+	for (size_t row = 0; row < std::size(kAllKinds); ++row) {
+		const AlertKind kind = kAllKinds[row];
+		if (only && kind != *only)
+			continue;
+		const QString problems = Problems(kind);
+		if (problems.isEmpty())
+			continue;
+		kinds_->setCurrentRow((int)row);
+		QMessageBox::warning(this, Text("Alerts.UnusableTitle"),
+				     Text(("Kind." + std::string(KindKey(kind))).c_str()) + "\n\n" + problems);
+		return false;
+	}
+	return true;
+}
+
 void AlertsDialog::UpdateStatus()
 {
 	for (auto &[kind, page] : pages_)
@@ -275,6 +337,8 @@ void AlertsDialog::UpdateStatus()
 
 void AlertsDialog::accept()
 {
+	if (!CheckMessages())
+		return;
 	controller_->ApplyConfig(Current(), true);
 	QDialog::accept();
 }

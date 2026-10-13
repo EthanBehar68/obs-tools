@@ -57,10 +57,15 @@ private:
 		QSpinBox *minimum = nullptr;        // Cheer: bits; Raid: viewers
 		QSpinBox *interval = nullptr;       // Subscriber: seconds between checks
 		QLabel *status = nullptr;
+		QLabel *warning = nullptr; // placeholders this kind won't fill in
 	};
 
 	QWidget *MakePage(AlertKind kind, const QStringList &sources, const QStringList &textSources);
 	AlertsConfig Current() const;
+	// What's wrong with a kind's messages (placeholders it won't fill in), one line per message; empty when fine.
+	QString Problems(AlertKind kind) const;
+	// False, with the kind shown and a warning, when one (or, without only, any kind) has problems.
+	bool CheckMessages(const AlertKind *only = nullptr);
 	void UpdateStatus();
 
 	AlertsController *controller_;
