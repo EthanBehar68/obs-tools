@@ -20,6 +20,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "platform-icons.hpp"
 #include "net/secret-store.hpp"
 #include "monitoring-repair.hpp"
+#include "scene-category.hpp"
 #include "settings-dialog.hpp"
 #include "stream-info-dialog.hpp"
 #include "target-switch.hpp"
@@ -189,6 +190,8 @@ ChatDock::ChatDock(QWidget *parent) : QWidget(parent)
 	connect(suggestions_, &QListWidget::itemClicked, this,
 		[this](QListWidgetItem *item) { ApplySuggestion(suggestions_->row(item)); });
 
+	sceneCategory_ = new SceneCategorySwitcher([this](const QString &text) { AppendNotice(text); }, this);
+
 	echoTimer_ = new QTimer(this);
 	echoTimer_->setSingleShot(true); // armed for the next merge deadline only, see ScheduleEchoTimer
 	connect(echoTimer_, &QTimer::timeout, this,
@@ -267,11 +270,13 @@ void ChatDock::Start()
 	LoadConfig();
 	LoadChatters();
 	Connect();
+	sceneCategory_->OnStreamingChanged(obsStreaming_);
 }
 
 void ChatDock::Shutdown()
 {
 	delete streamInfo_.data(); // ends its requests now, not when the main window goes
+	sceneCategory_->Stop();
 	if (!started_)
 		return;
 	Disconnect();
@@ -310,6 +315,7 @@ void ChatDock::LoadConfig()
 	UpdateMentionNames();
 	UpdatePlaceholder();
 	ApplyDisplay();
+	sceneCategory_->SetConfig(config_.categoryByScene, config_.categorySceneDelaySeconds, config_.sceneCategories);
 
 	if (report.unreadableSecrets || legacyReport.unreadableSecrets) {
 		obs_log(LOG_WARNING,
@@ -453,6 +459,7 @@ void ChatDock::OnStreamingChanged(bool streaming)
 	if (obsStreaming_ == streaming)
 		return;
 	obsStreaming_ = streaming;
+	sceneCategory_->OnStreamingChanged(streaming && started_);
 	if (!streaming && started_)
 		SaveChatters(); // a stream's chatters, kept even if OBS doesn't close cleanly
 	if (streaming)
@@ -503,6 +510,9 @@ void ChatDock::OpenSettings()
 	result.streamInfoTwitch = config_.streamInfoTwitch;
 	result.streamInfoYouTube = config_.streamInfoYouTube;
 	result.recentCategories = config_.recentCategories;
+	result.categoryByScene = config_.categoryByScene;
+	result.categorySceneDelaySeconds = config_.categorySceneDelaySeconds;
+	result.sceneCategories = config_.sceneCategories;
 	config_ = std::move(result);
 	ApplyDisplay();
 	UpdateHighlightStyles();
@@ -650,6 +660,11 @@ int ChatDock::TimestampLength(const QTextBlock &block)
 												 : 0;
 }
 
+void ChatDock::OnSceneChanged()
+{
+	sceneCategory_->OnSceneChanged();
+}
+
 void ChatDock::CheckMonitoringDevice()
 {
 	AudioDevice current;
@@ -678,10 +693,15 @@ void ChatDock::CheckMonitoringDevice()
 void ChatDock::OpenStreamInfo()
 {
 	if (!streamInfo_) {
-		auto save = [this](bool twitch, bool youtube, const std::vector<RecentCategory> &recent) {
-			config_.streamInfoTwitch = twitch;
-			config_.streamInfoYouTube = youtube;
-			config_.recentCategories = recent;
+		auto save = [this](const ChatConfig &settings) {
+			config_.streamInfoTwitch = settings.streamInfoTwitch;
+			config_.streamInfoYouTube = settings.streamInfoYouTube;
+			config_.recentCategories = settings.recentCategories;
+			config_.categoryByScene = settings.categoryByScene;
+			config_.categorySceneDelaySeconds = settings.categorySceneDelaySeconds;
+			config_.sceneCategories = settings.sceneCategories;
+			sceneCategory_->SetConfig(config_.categoryByScene, config_.categorySceneDelaySeconds,
+						  config_.sceneCategories);
 			SaveConfig();
 		};
 		streamInfo_ = new StreamInfoDialog(config_, save, this);

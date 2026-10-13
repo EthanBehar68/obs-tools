@@ -85,6 +85,8 @@ target_sources(
     src/monitoring-repair.cpp
     src/monitoring-repair.hpp
     src/plugin-main.cpp
+    src/scene-category.cpp
+    src/scene-category.hpp
     src/settings-dialog.cpp
     src/settings-dialog.hpp
     src/stream-info-dialog.cpp

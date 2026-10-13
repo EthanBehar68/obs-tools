@@ -218,3 +218,36 @@ TEST_CASE("Stream info settings round trip through config.json")
 	REQUIRE(edited.recentCategories.size() == 1);
 	CHECK(edited.recentCategories[0].tags == std::vector<std::string>{"good"});
 }
+
+TEST_CASE("Scene categories: one link per scene, replaced, removed, saved")
+{
+	std::vector<SceneCategory> links;
+	LinkSceneCategory(links, {"uuid-game", "Gaming", {"32982", "Grand Theft Auto V", ""}});
+	LinkSceneCategory(links, {"uuid-chat", "Just Chatting", {"509658", "Just Chatting", ""}});
+	LinkSceneCategory(links, {"uuid-game", "Gaming", {"33214", "Fortnite", ""}}); // relinked
+	LinkSceneCategory(links, {"", "No id", {"1", "x", ""}});                      // ignored
+	LinkSceneCategory(links, {"uuid-x", "No category", {}});                      // ignored
+	REQUIRE(links.size() == 2);
+	REQUIRE(FindSceneCategory(links, "uuid-game"));
+	CHECK(FindSceneCategory(links, "uuid-game")->category.name == "Fortnite");
+	CHECK_FALSE(FindSceneCategory(links, "uuid-brb"));
+
+	ChatConfig config;
+	CHECK_FALSE(config.categoryByScene);
+	CHECK(config.categorySceneDelaySeconds == kDefaultSceneCategoryDelay);
+	config.categoryByScene = true;
+	config.categorySceneDelaySeconds = 25;
+	config.sceneCategories = links;
+	const ChatConfig back = ParseConfig(SerializeConfig(config));
+	CHECK(back.categoryByScene);
+	CHECK(back.categorySceneDelaySeconds == 25);
+	REQUIRE(back.sceneCategories.size() == 2);
+	CHECK(back.sceneCategories[0].sceneUuid == "uuid-game");
+	CHECK(back.sceneCategories[0].category.id == "33214");
+	CHECK(back.sceneCategories[1].sceneName == "Just Chatting");
+
+	UnlinkSceneCategory(links, "uuid-game");
+	CHECK(links.size() == 1);
+	CHECK(ParseConfig(R"({"stream_info":{"scene_delay_seconds":999}})").categorySceneDelaySeconds ==
+	      kMaxSceneCategoryDelay);
+}

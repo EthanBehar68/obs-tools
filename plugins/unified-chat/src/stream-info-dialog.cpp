@@ -20,6 +20,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "core/text-util.hpp"
 #include "ui/accounts-dialog.hpp"
 
+#include <obs-frontend-api.h>
 #include <obs-module.h>
 
 #include <QCheckBox>
@@ -29,6 +30,9 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QMenu>
+#include <QSpinBox>
+#include <QToolButton>
 #include <QPushButton>
 #include <QStyle>
 #include <QTimer>
@@ -62,7 +66,8 @@ static std::string ToStd(const QString &value)
 StreamInfoDialog::StreamInfoDialog(const ChatConfig &config, SaveSettings save, QWidget *parent)
 	: QDialog(parent),
 	  save_(std::move(save)),
-	  recent_(config.recentCategories)
+	  recent_(config.recentCategories),
+	  sceneLinks_(config.sceneCategories)
 {
 	setWindowTitle(Text("StreamInfo.Title"));
 	setMinimumWidth(520);
@@ -100,6 +105,16 @@ StreamInfoDialog::StreamInfoDialog(const ChatConfig &config, SaveSettings save, 
 	categories_->setFixedHeight((kBoxArtHeight + 6) * 4);
 	form->addRow(QString(), categories_);
 
+	// Link the selected category to a scene: switching to it while streaming sets the category.
+	useForScene_ = new QToolButton(this);
+	useForScene_->setText(Text("StreamInfo.UseForScene"));
+	useForScene_->setToolTip(Text("StreamInfo.UseForSceneHint"));
+	useForScene_->setPopupMode(QToolButton::InstantPopup);
+	sceneMenu_ = new QMenu(useForScene_);
+	useForScene_->setMenu(sceneMenu_);
+	connect(sceneMenu_, &QMenu::aboutToShow, this, &StreamInfoDialog::FillSceneMenu);
+	form->addRow(QString(), useForScene_);
+
 	tags_ = new QLineEdit(this);
 	tags_->setPlaceholderText(Text("StreamInfo.TagsHint"));
 	form->addRow(Text("StreamInfo.Tags"), tags_);
@@ -124,6 +139,45 @@ StreamInfoDialog::StreamInfoDialog(const ChatConfig &config, SaveSettings save, 
 	targets->addStretch();
 	form->addRow(Text("StreamInfo.Change"), targets);
 	layout->addLayout(form);
+
+	// Scenes linked to a category.
+	auto scenesTitle = new QLabel(Text("StreamInfo.Scenes"), this);
+	QFont bold = scenesTitle->font();
+	bold.setBold(true);
+	scenesTitle->setFont(bold);
+	layout->addWidget(scenesTitle);
+	byScene_ = new QCheckBox(Text("StreamInfo.ByScene"), this);
+	byScene_->setChecked(config.categoryByScene);
+	sceneDelay_ = new QSpinBox(this);
+	sceneDelay_->setRange(0, kMaxSceneCategoryDelay);
+	sceneDelay_->setSuffix(" s");
+	sceneDelay_->setValue(config.categorySceneDelaySeconds);
+	sceneDelay_->setToolTip(Text("StreamInfo.SceneDelayHint"));
+	auto byRow = new QHBoxLayout();
+	byRow->addWidget(byScene_);
+	byRow->addWidget(sceneDelay_);
+	byRow->addStretch();
+	layout->addLayout(byRow);
+	sceneList_ = new QListWidget(this);
+	sceneList_->setIconSize(QSize(kBoxArtWidth, kBoxArtHeight));
+	sceneList_->setFixedHeight((kBoxArtHeight + 6) * 3);
+	unlink_ = new QPushButton(Text("StreamInfo.Unlink"), this);
+	auto listRow = new QHBoxLayout();
+	listRow->addWidget(sceneList_, 1);
+	listRow->addWidget(unlink_, 0, Qt::AlignTop);
+	layout->addLayout(listRow);
+	connect(byScene_, &QCheckBox::toggled, this, [this]() { Save(); });
+	connect(sceneDelay_, &QSpinBox::valueChanged, this, [this]() { Save(); });
+	connect(sceneList_, &QListWidget::currentRowChanged, this,
+		[this](int row) { unlink_->setEnabled(row >= 0 && row < (int)sceneLinks_.size()); });
+	connect(unlink_, &QPushButton::clicked, this, [this]() {
+		const int row = sceneList_->currentRow();
+		if (row < 0 || row >= (int)sceneLinks_.size())
+			return;
+		UnlinkSceneCategory(sceneLinks_, sceneLinks_[row].sceneUuid);
+		ShowSceneLinks();
+		Save();
+	});
 
 	result_ = new QLabel(this);
 	result_->setWordWrap(true);
@@ -218,6 +272,7 @@ StreamInfoDialog::StreamInfoDialog(const ChatConfig &config, SaveSettings save, 
 			Qt::QueuedConnection);
 	};
 	client_ = std::make_unique<StreamInfoClient>(std::move(callbacks));
+	ShowSceneLinks(); // box art comes through the client
 	Reload();
 }
 
@@ -383,6 +438,10 @@ void StreamInfoDialog::OnImage(const std::string &url, const std::string &bytes)
 		if (!category.id.empty() && BoxArtUrl(category, kBoxArtWidth * 2, kBoxArtHeight * 2) == url)
 			item->setIcon(pixmap);
 	}
+	for (int row = 0; row < sceneList_->count() && row < (int)sceneLinks_.size(); ++row) {
+		if (BoxArtUrl(sceneLinks_[row].category, kBoxArtWidth * 2, kBoxArtHeight * 2) == url)
+			sceneList_->item(row)->setIcon(pixmap);
+	}
 }
 
 void StreamInfoDialog::UpdateTitleCount()
@@ -407,6 +466,7 @@ void StreamInfoDialog::UpdateControls()
 		twitch_ && (twitch_->status == TwitchStatus::SignedOut || twitch_->status == TwitchStatus::NeedsScope));
 	search_->setEnabled(twitchRead);
 	categories_->setEnabled(twitchRead);
+	useForScene_->setEnabled(!selected_.id.empty());
 	tags_->setEnabled(twitchRead);
 	youtubeCategory_->setEnabled(youtubeReady);
 	changeTwitch_->setEnabled(twitchReady);
@@ -519,8 +579,64 @@ void StreamInfoDialog::OnApplied(Platform platform, const std::string &error)
 
 void StreamInfoDialog::Save()
 {
-	if (save_)
-		save_(changeTwitch_->isChecked(), changeYouTube_->isChecked(), recent_);
+	if (!save_)
+		return;
+	ChatConfig settings;
+	settings.streamInfoTwitch = changeTwitch_->isChecked();
+	settings.streamInfoYouTube = changeYouTube_->isChecked();
+	settings.recentCategories = recent_;
+	settings.categoryByScene = byScene_->isChecked();
+	settings.categorySceneDelaySeconds = sceneDelay_->value();
+	settings.sceneCategories = sceneLinks_;
+	save_(settings);
+}
+
+// The scene's name now, or the one saved with the link when it isn't in this scene collection.
+static QString SceneName(const SceneCategory &link, bool *present = nullptr)
+{
+	obs_source_t *scene = obs_get_source_by_uuid(link.sceneUuid.c_str());
+	if (present)
+		*present = scene != nullptr;
+	const QString name = scene ? QString::fromUtf8(obs_source_get_name(scene)) : FromStd(link.sceneName);
+	obs_source_release(scene);
+	return name;
+}
+
+void StreamInfoDialog::ShowSceneLinks()
+{
+	sceneList_->clear();
+	for (const auto &link : sceneLinks_) {
+		bool present = false;
+		const QString scene = SceneName(link, &present);
+		QString text = Text("StreamInfo.SceneLink").arg(scene, FromStd(link.category.name));
+		if (!present)
+			text += " " + Text("StreamInfo.OtherCollection");
+		sceneList_->addItem(new QListWidgetItem(BoxArt(link.category), text));
+	}
+	unlink_->setEnabled(false);
+}
+
+void StreamInfoDialog::FillSceneMenu()
+{
+	sceneMenu_->clear();
+	obs_frontend_source_list scenes = {};
+	obs_frontend_get_scenes(&scenes);
+	for (size_t i = 0; i < scenes.sources.num; ++i) {
+		obs_source_t *scene = scenes.sources.array[i];
+		const std::string uuid = obs_source_get_uuid(scene);
+		const std::string name = obs_source_get_name(scene);
+		QString label = QString::fromStdString(name);
+		if (const SceneCategory *link = FindSceneCategory(sceneLinks_, uuid))
+			label += "  (" + FromStd(link->category.name) + ")";
+		connect(sceneMenu_->addAction(label), &QAction::triggered, this, [this, uuid, name]() {
+			LinkSceneCategory(sceneLinks_, {uuid, name, selected_});
+			ShowSceneLinks();
+			Save();
+			result_->setText(
+				Text("StreamInfo.Linked").arg(QString::fromStdString(name), FromStd(selected_.name)));
+		});
+	}
+	obs_frontend_source_list_free(&scenes);
 }
 
 } // namespace unified_chat

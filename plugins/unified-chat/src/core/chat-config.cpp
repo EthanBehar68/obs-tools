@@ -112,15 +112,40 @@ static json StreamInfoToJson(const ChatConfig &config)
 				  {"box_art_url", r.category.boxArtUrl},
 				  {"tags", r.tags}});
 	}
+	json scenes = json::array();
+	for (const auto &link : config.sceneCategories) {
+		scenes.push_back({{"scene_uuid", link.sceneUuid},
+				  {"scene_name", link.sceneName},
+				  {"id", link.category.id},
+				  {"name", link.category.name},
+				  {"box_art_url", link.category.boxArtUrl}});
+	}
 	return {{"twitch", config.streamInfoTwitch},
 		{"youtube", config.streamInfoYouTube},
-		{"recent_categories", recent}};
+		{"recent_categories", recent},
+		{"category_by_scene", config.categoryByScene},
+		{"scene_delay_seconds", config.categorySceneDelaySeconds},
+		{"scenes", scenes}};
 }
 
 static void StreamInfoFromJson(const json &obj, ChatConfig &config)
 {
 	config.streamInfoTwitch = Get<bool>(obj, "twitch", config.streamInfoTwitch);
 	config.streamInfoYouTube = Get<bool>(obj, "youtube", config.streamInfoYouTube);
+	config.categoryByScene = Get<bool>(obj, "category_by_scene", config.categoryByScene);
+	config.categorySceneDelaySeconds =
+		std::clamp(Get<int>(obj, "scene_delay_seconds", kDefaultSceneCategoryDelay), 0, kMaxSceneCategoryDelay);
+	if (auto scenes = obj.find("scenes"); scenes != obj.end() && scenes->is_array()) {
+		for (const auto &item : *scenes) {
+			if (!item.is_object())
+				continue;
+			LinkSceneCategory(config.sceneCategories,
+					  {Get<std::string>(item, "scene_uuid", {}),
+					   Get<std::string>(item, "scene_name", {}),
+					   {Get<std::string>(item, "id", {}), Get<std::string>(item, "name", {}),
+					    Get<std::string>(item, "box_art_url", {})}});
+		}
+	}
 	auto recent = obj.find("recent_categories");
 	if (recent == obj.end() || !recent->is_array())
 		return;

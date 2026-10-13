@@ -199,6 +199,35 @@ void RememberCategory(std::vector<RecentCategory> &recent, RecentCategory used)
 		recent.resize(kMaxRecentCategories);
 }
 
+void LinkSceneCategory(std::vector<SceneCategory> &links, SceneCategory link)
+{
+	if (link.sceneUuid.empty() || link.category.id.empty())
+		return;
+	for (auto &existing : links) {
+		if (existing.sceneUuid == link.sceneUuid) {
+			existing = std::move(link);
+			return;
+		}
+	}
+	links.push_back(std::move(link));
+}
+
+void UnlinkSceneCategory(std::vector<SceneCategory> &links, const std::string &sceneUuid)
+{
+	links.erase(std::remove_if(links.begin(), links.end(),
+				   [&](const SceneCategory &link) { return link.sceneUuid == sceneUuid; }),
+		    links.end());
+}
+
+const SceneCategory *FindSceneCategory(const std::vector<SceneCategory> &links, const std::string &sceneUuid)
+{
+	for (const auto &link : links) {
+		if (link.sceneUuid == sceneUuid)
+			return &link;
+	}
+	return nullptr;
+}
+
 // ---- YouTube
 
 std::string YouTubeBroadcastsUrl(bool active)

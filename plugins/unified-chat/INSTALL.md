@@ -120,6 +120,7 @@ If YouTube goes live some other way (another app, or a multistream output with a
   - **Twitch tags:** up to 10, separated by commas, letters and digits only, up to 25 each.
   - **YouTube category:** e.g. Gaming. YouTube's API has no way to set the specific game; that stays in YouTube Studio.
   - **Change:** which platforms **Apply** updates. Only what you changed is sent. YouTube updates your live broadcast, or the next upcoming one, so you can set it before going live; each change uses **51 quota units**.
+  - **Category by scene:** pick a category, then **Use for scene ▾** and the scene, e.g. Gaming → Elden Ring, Chatting → Just Chatting. Tick **Switch the Twitch category with the scene while streaming**. Once a linked scene has been live (not just previewed) for the delay, 10 s by default, Twitch gets its category; BRB and other unlinked scenes keep whatever is set. Title and tags never change this way. The list shows the links; **Remove** drops one.
   - **Twitch:** after updating to this version, **sign in to Twitch again once** to allow it (the window has a **Sign in again…** button). Until then it shows what's set but can't change it.
 - **Moderation stays visible.** Nothing a moderator removes disappears from the dock. The message text is struck through and dimmed, but you can still read it, and a coloured tag says why:
   - *(deleted)*, grey: a single message was deleted (Twitch only; YouTube no longer reports single deletions).
