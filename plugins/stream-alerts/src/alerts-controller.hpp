@@ -64,6 +64,8 @@ public:
 	// variant: a resub / member milestone instead of a new sub / member.
 	void Test(AlertKind kind, bool variant = false);
 	QString StatusText(AlertKind kind) const;
+	// message filled in with a test alert's made-up details, for a new group's text source.
+	std::string SampleText(AlertKind kind, const std::string &message) const;
 
 private:
 	enum class Phase { Idle, Showing, Gap };

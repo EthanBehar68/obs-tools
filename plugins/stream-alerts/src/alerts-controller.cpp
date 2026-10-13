@@ -369,6 +369,12 @@ static AlertEvent TestEvent(AlertKind kind, bool variant, int n)
 	return event;
 }
 
+std::string AlertsController::SampleText(AlertKind kind, const std::string &message) const
+{
+	const AlertEvent event = TestEvent(kind, false, 0);
+	return FormatAlert(Alert{kind, {event.name}, false, event}, message, {});
+}
+
 void AlertsController::Test(AlertKind kind, bool variant)
 {
 	Push(TestEvent(kind, variant, ++testCount_), true);

@@ -11,6 +11,8 @@ target_sources(
     src/core/alerts-config.hpp
     src/core/platform-events.cpp
     src/core/platform-events.hpp
+    src/core/template-files.cpp
+    src/core/template-files.hpp
 )
 target_include_directories(stream-alerts-core PUBLIC src)
 target_link_libraries(stream-alerts-core PUBLIC obs-tools-core)
@@ -29,6 +31,8 @@ target_link_libraries(
 target_sources(
   ${PROJECT_NAME}
   PRIVATE
+    src/alert-template.cpp
+    src/alert-template.hpp
     src/alerts-controller.cpp
     src/alerts-controller.hpp
     src/alerts-dialog.cpp
@@ -52,7 +56,7 @@ set_target_properties_plugin(${PROJECT_NAME} PROPERTIES OUTPUT_NAME ${PROJECT_NA
 
 if(ENABLE_TESTS)
   add_executable(stream-alerts-tests)
-  target_sources(stream-alerts-tests PRIVATE tests/test-alert-queue.cpp tests/test-platform-events.cpp)
+  target_sources(stream-alerts-tests PRIVATE tests/test-alert-queue.cpp tests/test-platform-events.cpp tests/test-template-files.cpp)
   target_link_libraries(stream-alerts-tests PRIVATE stream-alerts-core obs-tools-test-main)
   _remove_output_before_link(stream-alerts-tests)
   add_test(NAME stream-alerts-tests COMMAND stream-alerts-tests)

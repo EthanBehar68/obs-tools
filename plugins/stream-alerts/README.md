@@ -29,6 +29,7 @@ Close OBS and extract `obs-stream-alerts-<version>-windows-x64.zip` into `C:\Pro
 
 ## Setup
 
+1. **Quickest: let the plugin build it.** In **Tools → OBS Tools → Stream Alerts…**, pick an alert kind and press **Create group…**. Choose a picture (image, GIF or video) and a sound, both optional. The plugin adds a hidden group with them and a text source to the current scene (and, by default, to every scene as a reference), fills it in on the page, and you press OK. Move or restyle it in OBS as you like. Or:
 1. **Build the alert in OBS.** For example, add a **group** named `Follow Alert` to your scenes containing:
    - a **Media Source** with your animation or sound (keep "Restart playback when source becomes active" on), and
    - a **Text (GDI+)** source named `Follow Text`.

@@ -81,6 +81,7 @@ Each library and plugin keeps its unit tests in its own `tests\` folder. They us
 | **plugins\stream-alerts** (`stream-alerts-tests.exe`) | |
 | Alert queue (order, once per person per stream, combining past 10, priority alerts), message placeholders, config round trip and 0.1.0 configs | `test-alert-queue.cpp` |
 | Twitch subscriptions, follow / chat notification / cheer events, YouTube events to alerts, validate scopes, recent-subscriber baseline and new-subscriber detection | `test-platform-events.cpp` |
+| Create group…: picture files (image or video), unique names | `test-template-files.cpp` |
 
 Run them with `ctest --preset windows-x64`, or run a test exe directly, e.g. `build_x64\plugins\unified-chat\RelWithDebInfo\unified-chat-tests.exe` (each accepts doctest options such as `-tc="*YouTube*"`). The tests need no network, OBS or Qt.
 
@@ -162,12 +163,14 @@ plugins\stream-alerts\
 │   │   │                      paid alerts and raids every time, never combined, ahead of follows; placeholders
 │   │   ├── platform-events.*  Twitch subscriptions and follow / chat notification / cheer events, YouTube events
 │   │   │                      from Unified Chat, validate; recent subscribers + SubscriberWatch
-│   │   └── alerts-config.*    config.json: per-kind settings, minimums, subscriber check interval
+│   │   ├── alerts-config.*    config.json: per-kind settings, minimums, subscriber check interval
+│   │   └── template-files.*   Create group…: image vs video files, unique names
 │   ├── net\listeners.*   TwitchListener (one EventSub session via libs/common RunEventSub) and SubscriberPoller
 │   │                     (every "Check every", 2 minutes by default); both only while OBS streams
 │   ├── alerts-controller.*   plays alerts: text source "text", scene item visibility in every scene and group;
 │   │                         hides every alert source at load and around scene collection switches
 │   ├── alerts-dialog.*       Tools > OBS Tools > Stream Alerts…: the kinds in a list, the selected one's settings
+│   ├── alert-template.*      Create group…: the group, text, picture and sound sources, in every scene
 │   ├── scene-selection.*     the item selected in OBS's Sources list, for "Use selected" and the Tools menu
 │   └── plugin-main.cpp
 ├── data\locale\en-US.ini
