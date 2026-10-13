@@ -40,7 +40,14 @@ OBS has no plugin API for the Sources right-click menu, so instead:
 - Set the Twitch category on scene switch: one per scene, or guessed from a game capture's `.exe`.
 - Stream Alerts **Create from template**: builds a group (text source plus an image) in the current scene and assigns it to an alert.
 
-## Still unverified (from 2026-10-12, keep open)
+## Still unverified (keep open)
+
+Built 2026-10-13 (sections 1 and 2 above), not yet tried in OBS:
+
+6. Stream Info: sign in to Twitch again, then title / category search and box art / tags / recent categories, Apply on each platform, YouTube before going live (upcoming broadcast), Enter in the search box doesn't Apply.
+7. Stream Alerts: Use selected (group with one text source fills both; Studio Mode uses the preview scene), the Tools menu entry, the settings window staying open while you click in Sources.
+
+From 2026-10-12:
 
 1. Twitch re-sign-in, then EventSub chat: sending, your own echo, `/me`, refused messages, badges.
 2. Highlights: alert lines, Settings → Highlights, first-time chatters ✨.
