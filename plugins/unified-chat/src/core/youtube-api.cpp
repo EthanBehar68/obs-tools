@@ -42,7 +42,8 @@ static constexpr const char *kMessagesFields =
 	"superChatDetails(amountDisplayString,userComment),"
 	"superStickerDetails(amountDisplayString,superStickerMetadata/altText),"
 	"newSponsorDetails/memberLevelName,memberMilestoneChatDetails(memberLevelName,memberMonth,userComment),"
-	"membershipGiftingDetails(giftMembershipsCount,giftMembershipsLevelName)),"
+	"membershipGiftingDetails(giftMembershipsCount,giftMembershipsLevelName),"
+	"giftDetails(jewelsAmount,giftName,comboCount,altText)),"
 	"authorDetails(displayName,channelId,isChatOwner,isChatModerator,isChatSponsor))";
 static constexpr const char *kBroadcastFields = "&fields=items(id,snippet/liveChatId)";
 static constexpr const char *kViewersFields = "&fields=items/liveStreamingDetails/concurrentViewers";
@@ -74,7 +75,7 @@ static bool BoolAt(const json &obj, const char *section, const char *key)
 
 static int64_t Int64At(const json &obj, std::initializer_list<const char *> path);
 
-// Super Chats, Super Stickers and membership events; nullopt for anything else.
+// Super Chats, Super Stickers, membership events and Jewels gifts; nullopt for anything else.
 static std::optional<YouTubeEvent> EventFromItem(const json &item)
 {
 	const std::string type = StringAt(item, {"snippet", "type"});
@@ -99,6 +100,15 @@ static std::optional<YouTubeEvent> EventFromItem(const json &item)
 		event.kind = YouTubeEvent::Kind::GiftMemberships;
 		event.level = StringAt(item, {"snippet", "membershipGiftingDetails", "giftMembershipsLevelName"});
 		event.count = Int64At(item, {"snippet", "membershipGiftingDetails", "giftMembershipsCount"});
+	} else if (type == "giftEvent") {
+		event.kind = YouTubeEvent::Kind::Jewels;
+		event.gift = StringAt(item, {"snippet", "giftDetails", "giftName"});
+		if (event.gift.empty())
+			event.gift = StringAt(item, {"snippet", "giftDetails", "altText"});
+		event.jewels = Int64At(item, {"snippet", "giftDetails", "jewelsAmount"});
+		event.combo =
+			std::max<int64_t>(Int64At(item, {"snippet", "giftDetails", "comboCount"}), 1); // 0: no combo
+		event.count = event.combo; // until GiftCombos knows how many of them are new
 	} else {
 		return std::nullopt;
 	}
@@ -120,6 +130,8 @@ static std::string DescribeEvent(const YouTubeEvent &event)
 		return "became a member";
 	case YouTubeEvent::Kind::MemberMilestone:
 		return "has been a member for " + std::to_string(event.months) + " months";
+	case YouTubeEvent::Kind::Jewels:
+		return "sent " + (event.gift.empty() ? std::string("a gift") : event.gift);
 	default:
 		return "gifted " + std::to_string(event.count) + " memberships";
 	}
@@ -361,6 +373,27 @@ bool RecentIds::Insert(std::string_view id)
 	return true;
 }
 
+bool GiftCombos::Apply(YouTubeEvent &event)
+{
+	if (event.id.empty())
+		return true; // nothing to tell updates apart by: counted as it is
+	const uint64_t hash = std::hash<std::string_view>{}(event.id);
+	auto [it, added] = combos_.try_emplace(hash, 0);
+	if (event.combo <= it->second)
+		return false; // a repeat, or an older update arriving late
+	event.count = event.combo - it->second;
+	it->second = event.combo;
+	event.id += "#" + std::to_string(event.combo);
+	if (added) {
+		order_.push_back(hash);
+		if (order_.size() > capacity_) {
+			combos_.erase(order_.front());
+			order_.pop_front();
+		}
+	}
+	return true;
+}
+
 ChatSession::ChatSession(HttpClient &http, oauth::Provider provider, oauth::Token token, std::string videoId,
 			 int minPollMs, TokenChanged onTokenChanged)
 	: http_(http),
@@ -531,7 +564,7 @@ void ChatSession::Poll(int64_t now, StepResult &out)
 
 	state_ = State::Polling;
 	for (auto &chat : page->messages) {
-		if (seen_.Insert(chat.id) && !IsHistory(chat))
+		if (IsNew(chat))
 			out.messages.push_back(std::move(chat));
 	}
 	DeliverModeration(page->moderation, out, false);
@@ -557,11 +590,19 @@ void ChatSession::EndChat(StepResult &out)
 	out.nextDelayMs = searchMs_;
 }
 
+bool ChatSession::IsNew(ChatMessage &chat)
+{
+	// A Jewels combo comes again under its id as it grows: those go by the combo count, not the id.
+	const bool gift = chat.youtubeEvent && chat.youtubeEvent->kind == YouTubeEvent::Kind::Jewels;
+	const bool unseen = gift ? gifts_.Apply(*chat.youtubeEvent) : seen_.Insert(chat.id);
+	return unseen && !IsHistory(chat);
+}
+
 void ChatSession::Deliver(std::vector<ChatMessage> &messages, StepResult &out)
 {
 	std::vector<ChatMessage> fresh;
 	for (auto &chat : messages) {
-		if (seen_.Insert(chat.id) && !IsHistory(chat))
+		if (IsNew(chat))
 			fresh.push_back(std::move(chat));
 	}
 	if (fresh.empty())

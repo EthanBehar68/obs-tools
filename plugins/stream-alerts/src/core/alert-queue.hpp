@@ -39,10 +39,12 @@ enum class AlertKind {
 	SuperChat, // Super Chats and Super Stickers
 	Member,    // a new YouTube member, or a milestone (variant)
 	GiftMemberships,
+	Jewels, // a YouTube Jewels gift, or several in a combo (variant)
 };
 constexpr AlertKind kAllKinds[] = {AlertKind::Follow,    AlertKind::TwitchSub, AlertKind::GiftSubs,
 				   AlertKind::Cheer,     AlertKind::Raid,      AlertKind::Subscriber,
-				   AlertKind::SuperChat, AlertKind::Member,    AlertKind::GiftMemberships};
+				   AlertKind::SuperChat, AlertKind::Member,    AlertKind::GiftMemberships,
+				   AlertKind::Jewels};
 
 inline bool IsTwitch(AlertKind kind)
 {
@@ -62,13 +64,15 @@ struct AlertEvent {
 	std::string id;
 	std::string name; // display name
 	// Details for the message placeholders; new fields go at the end (positional initialization).
-	bool variant = false; // TwitchSub: a resub; Member: a milestone
+	bool variant = false; // TwitchSub: a resub; Member: a milestone; Jewels: more than one gift
 	int64_t months = 0;   // {months}: resub / milestone
-	int64_t count = 0;    // {count}: gifts; {amount} for a cheer's bits
+	int64_t count = 0;    // {count}: gifts (Jewels: in this event); {amount} for a cheer's bits
 	int64_t viewers = 0;  // {viewers}: raid
-	std::string amount;   // {amount}: Super Chat "$5.00"; a cheer's bits
+	std::string amount;   // {amount}: Super Chat "$5.00"; a cheer's bits; the Jewels a gift is worth
 	std::string message;  // {message}: the viewer's comment
 	std::string level;    // {level}: membership level
+	std::string gift;     // {gift}: a Jewels gift's name, e.g. "Rose"
+	int64_t jewels = 0;   // Jewels: what the gifts are worth, for the minimum
 };
 
 struct Alert {
@@ -103,7 +107,7 @@ private:
 	std::unordered_set<std::string> seen_;
 };
 
-// single: "{name} just followed!", with {months} {count} {amount} {viewers} {message} {level} from the event too;
+// single: "{name} just followed!", with {months} {count} {amount} {viewers} {message} {level} {gift} from the event;
 // combined: "+{count} more new followers!", followed on a second line by as many names as fit in maxNamesLength
 // characters.
 std::string FormatAlert(const Alert &alert, const std::string &single, const std::string &combined,

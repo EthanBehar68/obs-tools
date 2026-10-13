@@ -21,6 +21,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "alert-queue.hpp"
 
 #include <string>
+#include <string_view>
+#include <vector>
 
 namespace stream_alerts {
 
@@ -30,7 +32,7 @@ struct AlertSettings {
 	std::string textSource; // gets the message; optional
 	std::string message;
 	std::string overflowMessage; // Follow, Subscriber: past kMaxQueued waiting
-	std::string variantMessage;  // TwitchSub: a resub; Member: a milestone
+	std::string variantMessage;  // TwitchSub: a resub; Member: a milestone; Jewels: several gifts at once
 
 	// An alert with neither source shows nothing, so it isn't queued (it would only hold up the others).
 	bool IsSetUp() const { return enabled && (!source.empty() || !textSource.empty()); }
@@ -48,8 +50,10 @@ struct AlertsConfig {
 	AlertSettings member{
 		true, {}, {}, "{name} just became a member!", {}, "{name} has been a member for {months} months!"};
 	AlertSettings giftMemberships{true, {}, {}, "{name} gifted {count} memberships!"};
+	AlertSettings jewels{true, {}, {}, "{name} sent {gift}!", {}, "{name} sent {count} × {gift}!"};
 	int minBits = 1;        // smaller cheers don't alert
 	int minRaidViewers = 1; // nor smaller raids
+	int minJewels = 1;      // nor smaller Jewels gifts
 	int durationSeconds = 5;
 	int subscriberCheckSeconds = 120; // YouTube subscribers: 1 quota unit per check, so 30 an hour
 
@@ -63,6 +67,13 @@ const char *KindKey(AlertKind kind);
 constexpr int kGapMs = 1000; // between two alerts
 constexpr int kMinSubscriberCheckSeconds = 30;
 constexpr int kMaxSubscriberCheckSeconds = 900;
+
+// The {placeholders} a kind's messages can use, e.g. {"{name}", "{amount}", "{message}"}; overflow: the "more than
+// 10 wait" message, which has only {count}. Keep in step with what FormatAlert fills in for each kind's events.
+std::vector<std::string> UsablePlaceholders(AlertKind kind, bool overflow);
+// The {word}s in text the kind won't fill in (another kind's, or a typo), each once, in order. They would show
+// as typed, or blank for another kind's: the settings window won't save until they're fixed.
+std::vector<std::string> UnusablePlaceholders(std::string_view text, AlertKind kind, bool overflow);
 
 std::string SerializeAlertsConfig(const AlertsConfig &config);
 // Missing or malformed fields fall back to the defaults.

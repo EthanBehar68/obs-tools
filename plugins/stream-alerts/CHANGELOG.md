@@ -6,9 +6,11 @@
 - Each kind has its own source, text source and message, with placeholders such as `{months}`, `{count}`, `{amount}`, `{viewers}`, `{message}` and `{level}`; subs and members have a second message for resubs and milestones.
 - Paid alerts and raids always play, each on its own and every time, ahead of waiting follows and subscribers. Cheers and raids have a minimum (bits / viewers), 1 by default.
 - A kind with no source set is skipped.
+- **Placeholders are checked:** a `{word}` an alert won't fill in (another alert's, or a typo) is flagged under the message as you type, and OK and Test wait until it's fixed. The "more than 10 wait" message's `{count}` is explained on the page instead of in a tooltip.
 - **YouTube subscribers: Check every** 30 seconds to 15 minutes (2 minutes by default); the window shows the quota it costs.
 - The settings window lists the kinds on the left, with the selected one's settings and Test buttons beside it.
 - Sign in to Twitch again once: the sign-in now also asks for chat (`user:read:chat`) and bits (`bits:read`) access.
+- **YouTube Jewels gifts** (needs the matching Unified Chat): one alert per gift, or per batch of a combo, with `{gift}`, `{count}` and `{amount}` (Jewels); a second message for several gifts at once, and a minimum in Jewels.
 - Internal: the EventSub WebSocket code is shared with Unified Chat.
 
 ## 0.1.0 (2026-09-27)

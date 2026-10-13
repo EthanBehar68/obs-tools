@@ -41,7 +41,7 @@ static constexpr const wchar_t *kRefreshLock = L"Local\\obs-tools-accounts-refre
 class NamedLock {
 public:
 	// With cancel, waits in short slices and gives up once it's set, so closing OBS never waits out timeoutMs
-	// behind another plugin's refresh.
+	// behind another plugin.
 	NamedLock(const wchar_t *name, DWORD timeoutMs, const std::atomic<bool> *cancel = nullptr)
 	{
 		handle_ = CreateMutexW(nullptr, FALSE, name);
@@ -111,17 +111,20 @@ static Accounts ReadFile(const std::string &path, SecretReport *report)
 
 AccountStore::AccountStore(std::string dir) : dir_(std::move(dir)), path_(dir_ + "/accounts.json") {}
 
-Accounts AccountStore::Load(SecretReport *report) const
+Accounts AccountStore::Load(SecretReport *report, const std::atomic<bool> *cancel) const
 {
-	NamedLock lock(kFileLock, kFileLockMs); // not held after a timeout: reading anyway beats blocking a sign-in
+	NamedLock lock(kFileLock, kFileLockMs,
+		       cancel); // not held after a timeout: reading anyway beats blocking a sign-in
 	return ReadFile(path_, report);
 }
 
-void AccountStore::Update(const std::function<void(Accounts &)> &change)
+void AccountStore::Update(const std::function<void(Accounts &)> &change, const std::atomic<bool> *cancel)
 {
-	NamedLock lock(kFileLock, kFileLockMs);
+	// Written even when cancelled: it may hold a refreshed Twitch token, and the old refresh token is spent.
+	NamedLock lock(kFileLock, kFileLockMs, cancel);
 	if (!lock.Held())
-		obs_log(LOG_WARNING, "accounts file lock timed out, writing anyway");
+		obs_log(LOG_WARNING, "accounts file lock %s, writing anyway",
+			cancel && cancel->load() ? "wait cut short by shutdown" : "timed out");
 	const std::string previous = ReadText(path_);
 	Accounts accounts = ParseAccounts(previous, Codec());
 	change(accounts);
@@ -131,16 +134,19 @@ void AccountStore::Update(const std::function<void(Accounts &)> &change)
 		obs_log(LOG_WARNING, "failed to save %s", path_.c_str());
 }
 
-bool AccountStore::ReplaceIfCurrent(Service service, const oauth::Token &stale, const oauth::Token &next)
+bool AccountStore::ReplaceIfCurrent(Service service, const oauth::Token &stale, const oauth::Token &next,
+				    const std::atomic<bool> *cancel)
 {
 	bool replaced = false;
-	Update([&](Accounts &accounts) {
-		oauth::Token &stored = accounts.Get(service).token;
-		if (SameToken(stored, stale)) {
-			stored = next;
-			replaced = true;
-		}
-	});
+	Update(
+		[&](Accounts &accounts) {
+			oauth::Token &stored = accounts.Get(service).token;
+			if (SameToken(stored, stale)) {
+				stored = next;
+				replaced = true;
+			}
+		},
+		cancel);
 	return replaced;
 }
 
@@ -154,7 +160,7 @@ AccountStore::RefreshResult AccountStore::Refresh(Service service, const oauth::
 	if (!refreshing.Held())
 		return {RefreshOutcome::Transient, {}};
 
-	const Account stored = Load().Get(service);
+	const Account stored = Load(nullptr, cancel).Get(service);
 	switch (NextRefreshStep(stored.token, stale)) {
 	case RefreshStep::UseStored:
 		return {RefreshOutcome::Granted, stored.token};
@@ -182,9 +188,9 @@ AccountStore::RefreshResult AccountStore::Refresh(Service service, const oauth::
 			badClient ? ": the client ID (or secret) in Tools > OBS Tools > Accounts isn't accepted" : "");
 		return {outcome, {}};
 	}
-	if (!ReplaceIfCurrent(service, stored.token, parsed.token))
+	if (!ReplaceIfCurrent(service, stored.token, parsed.token, cancel))
 		return {RefreshOutcome::Granted,
-			Load().Get(service).token}; // the user signed in again meanwhile: it wins
+			Load(nullptr, cancel).Get(service).token}; // the user signed in again meanwhile: it wins
 	return {RefreshOutcome::Granted, parsed.token};
 }
 

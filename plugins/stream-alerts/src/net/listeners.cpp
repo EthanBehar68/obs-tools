@@ -115,7 +115,7 @@ TwitchListener::~TwitchListener()
 
 TwitchListener::Outcome TwitchListener::Authorize(std::string &userId)
 {
-	account_ = SharedAccounts().Load().twitch;
+	account_ = SharedAccounts().Load(nullptr, &stop_).twitch;
 	if (!account_.token.IsValid() || account_.clientId.empty()) {
 		Status("not signed in (Tools → OBS Tools → Accounts)");
 		return Outcome::Stop;
@@ -318,7 +318,7 @@ void SubscriberPoller::Run()
 	CurlHttpClient http(&stop_, "YouTube subscribers");
 	while (!stop_) {
 		int waitSeconds = intervalSeconds_;
-		account_ = SharedAccounts().Load().google; // picks up a refresh the chat plugin made
+		account_ = SharedAccounts().Load(nullptr, &stop_).google; // picks up a refresh the chat plugin made
 		if (!account_.token.IsValid()) {
 			Status("not signed in (Tools → OBS Tools → Accounts)");
 			return;

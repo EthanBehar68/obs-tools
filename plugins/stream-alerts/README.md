@@ -6,12 +6,12 @@ Alerts for **Twitch** and **YouTube**, built into OBS: no StreamElements, Stream
 |---|---|---|
 | Twitch | follows, subs and resubs, gift subs, cheers, raids | the moment they happen (EventSub over one WebSocket; the connection sleeps between events) |
 | YouTube | channel subscribers | checked every 2 minutes by default (30 of your daily 10,000 quota units an hour); **Check every** sets 30 seconds (120 units an hour) to 15 minutes (4). Only public subscriptions can be seen; that's a YouTube rule |
-| YouTube | Super Chats and Super Stickers, new members and milestones, gifted memberships | from [Unified Chat](../unified-chat/README.md)'s YouTube chat, about 2 seconds after they happen, at no extra quota. Unified Chat must be installed and connected to YouTube |
+| YouTube | Super Chats and Super Stickers, new members and milestones, gifted memberships, Jewels gifts | from [Unified Chat](../unified-chat/README.md)'s YouTube chat, about 2 seconds after they happen, at no extra quota. Unified Chat must be installed and connected to YouTube |
 
 - Alerts run **only while OBS is streaming**. Nothing connects or polls while you're offline.
 - Alerts play **one at a time** with a 1-second gap.
 - **Follows and subscribers:** up to **10** wait their turn. Past that, the rest are combined into one alert, e.g. "**+14 more new followers!**" with as many names as fit, so a follow-bot flood can't take over the screen. Nobody is dropped, and every name is written to the OBS log. Each person alerts **once per stream**, so unfollowing and following again doesn't repeat it.
-- **Subs, gifts, cheers, raids, Super Chats and memberships** always play, each on its own and every time, ahead of any waiting follows and subscribers (never interrupting the alert on screen). Cheers and raids can have a minimum (bits / viewers).
+- **Subs, gifts, cheers, raids, Super Chats, memberships and Jewels gifts** always play, each on its own and every time, ahead of any waiting follows and subscribers (never interrupting the alert on screen). Cheers, raids and Jewels gifts can have a minimum (bits / viewers / Jewels). A Jewels combo plays one alert for each batch of gifts YouTube reports, so none is missed.
 - A gift of several subs at once is **one** alert ("gifted 5 subs"), not one per recipient. A resub alerts when the viewer shares it in chat; that's how Twitch reports resubs.
 - An alert kind with no source set is skipped, so a kind you haven't built yet never holds up the others.
 - With **Unified Chat** installed, each new follower and subscriber also appears in the chat dock as a highlighted line, straight away, even when their on-screen alert is still waiting or combined. Subs, cheers, raids and Super Chats already show in the chat.

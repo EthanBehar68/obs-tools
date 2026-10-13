@@ -29,6 +29,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QListWidget>
+#include <QMessageBox>
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QSpinBox>
@@ -156,6 +157,18 @@ AlertsDialog::AlertsDialog(AlertsController *controller, QWidget *parent)
 	UpdateStatus();
 }
 
+// The minimum setting on a kind's page: bits, raid viewers or Jewels.
+static int &Minimum(AlertsConfig &config, AlertKind kind)
+{
+	return kind == AlertKind::Cheer  ? config.minBits
+	       : kind == AlertKind::Raid ? config.minRaidViewers
+					 : config.minJewels;
+}
+static int Minimum(const AlertsConfig &config, AlertKind kind)
+{
+	return Minimum(const_cast<AlertsConfig &>(config), kind);
+}
+
 QWidget *AlertsDialog::MakePage(AlertKind kind, const QStringList &sources, const QStringList &textSources)
 {
 	const AlertSettings &settings = original_.For(kind);
@@ -184,25 +197,48 @@ QWidget *AlertsDialog::MakePage(AlertKind kind, const QStringList &sources, cons
 	page.message = MakeMessageEdit(settings.message, widget);
 	form->addRow(Text("Alerts.Message"), page.message);
 
-	const bool hasVariant = kind == AlertKind::TwitchSub || kind == AlertKind::Member;
+	const bool hasVariant = kind == AlertKind::TwitchSub || kind == AlertKind::Member || kind == AlertKind::Jewels;
+	const char *variantName = kind == AlertKind::TwitchSub ? "Resub"
+				  : kind == AlertKind::Member  ? "Milestone"
+							       : "Several";
 	if (hasVariant) {
 		page.variant = MakeMessageEdit(settings.variantMessage, widget);
-		form->addRow(Text(kind == AlertKind::TwitchSub ? "Alerts.Resub" : "Alerts.Milestone"), page.variant);
-	}
-	if (!IsPriority(kind)) {
-		page.overflow = MakeMessageEdit(settings.overflowMessage, widget);
-		page.overflow->setToolTip(Text("Alerts.OverflowHint"));
-		form->addRow(Text("Alerts.Overflow"), page.overflow);
+		form->addRow(Text((std::string("Alerts.") + variantName).c_str()), page.variant);
 	}
 	auto placeholders = new QLabel(Text(("Placeholders." + key).c_str()), widget);
 	placeholders->setWordWrap(true);
 	form->addRow(QString(), placeholders);
+	if (!IsPriority(kind)) {
+		page.overflow = MakeMessageEdit(settings.overflowMessage, widget);
+		form->addRow(Text("Alerts.Overflow"), page.overflow);
+		auto overflowHelp = new QLabel(Text("Alerts.OverflowPlaceholders"), widget);
+		overflowHelp->setWordWrap(true);
+		form->addRow(QString(), overflowHelp);
+	}
 
-	if (kind == AlertKind::Cheer || kind == AlertKind::Raid) {
+	page.warning = new QLabel(widget);
+	page.warning->setWordWrap(true);
+	page.warning->setProperty("class", "text-danger"); // OBS themes' error colour
+	page.warning->hide();
+	form->addRow(QString(), page.warning);
+	auto showProblems = [this, kind]() {
+		const QString problems = Problems(kind);
+		pages_[kind].warning->setText(problems);
+		pages_[kind].warning->setVisible(!problems.isEmpty());
+	};
+	for (QPlainTextEdit *edit : {page.message, page.variant, page.overflow}) {
+		if (edit)
+			connect(edit, &QPlainTextEdit::textChanged, this, showProblems);
+	}
+	showProblems(); // a message saved before this check existed
+
+	if (kind == AlertKind::Cheer || kind == AlertKind::Raid || kind == AlertKind::Jewels) {
 		page.minimum = new QSpinBox(widget);
 		page.minimum->setRange(1, 1000000);
-		page.minimum->setValue(kind == AlertKind::Cheer ? original_.minBits : original_.minRaidViewers);
-		page.minimum->setSuffix(Text(kind == AlertKind::Cheer ? "Alerts.BitsSuffix" : "Alerts.ViewersSuffix"));
+		page.minimum->setValue(Minimum(original_, kind));
+		page.minimum->setSuffix(Text(kind == AlertKind::Cheer  ? "Alerts.BitsSuffix"
+					     : kind == AlertKind::Raid ? "Alerts.ViewersSuffix"
+								       : "Alerts.JewelsSuffix"));
 		form->addRow(Text("Alerts.Minimum"), page.minimum);
 	}
 
@@ -232,6 +268,8 @@ QWidget *AlertsDialog::MakePage(AlertKind kind, const QStringList &sources, cons
 	auto addTest = [&](const char *labelKey, bool variant) {
 		auto test = new QPushButton(Text(labelKey), widget);
 		connect(test, &QPushButton::clicked, this, [this, kind, variant]() {
+			if (!CheckMessages(&kind))
+				return;
 			controller_->ApplyConfig(Current(), false); // try the values as entered
 			controller_->Test(kind, variant);
 		});
@@ -239,7 +277,7 @@ QWidget *AlertsDialog::MakePage(AlertKind kind, const QStringList &sources, cons
 	};
 	addTest("Alerts.Test", false);
 	if (hasVariant)
-		addTest(kind == AlertKind::TwitchSub ? "Alerts.TestResub" : "Alerts.TestMilestone", true);
+		addTest((std::string("Alerts.Test") + variantName).c_str(), true);
 	tests->addStretch();
 	form->addRow(QString(), tests);
 	return widget;
@@ -259,12 +297,57 @@ AlertsConfig AlertsDialog::Current() const
 		if (page.variant)
 			settings.variantMessage = ToStd(page.variant->toPlainText());
 		if (page.minimum)
-			(kind == AlertKind::Cheer ? config.minBits : config.minRaidViewers) = page.minimum->value();
+			Minimum(config, kind) = page.minimum->value();
 		if (page.interval)
 			config.subscriberCheckSeconds = page.interval->value();
 	}
 	config.durationSeconds = duration_->value();
 	return config;
+}
+
+QString AlertsDialog::Problems(AlertKind kind) const
+{
+	const Page &page = pages_.at(kind);
+	auto join = [](const std::vector<std::string> &items) {
+		QStringList list;
+		for (const auto &item : items)
+			list.append(QString::fromStdString(item));
+		return list.join(", ");
+	};
+	QStringList lines;
+	auto check = [&](const QPlainTextEdit *edit, const QString &label, bool overflow) {
+		if (!edit)
+			return;
+		const auto unusable = UnusablePlaceholders(ToStd(edit->toPlainText()), kind, overflow);
+		if (!unusable.empty())
+			lines.append(Text("Alerts.Unusable")
+					     .arg(label, join(unusable), join(UsablePlaceholders(kind, overflow))));
+	};
+	check(page.message, Text("Alerts.Message"), false);
+	check(page.variant,
+	      Text(kind == AlertKind::TwitchSub ? "Alerts.Resub"
+		   : kind == AlertKind::Member  ? "Alerts.Milestone"
+						: "Alerts.Several"),
+	      false);
+	check(page.overflow, Text("Alerts.Overflow"), true);
+	return lines.join("\n");
+}
+
+bool AlertsDialog::CheckMessages(const AlertKind *only)
+{
+	for (size_t row = 0; row < std::size(kAllKinds); ++row) {
+		const AlertKind kind = kAllKinds[row];
+		if (only && kind != *only)
+			continue;
+		const QString problems = Problems(kind);
+		if (problems.isEmpty())
+			continue;
+		kinds_->setCurrentRow((int)row);
+		QMessageBox::warning(this, Text("Alerts.UnusableTitle"),
+				     Text(("Kind." + std::string(KindKey(kind))).c_str()) + "\n\n" + problems);
+		return false;
+	}
+	return true;
 }
 
 void AlertsDialog::UpdateStatus()
@@ -275,6 +358,8 @@ void AlertsDialog::UpdateStatus()
 
 void AlertsDialog::accept()
 {
+	if (!CheckMessages())
+		return;
 	controller_->ApplyConfig(Current(), true);
 	QDialog::accept();
 }

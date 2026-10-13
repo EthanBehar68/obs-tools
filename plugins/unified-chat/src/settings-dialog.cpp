@@ -433,6 +433,8 @@ void SettingsDialog::UpdatePreview()
 		 {Platform::YouTube, HighlightKind::Member, "@member became a member (Gold)", {}}},
 		{HighlightKind::GiftMemberships,
 		 {Platform::YouTube, HighlightKind::GiftMemberships, "@giver gifted 5 memberships", {}}},
+		{HighlightKind::Jewels,
+		 {Platform::YouTube, HighlightKind::Jewels, "@fan sent 3 × Rose (30 Jewels)", {}}},
 	};
 
 	QTextDocument *doc = preview_->document();

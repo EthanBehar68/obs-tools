@@ -26,8 +26,9 @@ using json = nlohmann::json;
 
 namespace obs_tools {
 
-static constexpr const char *kKindNames[] = {"super_chat", "super_sticker", "new_member", "member_milestone",
-					     "gift_memberships"};
+// Append only: an older Stream Alerts ignores a kind it doesn't know.
+static constexpr const char *kKindNames[] = {"super_chat",       "super_sticker",    "new_member",
+					     "member_milestone", "gift_memberships", "jewels"};
 
 std::string SerializeYouTubeEvent(const YouTubeEvent &event)
 {
@@ -40,7 +41,10 @@ std::string SerializeYouTubeEvent(const YouTubeEvent &event)
 		    {"message", event.message},
 		    {"level", event.level},
 		    {"months", event.months},
-		    {"count", event.count}};
+		    {"count", event.count},
+		    {"gift", event.gift},
+		    {"combo", event.combo},
+		    {"jewels", event.jewels}};
 	return obj.dump();
 }
 
@@ -72,6 +76,9 @@ std::optional<YouTubeEvent> ParseYouTubeEvent(const std::string &text)
 	event.level = string("level");
 	event.months = number("months");
 	event.count = number("count");
+	event.gift = string("gift");
+	event.combo = number("combo");
+	event.jewels = number("jewels");
 	return event;
 }
 

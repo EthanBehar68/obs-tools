@@ -143,6 +143,13 @@ TEST_CASE("Alert messages fill in each kind's details")
 	superChat.message = "great stream";
 	CHECK(FormatAlert({superChat.kind, {superChat.name}, false, superChat}, config.superChat.message, {}) ==
 	      "@viewer sent $5.00!\ngreat stream");
+
+	AlertEvent jewels{AlertKind::Jewels, "4#3", "@fan"};
+	jewels.gift = "Rose";
+	jewels.count = 3;
+	CHECK(FormatAlert({jewels.kind, {jewels.name}, false, jewels}, config.jewels.message, {}) == "@fan sent Rose!");
+	CHECK(FormatAlert({jewels.kind, {jewels.name}, false, jewels}, config.jewels.variantMessage, {}) ==
+	      "@fan sent 3 × Rose!");
 }
 
 TEST_CASE("A kind is set up only with something to show")
@@ -163,6 +170,7 @@ TEST_CASE("Every kind, the minimums and variant messages round trip")
 	config.member.variantMessage = "{months}!";
 	config.minBits = 500;
 	config.minRaidViewers = 10;
+	config.minJewels = 50;
 	config.subscriberCheckSeconds = 300;
 	AlertsConfig loaded = ParseAlertsConfig(SerializeAlertsConfig(config));
 	for (AlertKind kind : kAllKinds)
@@ -170,6 +178,7 @@ TEST_CASE("Every kind, the minimums and variant messages round trip")
 	CHECK(loaded.member.variantMessage == "{months}!");
 	CHECK(loaded.minBits == 500);
 	CHECK(loaded.minRaidViewers == 10);
+	CHECK(loaded.minJewels == 50);
 	CHECK(loaded.subscriberCheckSeconds == 300);
 	CHECK(ParseAlertsConfig(R"({"subscriber_check_seconds":5})").subscriberCheckSeconds == 30);
 
@@ -178,6 +187,8 @@ TEST_CASE("Every kind, the minimums and variant messages round trip")
 	CHECK(old.follow.source == "F");
 	CHECK(old.giftSubs.message == "{name} gifted {count} subs!");
 	CHECK(old.minBits == 1);
+	CHECK(old.minJewels == 1);
+	CHECK(old.jewels.message == "{name} sent {gift}!");
 	CHECK(old.subscriberCheckSeconds == 120);
 	CHECK(ParseAlertsConfig(R"({"min_bits":0})").minBits == 1);
 }
@@ -203,4 +214,28 @@ TEST_CASE("Raising a minimum drops waiting cheers below it, nothing else")
 	for (int n = 2; n <= 20; ++n)
 		queue.Push(Follow(n)); // removing kept the individual count right: still 10, then combined
 	CHECK(queue.Size() == AlertQueue::kMaxQueued + 1);
+}
+
+TEST_CASE("Placeholders another kind would fill in, or typos, are found")
+{
+	// Every default message uses only what its kind fills in.
+	const AlertsConfig defaults;
+	for (AlertKind kind : kAllKinds) {
+		CAPTURE(KindKey(kind));
+		const AlertSettings &settings = defaults.For(kind);
+		CHECK(UnusablePlaceholders(settings.message, kind, false).empty());
+		CHECK(UnusablePlaceholders(settings.variantMessage, kind, false).empty());
+		CHECK(UnusablePlaceholders(settings.overflowMessage, kind, true).empty());
+	}
+
+	CHECK(UnusablePlaceholders("{name} raided with {viewers}! {viewers} {nmae}", AlertKind::Cheer, false) ==
+	      std::vector<std::string>{"{viewers}", "{nmae}"});
+	CHECK(UnusablePlaceholders("+{count} more, thanks {name}", AlertKind::Follow, true) ==
+	      std::vector<std::string>{"{name}"});
+	CHECK(UnusablePlaceholders("{count} gifts", AlertKind::Follow, false) == std::vector<std::string>{"{count}"});
+	// Braces that aren't a placeholder are left alone.
+	CHECK(UnusablePlaceholders("{ } {two words} { {name}} {", AlertKind::Follow, false).empty());
+	CHECK(UnusablePlaceholders("{Name}", AlertKind::Follow, false) == std::vector<std::string>{"{Name}"});
+	CHECK(UnusablePlaceholders("{name} sent {count} × {gift} ({amount} Jewels) {level}", AlertKind::Jewels,
+				   false) == std::vector<std::string>{"{level}"});
 }

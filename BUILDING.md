@@ -96,7 +96,7 @@ libs\
 │   │   ├── oauth-device.*       RFC 8628 device flow for Twitch and Google; the Twitch scopes of every plugin
 │   │   ├── json-array-reader.*  splits a chunked JSON array into complete objects
 │   │   ├── text-util.*          UTF-8, escaping, URL encoding
-│   │   ├── youtube-events.*     YouTube Super Chats / memberships as JSON, from Unified Chat to Stream Alerts
+│   │   ├── youtube-events.*     YouTube Super Chats / memberships / Jewels as JSON, from Unified Chat to Stream Alerts
 │   │   ├── http-client.hpp      the HttpClient interface the cores are tested against
 │   │   └── secret-codec.*       the SecretCodec interface, "enc:v1:" sealing
 │   ├── net\          -> obs-tools-net (libcurl, libobs file helpers)
@@ -127,7 +127,7 @@ plugins\unified-chat\
 │   │   ├── name-color.*      readable name colors (WCAG contrast vs. the chat background), cached per color
 │   │   ├── echo-merger.*     your own Both message shown as one line
 │   │   ├── highlights.*      highlight kinds (alerts, first-time chatter, mention): defaults, readable tint + text
-│   │   │                     for any colour, event lines from cheers / Super Chats / memberships
+│   │   │                     for any colour, event lines from cheers / Super Chats / memberships / Jewels
 │   │   ├── chatter-log.*     who has chatted before (chatters.json), for first-time chatters
 │   │   ├── bot-merger.*      a bot's identical Twitch + YouTube lines folded into one (line shown first, icon added later)
 │   │   ├── mentions.*        clickable-name links, "mentions you" matching, recent chatters for @ + Tab completion
@@ -178,12 +178,12 @@ Also:
 
 ### What the plugins share, and releasing
 
-Separately installed plugins talk through the shared accounts file, the Twitch scopes, libobs signals and procs, and the JSON those carry. `kObsToolsProtocol` (`ui/obs-tools-menu.hpp`) versions all of it; each plugin publishes its version, protocol and scopes at load and logs a warning (and the Accounts window shows one) when another plugin's protocol differs.
+Separately installed plugins talk through the shared accounts file, the Twitch scopes, libobs signals and procs, and the JSON those carry. `kObsToolsProtocol` (`ui/obs-tools-menu.hpp`) versions all of it; each plugin publishes its version, protocol, oldest supported protocol (`kObsToolsMinProtocol`) and scopes at load, and logs a warning (the Accounts window shows one too) only when the two can't work together: one's protocol is below the other's oldest supported one.
 
 - **New signals** carry one JSON string with `"v"` and `"kind"`: `void obs_tools_<topic>(string <name>)`, declared through `DeclareSignals()`. (`obs_tools_alert` and `obs_tools_accounts_changed` predate this and keep their shape.)
 - **The accounts file** keeps keys a plugin doesn't know, so an older plugin never deletes a newer one's fields. Its `"version"` may only rise for additions an older writer can't break (it rewrites only the fields it knows); a change to those fields needs a new file name.
 - **Plugins find each other** through a registry (`obs_tools_register` / `obs_tools_plugins` procs, owned by whichever plugin registered first), so a new plugin is seen by the others without changing them.
-- **Release rule:** when a change in `libs/common` alters anything above, bump `kObsToolsProtocol`, bump and tag *both* plugins, and say in each CHANGELOG which version of the other it needs. A change that only touches one plugin releases only that plugin.
+- **Release rule:** when a change in `libs/common` alters anything above, bump `kObsToolsProtocol` (and raise `kObsToolsMinProtocol` to it when the older protocol no longer works), bump and tag *both* plugins, and say in each CHANGELOG which version of the other it needs. A change that only touches one plugin releases only that plugin.
 
 ### Design notes
 
