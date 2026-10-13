@@ -77,7 +77,7 @@ Each library and plugin keeps its unit tests in its own `tests\` folder. They us
 | Send routing (targets, length limits, partial delivery), HTML escaping of chat lines and event lines, timestamps, config round trip (display settings too), 1.2.0 sign-in migration | `test-router-format-config.cpp` |
 | Monitoring device: present / default / new ID for the same name / missing / ambiguous | `test-monitoring-device.cpp` |
 | Highlight defaults, readable styles for any colour, emoji limits, event lines, the chatter list | `test-highlights.cpp` |
-| Stream info: Helix channel / category search parsing, box art sizes, Modify Channel bodies, tag rules, recent categories, YouTube broadcast choice and videos.update snippet, config round trip | `test-stream-info.cpp` |
+| Stream info: Helix channel / category search parsing, box art sizes, Modify Channel bodies, tag rules, recent categories, scene links, YouTube broadcast choice and videos.update snippet, config round trip | `test-stream-info.cpp` |
 | **plugins\stream-alerts** (`stream-alerts-tests.exe`) | |
 | Alert queue (order, once per person per stream, combining past 10, priority alerts), message placeholders, config round trip and 0.1.0 configs | `test-alert-queue.cpp` |
 | Twitch subscriptions, follow / chat notification / cheer events, YouTube events to alerts, validate scopes, recent-subscriber baseline and new-subscriber detection | `test-platform-events.cpp` |
@@ -148,6 +148,7 @@ plugins\unified-chat\
 │   │   └── youtube-connection.*  YouTube poll/send loop
 │   ├── chat-dock.*        the dock widget
 │   ├── monitoring-repair.*   reselects and saves a monitoring device whose ID changed (load, stream start, profile)
+│   ├── scene-category.*      while streaming, a linked scene sets its Twitch category after a delay
 │   ├── settings-dialog.*
 │   ├── stream-info-dialog.*  Stream Info window (✎ on the dock, Tools > OBS Tools > Stream Info…)
 │   ├── target-switch.*    the Twitch / YouTube / Both switch

@@ -87,6 +87,19 @@ struct RecentCategory {
 };
 void RememberCategory(std::vector<RecentCategory> &recent, RecentCategory used);
 
+// Scenes linked to a Twitch category: while streaming, switching to one sets it after a delay.
+constexpr int kDefaultSceneCategoryDelay = 10; // seconds the scene must stay live
+constexpr int kMaxSceneCategoryDelay = 60;
+struct SceneCategory {
+	std::string sceneUuid; // survives renames; unique within a scene collection
+	std::string sceneName; // shown when the scene isn't in this collection
+	TwitchCategory category;
+};
+// Replaces the scene's link if it has one.
+void LinkSceneCategory(std::vector<SceneCategory> &links, SceneCategory link);
+void UnlinkSceneCategory(std::vector<SceneCategory> &links, const std::string &sceneUuid);
+const SceneCategory *FindSceneCategory(const std::vector<SceneCategory> &links, const std::string &sceneUuid);
+
 // ---- YouTube
 
 struct YouTubeBroadcast {

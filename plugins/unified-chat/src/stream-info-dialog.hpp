@@ -37,6 +37,9 @@ class QLabel;
 class QLineEdit;
 class QListWidget;
 class QListWidgetItem;
+class QMenu;
+class QSpinBox;
+class QToolButton;
 class QPushButton;
 class QTimer;
 
@@ -47,8 +50,9 @@ namespace unified_chat {
 // that ends when the window closes.
 class StreamInfoDialog : public QDialog {
 public:
-	// Runs when the platforms to change or the recent categories change, for config.json.
-	using SaveSettings = std::function<void(bool twitch, bool youtube, const std::vector<RecentCategory> &recent)>;
+	// Runs when the platforms to change, the recent categories or the scene links change, for config.json. Only
+	// those fields of the config are meant.
+	using SaveSettings = std::function<void(const ChatConfig &settings)>;
 
 	StreamInfoDialog(const ChatConfig &config, SaveSettings save, QWidget *parent);
 	~StreamInfoDialog() override;
@@ -70,9 +74,13 @@ private:
 	void UpdateControls();
 	void Apply();
 	void Save();
+	// The scenes linked to a category, with today's scene names.
+	void ShowSceneLinks();
+	void FillSceneMenu();
 
 	SaveSettings save_;
 	std::vector<RecentCategory> recent_;
+	std::vector<SceneCategory> sceneLinks_;
 	std::unique_ptr<StreamInfoClient> client_;
 	std::optional<StreamInfoClient::TwitchState> twitch_;
 	std::optional<StreamInfoClient::YouTubeState> youtube_;
@@ -93,6 +101,12 @@ private:
 	QLineEdit *tags_;
 	QLabel *tagsWarning_;
 	QComboBox *youtubeCategory_;
+	QToolButton *useForScene_;
+	QMenu *sceneMenu_;
+	QCheckBox *byScene_;
+	QSpinBox *sceneDelay_;
+	QListWidget *sceneList_;
+	QPushButton *unlink_;
 	QCheckBox *changeTwitch_;
 	QCheckBox *changeYouTube_;
 	QPushButton *signIn_;

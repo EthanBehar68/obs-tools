@@ -72,6 +72,10 @@ struct ChatConfig {
 	bool streamInfoTwitch = true;
 	bool streamInfoYouTube = true;
 	std::vector<RecentCategory> recentCategories;
+	// Switch the Twitch category with the scene, while streaming, once a linked scene has been live this long.
+	bool categoryByScene = false;
+	int categorySceneDelaySeconds = kDefaultSceneCategoryDelay;
+	std::vector<SceneCategory> sceneCategories;
 };
 
 // "Nightbot, StreamElements" <-> {"Nightbot", "StreamElements"}; empty entries are dropped.

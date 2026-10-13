@@ -11,6 +11,7 @@
 ### Stream info
 - **Set the title, category and tags from OBS:** ✎ on the dock or **Tools → OBS Tools → Stream Info…**. One title for Twitch and YouTube; the Twitch category is searched as you type, with box art; Twitch tags; the YouTube category. Your recent Twitch categories are one click away and bring back their tags.
 - YouTube changes your live broadcast, or the next upcoming one, so it can be set before going live (51 quota units per change). YouTube's API can't set the specific game.
+- **Category by scene:** in Stream Info, **Use for scene ▾** links the selected Twitch category to a scene. While streaming, once a linked scene has been live for 10 seconds (adjustable, 0 to 60), the category changes to it; other scenes leave it alone. Only the category changes, and only when Twitch has another one; the dock says when it does.
 - Sign in to Twitch again once to allow it (`channel:manage:broadcast`).
 
 ### Highlights

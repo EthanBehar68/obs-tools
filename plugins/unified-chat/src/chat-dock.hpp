@@ -59,6 +59,7 @@ class QUrl;
 
 namespace unified_chat {
 
+class SceneCategorySwitcher;
 class StreamInfoDialog;
 class TargetSwitch;
 struct ModerationTag;
@@ -79,6 +80,8 @@ public:
 	void OpenSettings();
 	// The title, category and tags for Twitch and YouTube; one window, raised if already open.
 	void OpenStreamInfo();
+	// OBS's live (program) scene changed: a scene linked to a Twitch category sets it (while streaming).
+	void OnSceneChanged();
 	// OBS's monitoring device lost its Windows ID: selected again, or a notice when that isn't possible. At load,
 	// stream start and profile switches.
 	void CheckMonitoringDevice();
@@ -268,6 +271,7 @@ private:
 	QToolButton *settingsButton_;
 	QToolButton *streamInfoButton_;
 	QPointer<StreamInfoDialog> streamInfo_;
+	SceneCategorySwitcher *sceneCategory_;
 	std::string monitoringWarned_; // the device ID last warned about, so a stream start doesn't repeat it
 	QTextBrowser *view_;
 	QWidget *replyBar_;
