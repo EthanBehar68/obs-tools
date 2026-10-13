@@ -73,6 +73,8 @@ private:
 	// The item selected in OBS's Sources list into a kind's source (text: its text source); false, with a message,
 	// when nothing (or, for text, no Text source) is selected.
 	bool FillFromSelection(AlertKind kind, bool text);
+	// "Create group…": asks for a picture and a sound, builds the group, fills the page in (saved on OK).
+	void CreateGroup(AlertKind kind);
 	void UpdateStatus();
 
 	AlertsController *controller_;

@@ -18,6 +18,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include "alerts-dialog.hpp"
 #include "alerts-controller.hpp"
+#include "alert-template.hpp"
+#include "core/template-files.hpp"
 #include "scene-selection.hpp"
 #include "ui/accounts-dialog.hpp"
 
@@ -26,6 +28,9 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDialogButtonBox>
+#include <QDir>
+#include <QFileDialog>
+#include <QLineEdit>
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -203,6 +208,10 @@ QWidget *AlertsDialog::MakePage(AlertKind kind, const QStringList &sources, cons
 	page.source->setToolTip(Text("Alerts.SourceHint"));
 	form->addRow(Text("Alerts.Source"), WithUseSelected(page.source, "Alerts.UseSelectedHint", widget, useSource));
 	connect(useSource, &QPushButton::clicked, this, [this, kind]() { FillFromSelection(kind, false); });
+	auto create = new QPushButton(Text("Alerts.CreateGroup"), widget);
+	create->setToolTip(Text("Alerts.CreateGroupHint"));
+	connect(create, &QPushButton::clicked, this, [this, kind]() { CreateGroup(kind); });
+	form->addRow(QString(), create);
 
 	page.textSource = MakeSourceCombo(textSources, settings.textSource, widget);
 	page.textSource->setToolTip(Text("Alerts.TextSourceHint"));
@@ -387,6 +396,77 @@ bool AlertsDialog::FillFromSelection(AlertKind kind, bool text)
 	if (!selected->textInside.empty()) // a group with its own text: that's the one the alert writes into
 		page.textSource->setCurrentText(QString::fromStdString(selected->textInside));
 	return true;
+}
+
+// A path box with a Browse… button.
+static QLineEdit *AddFileRow(QFormLayout *form, const QString &label, const QString &filter, QWidget *parent)
+{
+	auto path = new QLineEdit(parent);
+	path->setPlaceholderText(Text("Alerts.TemplateNone"));
+	path->setClearButtonEnabled(true);
+	auto browse = new QPushButton(Text("Alerts.Browse"), parent);
+	QObject::connect(browse, &QPushButton::clicked, parent, [path, label, filter, parent]() {
+		const QString file = QFileDialog::getOpenFileName(parent, label, path->text(), filter);
+		if (!file.isEmpty())
+			path->setText(QDir::toNativeSeparators(file));
+	});
+	auto row = new QHBoxLayout();
+	row->addWidget(path, 1);
+	row->addWidget(browse);
+	form->addRow(label, row);
+	return path;
+}
+
+void AlertsDialog::CreateGroup(AlertKind kind)
+{
+	const std::string key = KindKey(kind);
+	QDialog ask(this);
+	ask.setWindowTitle(Text("Alerts.CreateGroup"));
+	ask.setMinimumWidth(480);
+	auto layout = new QVBoxLayout(&ask);
+	auto intro = new QLabel(Text("Alerts.TemplateIntro"), &ask);
+	intro->setWordWrap(true);
+	layout->addWidget(intro);
+	auto form = new QFormLayout();
+	QLineEdit *picture = AddFileRow(form, Text("Alerts.TemplatePicture"),
+					Text("Alerts.PictureFiles") + " (" + kPictureFilter + ")", &ask);
+	QLineEdit *sound = AddFileRow(form, Text("Alerts.TemplateSound"),
+				      Text("Alerts.SoundFiles") + " (" + kSoundFilter + ")", &ask);
+	auto everyScene = new QCheckBox(Text("Alerts.TemplateEveryScene"), &ask);
+	everyScene->setChecked(true);
+	form->addRow(QString(), everyScene);
+	layout->addLayout(form);
+	auto buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &ask);
+	buttons->button(QDialogButtonBox::Ok)->setText(Text("Alerts.TemplateCreate"));
+	connect(buttons, &QDialogButtonBox::accepted, &ask, &QDialog::accept);
+	connect(buttons, &QDialogButtonBox::rejected, &ask, &QDialog::reject);
+	layout->addWidget(buttons);
+	if (ask.exec() != QDialog::Accepted)
+		return;
+
+	Page &page = pages_[kind];
+	AlertTemplate alert;
+	alert.name = Text(("GroupName." + key).c_str()).toStdString();
+	alert.sampleText = controller_->SampleText(kind, ToStd(page.message->toPlainText()));
+	alert.picture = ToStd(picture->text());
+	alert.sound = ToStd(sound->text());
+	alert.everyScene = everyScene->isChecked();
+	const auto created = CreateAlertGroup(alert);
+	if (!created) {
+		QMessageBox::warning(this, Text("Alerts.CreateGroup"), Text("Alerts.TemplateFailed"));
+		return;
+	}
+	// The new names, so they're in the pickers next time too.
+	for (QComboBox *combo : {page.source, page.textSource}) {
+		const QString name = QString::fromStdString(combo == page.source ? created->group : created->text);
+		if (combo->findText(name) < 0)
+			combo->addItem(name);
+		combo->setCurrentText(name);
+	}
+	page.enabled->setChecked(true);
+	QMessageBox::information(
+		this, Text("Alerts.CreateGroup"),
+		Text("Alerts.TemplateDone").arg(QString::fromStdString(created->group)).arg(created->scenes));
 }
 
 void AlertsDialog::UseSelected(AlertKind kind)
