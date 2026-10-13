@@ -37,7 +37,7 @@ OBS has no plugin API for the Sources right-click menu, so instead:
 
 ## Later
 
-- Set the Twitch category on scene switch: one per scene, or guessed from a game capture's `.exe`.
+- Guessing the category from a game capture's `.exe`: not planned (Twitch has no lookup by executable; name matching is unreliable).
 
 ## Still unverified (keep open)
 
@@ -51,6 +51,8 @@ Built 2026-10-13 (sections 1 and 2 above), not yet tried in OBS:
 9. Display (Settings → General): text size up and down with chat on screen (text, icons, badges, emotes resize; moderation strikes still right), timestamps on/off/12h on existing lines and new ones (also after a bot merge and your own Twitch line's update), compact on and off (header icons, dimmed when offline, viewer counts).
 
 10. Stream Alerts Create group…: with a picture and a sound, with neither, and with a video; the group lands hidden in every scene (Studio Mode: built in the preview scene), Test alert plays it with sound you hear, OK keeps it assigned; a second Create gives "… 2".
+
+11. Category by scene: link two scenes (Use for scene ▾), tick the switch, go live: a linked scene sets its category after 10 s (dock notice), a quick hop to BRB and back changes nothing, an unlinked scene leaves it, Studio Mode preview doesn't count, a scene rename keeps its link.
 
 From 2026-10-12:
 
