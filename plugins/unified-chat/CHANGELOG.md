@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Display
+- **Settings → General → Display:** **Text size** (80 to 200% of OBS's font; icons, badges and emotes grow with it), **Timestamps** (24-hour or 12-hour, on every line: chat, notices and alerts) and **Compact** (emotes at 1.2× text height instead of 1.5×, a header of icons with viewer counts, tighter margins; nothing is hidden). All three also change the lines already in the dock.
+
 ### Audio monitoring repair
 - **Alerts silent for you but not the stream?** When Windows gives your headset a new device ID (another USB port, a driver update), OBS keeps asking for the old one and monitored sound stops playing to you (`Failed to get device: 80070490` in the log). Unified Chat now notices at load, at stream start and on a profile switch, selects the same-named device again and saves it, with a notice in the dock. If the device isn't connected, the dock says so once.
 

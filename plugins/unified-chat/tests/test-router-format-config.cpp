@@ -360,3 +360,34 @@ TEST_CASE("Config falls back to defaults for damaged input")
 	CHECK(wrongTypes.maxMessages == 500);
 	CHECK(wrongTypes.sendTarget == SendTarget::Twitch);
 }
+
+TEST_CASE("Timestamps: 24-hour and 12-hour clocks")
+{
+	CHECK(FormatClock(14, 5, TimestampStyle::Hours24) == "14:05");
+	CHECK(FormatClock(9, 30, TimestampStyle::Hours24) == "09:30");
+	CHECK(FormatClock(0, 0, TimestampStyle::Hours24) == "00:00");
+	CHECK(FormatClock(14, 5, TimestampStyle::Hours12) == "2:05");
+	CHECK(FormatClock(0, 7, TimestampStyle::Hours12) == "12:07");
+	CHECK(FormatClock(12, 59, TimestampStyle::Hours12) == "12:59");
+	CHECK(FormatClock(14, 5, TimestampStyle::Off).empty());
+}
+
+TEST_CASE("Display settings round trip; text size snaps to 10% steps within 80-200")
+{
+	ChatConfig config;
+	CHECK(config.textSizePercent == 100);
+	CHECK(config.timestamps == TimestampStyle::Off);
+	CHECK_FALSE(config.compact);
+	config.textSizePercent = 130;
+	config.timestamps = TimestampStyle::Hours12;
+	config.compact = true;
+	const ChatConfig back = ParseConfig(SerializeConfig(config));
+	CHECK(back.textSizePercent == 130);
+	CHECK(back.timestamps == TimestampStyle::Hours12);
+	CHECK(back.compact);
+
+	CHECK(ParseConfig(R"({"display":{"text_size_percent":500}})").textSizePercent == 200);
+	CHECK(ParseConfig(R"({"display":{"text_size_percent":10}})").textSizePercent == 80);
+	CHECK(ParseConfig(R"({"display":{"text_size_percent":123}})").textSizePercent == 120);
+	CHECK(ParseConfig(R"({"display":{"timestamps":"bogus"}})").timestamps == TimestampStyle::Off);
+}

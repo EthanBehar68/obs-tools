@@ -33,6 +33,14 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 namespace unified_chat {
 
+enum class TimestampStyle { Off, Hours24, Hours12 };
+
+// Display: text size, timestamps, compact.
+constexpr int kMinTextSizePercent = 80;
+constexpr int kMaxTextSizePercent = 200;
+constexpr double kEmoteScale = 1.5;        // emote height / text height
+constexpr double kCompactEmoteScale = 1.2; // compact: smaller, still pictures
+
 struct ChatConfig {
 	// Sign-ins and client IDs are shared by all plugins (core/accounts.hpp), not stored here.
 	std::string twitchChannel;
@@ -55,6 +63,11 @@ struct ChatConfig {
 	bool showAlerts = true;
 	// How each kind of highlighted line looks, and whether it's shown.
 	Highlights highlights;
+	// Percent of OBS's font size, in steps of 10; applies to the text and every icon, badge and emote.
+	int textSizePercent = 100;
+	TimestampStyle timestamps = TimestampStyle::Off; // before every line
+	// Smaller emotes, a header of icons, tighter margins. Nothing is hidden.
+	bool compact = false;
 	// The stream info window: which platforms Apply changes, and recently used Twitch categories with their tags.
 	bool streamInfoTwitch = true;
 	bool streamInfoYouTube = true;

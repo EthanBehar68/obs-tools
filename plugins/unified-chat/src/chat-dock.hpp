@@ -50,6 +50,8 @@ class QLineEdit;
 class QListWidget;
 class QPoint;
 class QTextBlock;
+class QTextCursor;
+class QVBoxLayout;
 class QTextBrowser;
 class QTimer;
 class QToolButton;
@@ -134,6 +136,13 @@ private:
 	void AppendEvent(const ChatEvent &event);
 	// The chat background, re-read after a theme change, and every highlight colour derived from it.
 	void RefreshTheme();
+	// Text size, timestamps and compact, applied to the lines already shown as well as new ones.
+	void ApplyDisplay();
+	void ResizeImages(QTextCursor &cursor, int iconSize, int emoteHeight);
+	void RewriteTimestamps(QTextCursor &cursor, TimestampStyle style);
+	void InsertTimestamp(QTextCursor &cursor, int64_t unixSeconds);
+	QString ClockText(int64_t unixSeconds); // cached for the minute
+	static int TimestampLength(const QTextBlock &block);
 	void UpdateHighlightStyles();
 	void LoadChatters();
 	void SaveChatters();
@@ -232,6 +241,11 @@ private:
 	std::string assetChannelId_;
 	bool globalAssetsRequested_ = false;
 	int emoteHeight_ = 24;
+	TimestampStyle shownTimestamps_ = TimestampStyle::Off; // what the lines in the view have
+	TimestampStyle clockStyle_ = TimestampStyle::Off;
+	int64_t clockMinute_ = -1;
+	QString clockText_;
+	QVBoxLayout *layout_;
 	bool hiDpi_ = false;
 
 	std::unordered_set<std::string>
