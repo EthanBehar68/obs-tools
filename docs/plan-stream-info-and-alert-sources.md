@@ -49,7 +49,7 @@ Built 2026-10-13 (sections 1 and 2 above), not yet tried in OBS:
 
 From 2026-10-12:
 
-1. Twitch re-sign-in, then EventSub chat: sending, your own echo, `/me`, refused messages, badges.
+1. Twitch re-sign-in, then EventSub chat: sending, your own echo, `/me`, refused messages, role badges. (Verified 2026-10-13: the Watching without audio badge shows.)
 2. Highlights: alert lines, Settings → Highlights, first-time chatters ✨.
 3. Stream Alerts: every new kind's Test button, priority order, minimums, placeholder checks.
 4. YouTube: Super Chat and membership lines and alerts; Jewels needs a real gift (check the logged raw figures).
