@@ -153,6 +153,7 @@ Every plugin log line starts with `[obs-unified-chat]`. Check **Help → Log Fil
 |---------|-----|
 | No **Unified Chat** entry under Docks | Look in the log for `compiled with newer libobs`: update OBS to 32.2 or newer. Otherwise check the DLL path from step 1. |
 | `Twitch: no channel configured` | Enter a channel in Settings. |
+| `Audio monitoring: … isn't connected` / alerts play on stream but you don't hear them | The monitoring device in **Settings → Audio → Advanced** isn't present. Plug it in, or pick another and Apply. When only its Windows ID changed, the dock fixes it by itself and says so. |
 | `Twitch: sign in to Twitch again … to move chat to EventSub` | Sign in to Twitch once more in **Tools → OBS Tools → Accounts…**. Chat works over IRC meanwhile. |
 | `Twitch: message not sent (…)` | Twitch's reason follows, e.g. a duplicate message or a chat mode such as followers-only. |
 | `Twitch: login rejected` / `sign-in expired` | Sign in again in **Tools → OBS Tools → Accounts…**. Chat keeps working read-only in the meantime. |

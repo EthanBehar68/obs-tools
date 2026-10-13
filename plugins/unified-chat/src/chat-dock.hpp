@@ -77,6 +77,9 @@ public:
 	void OpenSettings();
 	// The title, category and tags for Twitch and YouTube; one window, raised if already open.
 	void OpenStreamInfo();
+	// OBS's monitoring device lost its Windows ID: selected again, or a notice when that isn't possible. At load,
+	// stream start and profile switches.
+	void CheckMonitoringDevice();
 	// A new follower or subscriber from Stream Alerts.
 	void OnAlert(bool follow, const std::string &name, bool test);
 
@@ -251,6 +254,7 @@ private:
 	QToolButton *settingsButton_;
 	QToolButton *streamInfoButton_;
 	QPointer<StreamInfoDialog> streamInfo_;
+	std::string monitoringWarned_; // the device ID last warned about, so a stream start doesn't repeat it
 	QTextBrowser *view_;
 	QWidget *replyBar_;
 	QLabel *replyLabel_;

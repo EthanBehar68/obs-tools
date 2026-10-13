@@ -26,6 +26,8 @@ target_sources(
     src/core/mentions.hpp
     src/core/moderation.cpp
     src/core/moderation.hpp
+    src/core/monitoring-device.cpp
+    src/core/monitoring-device.hpp
     src/core/name-color.cpp
     src/core/name-color.hpp
     src/core/obs-tools.hpp
@@ -80,6 +82,8 @@ target_sources(
     src/net/youtube-connection.hpp
     src/platform-icons.cpp
     src/platform-icons.hpp
+    src/monitoring-repair.cpp
+    src/monitoring-repair.hpp
     src/plugin-main.cpp
     src/settings-dialog.cpp
     src/settings-dialog.hpp
@@ -110,6 +114,7 @@ if(ENABLE_TESTS)
       tests/test-highlights.cpp
       tests/test-mentions.cpp
       tests/test-moderation.cpp
+      tests/test-monitoring-device.cpp
       tests/test-name-color.cpp
       tests/test-router-format-config.cpp
       tests/test-stream-info.cpp
