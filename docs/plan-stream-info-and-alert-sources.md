@@ -49,6 +49,8 @@ Built 2026-10-13 (sections 1 and 2 above), not yet tried in OBS:
 
 8. Monitoring repair: change one character of `MonitoringDeviceId` in the profile's `basic.ini` (OBS closed), start OBS: a dock notice, and alerts play in the headphones again.
 
+9. Display (Settings → General): text size up and down with chat on screen (text, icons, badges, emotes resize; moderation strikes still right), timestamps on/off/12h on existing lines and new ones (also after a bot merge and your own Twitch line's update), compact on and off (header icons, dimmed when offline, viewer counts).
+
 From 2026-10-12:
 
 1. Twitch re-sign-in, then EventSub chat: sending, your own echo, `/me`, refused messages, role badges. (Verified 2026-10-13: the Watching without audio badge shows.)
