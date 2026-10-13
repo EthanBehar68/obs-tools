@@ -18,6 +18,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include "alerts-dialog.hpp"
 #include "alerts-controller.hpp"
+#include "scene-selection.hpp"
 #include "ui/accounts-dialog.hpp"
 
 #include <obs-module.h>
@@ -38,7 +39,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QTimer>
 #include <QVBoxLayout>
 
-#include <cstring>
+#include <algorithm>
 
 namespace stream_alerts {
 
@@ -64,8 +65,7 @@ static bool AddSource(void *param, obs_source_t *source)
 	if (!name || !*name)
 		return true;
 	names->all.append(QString::fromUtf8(name));
-	const char *id = obs_source_get_unversioned_id(source);
-	if (id && std::strncmp(id, "text_", 5) == 0)
+	if (IsTextSource(source))
 		names->text.append(QString::fromUtf8(name));
 	return true;
 }
@@ -100,6 +100,17 @@ static QComboBox *MakeSourceCombo(const QStringList &names, const std::string &c
 	combo->addItems(names);
 	combo->setCurrentText(QString::fromStdString(current));
 	return combo;
+}
+
+// The combo with a "Use selected" button after it, which takes the item selected in OBS's Sources list.
+static QHBoxLayout *WithUseSelected(QComboBox *combo, const char *hintKey, QWidget *parent, QPushButton *&button)
+{
+	auto row = new QHBoxLayout();
+	row->addWidget(combo, 1);
+	button = new QPushButton(Text("Alerts.UseSelected"), parent);
+	button->setToolTip(Text(hintKey));
+	row->addWidget(button);
+	return row;
 }
 
 AlertsDialog::AlertsDialog(AlertsController *controller, QWidget *parent)
@@ -186,13 +197,18 @@ QWidget *AlertsDialog::MakePage(AlertKind kind, const QStringList &sources, cons
 	page.enabled->setChecked(settings.enabled);
 	form->addRow(QString(), page.enabled);
 
+	QPushButton *useSource = nullptr;
+	QPushButton *useText = nullptr;
 	page.source = MakeSourceCombo(sources, settings.source, widget);
 	page.source->setToolTip(Text("Alerts.SourceHint"));
-	form->addRow(Text("Alerts.Source"), page.source);
+	form->addRow(Text("Alerts.Source"), WithUseSelected(page.source, "Alerts.UseSelectedHint", widget, useSource));
+	connect(useSource, &QPushButton::clicked, this, [this, kind]() { FillFromSelection(kind, false); });
 
 	page.textSource = MakeSourceCombo(textSources, settings.textSource, widget);
 	page.textSource->setToolTip(Text("Alerts.TextSourceHint"));
-	form->addRow(Text("Alerts.TextSource"), page.textSource);
+	form->addRow(Text("Alerts.TextSource"),
+		     WithUseSelected(page.textSource, "Alerts.UseSelectedTextHint", widget, useText));
+	connect(useText, &QPushButton::clicked, this, [this, kind]() { FillFromSelection(kind, true); });
 
 	page.message = MakeMessageEdit(settings.message, widget);
 	form->addRow(Text("Alerts.Message"), page.message);
@@ -348,6 +364,37 @@ bool AlertsDialog::CheckMessages(const AlertKind *only)
 		return false;
 	}
 	return true;
+}
+
+bool AlertsDialog::FillFromSelection(AlertKind kind, bool text)
+{
+	const auto selected = GetSelectedSource();
+	if (!selected) {
+		QMessageBox::information(this, Text("Alerts.UseSelected"), Text("Alerts.NothingSelected"));
+		return false;
+	}
+	Page &page = pages_[kind];
+	const QString name = QString::fromStdString(selected->name);
+	if (text) {
+		if (!selected->isText) {
+			QMessageBox::information(this, Text("Alerts.UseSelected"), Text("Alerts.NotText").arg(name));
+			return false;
+		}
+		page.textSource->setCurrentText(name);
+		return true;
+	}
+	page.source->setCurrentText(name);
+	if (!selected->textInside.empty()) // a group with its own text: that's the one the alert writes into
+		page.textSource->setCurrentText(QString::fromStdString(selected->textInside));
+	return true;
+}
+
+void AlertsDialog::UseSelected(AlertKind kind)
+{
+	const auto row = std::find(std::begin(kAllKinds), std::end(kAllKinds), kind) - std::begin(kAllKinds);
+	kinds_->setCurrentRow((int)row);
+	if (FillFromSelection(kind, false))
+		pages_[kind].enabled->setChecked(true);
 }
 
 void AlertsDialog::UpdateStatus()

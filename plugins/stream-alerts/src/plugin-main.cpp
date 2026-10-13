@@ -24,6 +24,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <plugin-support.h>
 
 #include <QMainWindow>
+#include <QMenu>
 #include <QPointer>
 
 OBS_DECLARE_MODULE()
@@ -66,6 +67,16 @@ bool obs_module_load(void)
 		if (s_controller)
 			s_controller->OpenSettings(mainwin);
 	});
+	// OBS has no API for adding to the Sources list's right-click menu, so this is the nearest thing.
+	QMenu *assign = obs_tools::ObsToolsMenu()->addMenu(QString::fromUtf8(obs_module_text("Tools.AssignSelected")));
+	for (stream_alerts::AlertKind kind : stream_alerts::kAllKinds) {
+		const std::string key = std::string("Kind.") + stream_alerts::KindKey(kind);
+		QObject::connect(assign->addAction(QString::fromUtf8(obs_module_text(key.c_str()))),
+				 &QAction::triggered, assign, [mainwin, kind]() {
+					 if (s_controller)
+						 s_controller->AssignSelected(kind, mainwin);
+				 });
+	}
 	obs_tools::SetAccountsChangedHandler([](bool twitch, bool google) {
 		if (s_controller)
 			s_controller->OnAccountsChanged(twitch, google);

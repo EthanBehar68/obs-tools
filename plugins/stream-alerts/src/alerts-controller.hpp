@@ -23,6 +23,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "net/listeners.hpp"
 
 #include <QObject>
+#include <QPointer>
 #include <QString>
 
 #include <memory>
@@ -31,6 +32,8 @@ class QTimer;
 class QWidget;
 
 namespace stream_alerts {
+
+class AlertsDialog;
 
 // Runs on the UI thread. Listens for Twitch and YouTube events while OBS streams, and plays alerts one at a time by
 // writing the message into the text source and showing the alert source for the configured time.
@@ -49,7 +52,11 @@ public:
 	void OnAccountsChanged(bool twitch, bool google);
 	// A Super Chat or membership from Unified Chat's YouTube chat (core/youtube-events JSON).
 	void OnYouTubeEvent(const std::string &eventJson);
+	// One settings window at a time; opening it again brings it to the front.
 	void OpenSettings(QWidget *parent);
+	// Tools > OBS Tools > Assign selected source to alert: the settings window, showing the kind with the source
+	// selected in OBS's Sources list filled in.
+	void AssignSelected(AlertKind kind, QWidget *parent);
 
 	const AlertsConfig &Config() const { return config_; }
 	// save = false: the settings window trying values out (Test), undone on Cancel.
@@ -78,6 +85,7 @@ private:
 	QString twitchStatus_;
 	QString subscriberStatus_;
 	QTimer *timer_;
+	QPointer<AlertsDialog> dialog_;
 	Phase phase_ = Phase::Idle;
 	std::string shownSource_;
 	bool started_ = false;
