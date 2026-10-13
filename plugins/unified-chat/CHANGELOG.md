@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Audio monitoring repair
+- **Alerts silent for you but not the stream?** When Windows gives your headset a new device ID (another USB port, a driver update), OBS keeps asking for the old one and monitored sound stops playing to you (`Failed to get device: 80070490` in the log). Unified Chat now notices at load, at stream start and on a profile switch, selects the same-named device again and saves it, with a notice in the dock. If the device isn't connected, the dock says so once.
+
 ### Stream info
 - **Set the title, category and tags from OBS:** ✎ on the dock or **Tools → OBS Tools → Stream Info…**. One title for Twitch and YouTube; the Twitch category is searched as you type, with box art; Twitch tags; the YouTube category. Your recent Twitch categories are one click away and bring back their tags.
 - YouTube changes your live broadcast, or the next upcoming one, so it can be set before going live (51 quota units per change). YouTube's API can't set the specific game.

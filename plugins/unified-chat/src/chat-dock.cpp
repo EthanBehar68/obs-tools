@@ -19,6 +19,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "chat-dock.hpp"
 #include "platform-icons.hpp"
 #include "net/secret-store.hpp"
+#include "monitoring-repair.hpp"
 #include "settings-dialog.hpp"
 #include "stream-info-dialog.hpp"
 #include "target-switch.hpp"
@@ -504,6 +505,31 @@ void ChatDock::OpenSettings()
 		if (youtube_)
 			historyCutoff_ = (int64_t)std::time(nullptr);
 		Connect();
+	}
+}
+
+void ChatDock::CheckMonitoringDevice()
+{
+	AudioDevice current;
+	const MonitoringRepair repair = RepairMonitoringDevice(current);
+	const QString name = QString::fromStdString(current.name);
+	switch (repair.check) {
+	case MonitoringCheck::Fine:
+		monitoringWarned_.clear();
+		return;
+	case MonitoringCheck::Reselect:
+		monitoringWarned_.clear();
+		AppendNotice(Text("Notice.MonitoringRepaired").arg(name));
+		return;
+	case MonitoringCheck::Missing:
+	case MonitoringCheck::Ambiguous:
+		if (monitoringWarned_ == current.id)
+			return;
+		monitoringWarned_ = current.id;
+		AppendNotice(Text(repair.check == MonitoringCheck::Missing ? "Notice.MonitoringMissing"
+									   : "Notice.MonitoringAmbiguous")
+				     .arg(name));
+		return;
 	}
 }
 

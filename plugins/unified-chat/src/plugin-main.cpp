@@ -38,12 +38,16 @@ static void OnFrontendEvent(enum obs_frontend_event event, void *private_data)
 	if (event == OBS_FRONTEND_EVENT_FINISHED_LOADING) {
 		obs_tools::CheckObsToolsPlugins();
 		dock->Start();
+		dock->CheckMonitoringDevice();
 	} else if (event == OBS_FRONTEND_EVENT_EXIT)
 		dock->Shutdown();
-	else if (event == OBS_FRONTEND_EVENT_STREAMING_STARTED)
+	else if (event == OBS_FRONTEND_EVENT_STREAMING_STARTED) {
 		dock->OnStreamingChanged(true);
-	else if (event == OBS_FRONTEND_EVENT_STREAMING_STOPPED)
+		dock->CheckMonitoringDevice(); // the headset may have been replugged since OBS started
+	} else if (event == OBS_FRONTEND_EVENT_STREAMING_STOPPED)
 		dock->OnStreamingChanged(false);
+	else if (event == OBS_FRONTEND_EVENT_PROFILE_CHANGED)
+		dock->CheckMonitoringDevice(); // each profile has its own monitoring device
 }
 
 static unified_chat::ChatDock *s_dock = nullptr;
