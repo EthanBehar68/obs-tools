@@ -74,7 +74,7 @@ Each library and plugin keeps its unit tests in its own `tests\` folder. They us
 | Twitch IRC parsing, tag unescaping, login/PING/RECONNECT state machine, `/me`, CRLF injection | `test-twitch-irc.cpp` |
 | Twitch EventSub chat events (messages, emote fragments, replies, deletions, clears, bans), chat subscriptions, Send Chat Message, echo updates | `test-twitch-eventsub.cpp` |
 | YouTube response parsing, video URL parsing, dedupe, and the full `ChatSession` against a scripted fake HTTP server (broadcast discovery, paging, token refresh, 401 retry, quota backoff, chat end, send + echo) | `test-youtube.cpp` |
-| Send routing (targets, length limits, partial delivery), HTML escaping of chat lines and event lines, config round trip, 1.2.0 sign-in migration | `test-router-format-config.cpp` |
+| Send routing (targets, length limits, partial delivery), HTML escaping of chat lines and event lines, timestamps, config round trip (display settings too), 1.2.0 sign-in migration | `test-router-format-config.cpp` |
 | Monitoring device: present / default / new ID for the same name / missing / ambiguous | `test-monitoring-device.cpp` |
 | Highlight defaults, readable styles for any colour, emoji limits, event lines, the chatter list | `test-highlights.cpp` |
 | Stream info: Helix channel / category search parsing, box art sizes, Modify Channel bodies, tag rules, recent categories, YouTube broadcast choice and videos.update snippet, config round trip | `test-stream-info.cpp` |

@@ -20,6 +20,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include "obs-tools.hpp"
 
+#include "chat-config.hpp"
 #include "chat-message.hpp"
 #include "highlights.hpp"
 
@@ -51,6 +52,9 @@ std::string FormatMessageHtml(const ChatMessage &message, int iconSize, const st
 			      NameColorResolver *colors = nullptr, const EmoteIndex *emotes = nullptr,
 			      int emoteHeight = 0, int *renderedTextLength = nullptr, std::string_view nameIcon = {});
 std::string FormatNoticeHtml(std::string_view text);
+// A line's time, "14:05" or "2:05" (Off: empty). Timestamps are plain text in the dock, coloured like notices.
+std::string FormatClock(int hour, int minute, TimestampStyle style);
+constexpr const char *kTimestampColor = "#9a9a9a";
 // An alert line (follow, sub, cheer, Super Chat...): the platform icon, the emoji, what happened in bold, then the
 // viewer's comment in the same colour. textColor comes from ComputeHighlightStyle. renderedTextLength receives the
 // comment's length (UTF-16 units), which ends the block, for moderation strikes.

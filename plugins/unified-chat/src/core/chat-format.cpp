@@ -143,7 +143,18 @@ std::string ModerationNotice(const ModerationEvent &event, std::string_view name
 
 std::string FormatNoticeHtml(std::string_view text)
 {
-	return "<span style=\"color: #9a9a9a; font-style: italic;\">" + HtmlEscape(text) + "</span>";
+	return "<span style=\"color: " + std::string(kTimestampColor) + "; font-style: italic;\">" + HtmlEscape(text) +
+	       "</span>";
+}
+
+std::string FormatClock(int hour, int minute, TimestampStyle style)
+{
+	if (style == TimestampStyle::Off)
+		return {};
+	if (style == TimestampStyle::Hours12)
+		hour = hour % 12 == 0 ? 12 : hour % 12;
+	const std::string mm = (minute < 10 ? "0" : "") + std::to_string(minute);
+	return (style == TimestampStyle::Hours24 && hour < 10 ? "0" : "") + std::to_string(hour) + ":" + mm;
 }
 
 std::string FormatEventHtml(const ChatEvent &event, std::string_view icon, std::string_view textColor, int iconSize,

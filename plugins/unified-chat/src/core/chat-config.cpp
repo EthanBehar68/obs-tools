@@ -162,6 +162,12 @@ std::string SerializeConfig(const ChatConfig &config)
 		{"show_alerts", config.showAlerts},
 		{"highlights", HighlightsToJson(config.highlights)},
 		{"stream_info", StreamInfoToJson(config)},
+		{"display",
+		 {{"text_size_percent", config.textSizePercent},
+		  {"timestamps", config.timestamps == TimestampStyle::Hours24   ? "24h"
+				 : config.timestamps == TimestampStyle::Hours12 ? "12h"
+										: "off"},
+		  {"compact", config.compact}}},
 	};
 	return obj.dump(4);
 }
@@ -204,6 +210,15 @@ ChatConfig ParseConfig(const std::string &text, Accounts *legacy, const SecretCo
 
 	if (auto highlights = obj.find("highlights"); highlights != obj.end() && highlights->is_object())
 		HighlightsFromJson(*highlights, config.highlights);
+	if (auto display = obj.find("display"); display != obj.end() && display->is_object()) {
+		const int percent = Get<int>(*display, "text_size_percent", 100);
+		config.textSizePercent = std::clamp((percent + 5) / 10 * 10, kMinTextSizePercent, kMaxTextSizePercent);
+		const std::string timestamps = Get<std::string>(*display, "timestamps", "off");
+		config.timestamps = timestamps == "24h"   ? TimestampStyle::Hours24
+				    : timestamps == "12h" ? TimestampStyle::Hours12
+							  : TimestampStyle::Off;
+		config.compact = Get<bool>(*display, "compact", false);
+	}
 	if (auto streamInfo = obj.find("stream_info"); streamInfo != obj.end() && streamInfo->is_object())
 		StreamInfoFromJson(*streamInfo, config);
 	auto showAlerts = obj.find("show_alerts");

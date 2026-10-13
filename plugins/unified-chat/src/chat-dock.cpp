@@ -48,6 +48,9 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QMessageBox>
 #include <QScrollBar>
 #include <QTextBlock>
+#include <QTextFragment>
+#include <QTextImageFormat>
+#include <QFontMetrics>
 #include <QTextBlockFormat>
 #include <QTextBlockUserData>
 #include <QTextCharFormat>
@@ -61,6 +64,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QWindow>
 
 #include <algorithm>
+#include <cmath>
 #include <ctime>
 #include <iterator>
 #include <limits>
@@ -75,6 +79,10 @@ struct ChatDock::LineData : QTextBlockUserData {
 // Allowance for clock differences between this PC and YouTube when deciding what counts as chat history.
 static constexpr int64_t kHistoryGraceSeconds = 30;
 static constexpr size_t kMaxSuggestions = 8;
+// Every line's time (unix seconds) is kept in its block format, so timestamps can be added to it later; the
+// timestamp text is marked so it can be found and removed again.
+static constexpr int kLineTimeProperty = QTextFormat::UserProperty + 1;
+static constexpr int kTimestampProperty = QTextFormat::UserProperty + 2;
 
 static QString Text(const char *key)
 {
@@ -110,7 +118,7 @@ ChatDock::ChatDock(QWidget *parent) : QWidget(parent)
 {
 	setWindowTitle(Text("Title"));
 
-	auto layout = new QVBoxLayout(this);
+	auto layout = layout_ = new QVBoxLayout(this);
 	layout->setContentsMargins(4, 4, 4, 4);
 	layout->setSpacing(4);
 
@@ -165,7 +173,7 @@ ChatDock::ChatDock(QWidget *parent) : QWidget(parent)
 	layout->addLayout(footer);
 
 	iconSize_ = qMax(14, fontMetrics().height());
-	emoteHeight_ = qRound(iconSize_ * 1.5); // a little larger than text, as chosen
+	emoteHeight_ = qRound(iconSize_ * kEmoteScale); // a little larger than text, as chosen
 	hiDpi_ = devicePixelRatioF() > 1.25;
 	assets_ = std::make_unique<AssetLoader>();
 
@@ -301,6 +309,7 @@ void ChatDock::LoadConfig()
 	botMerger_.SetBots(config_.mergeBots);
 	UpdateMentionNames();
 	UpdatePlaceholder();
+	ApplyDisplay();
 
 	if (report.unreadableSecrets || legacyReport.unreadableSecrets) {
 		obs_log(LOG_WARNING,
@@ -495,6 +504,7 @@ void ChatDock::OpenSettings()
 	result.streamInfoYouTube = config_.streamInfoYouTube;
 	result.recentCategories = config_.recentCategories;
 	config_ = std::move(result);
+	ApplyDisplay();
 	UpdateHighlightStyles();
 	view_->document()->setMaximumBlockCount(config_.maxMessages);
 	botMerger_.SetBots(config_.mergeBots);
@@ -506,6 +516,138 @@ void ChatDock::OpenSettings()
 			historyCutoff_ = (int64_t)std::time(nullptr);
 		Connect();
 	}
+}
+
+void ChatDock::ApplyDisplay()
+{
+	// The dock's own font is OBS's; the view gets it at the chosen size.
+	QFont textFont = font();
+	const double scale = config_.textSizePercent / 100.0;
+	if (textFont.pointSizeF() > 0)
+		textFont.setPointSizeF(textFont.pointSizeF() * scale);
+	else
+		textFont.setPixelSize(qMax(1, qRound(textFont.pixelSize() * scale)));
+	const int iconSize = qMax(14, QFontMetrics(textFont).height());
+	const int emoteHeight = qRound(iconSize * (config_.compact ? kCompactEmoteScale : kEmoteScale));
+	hiDpi_ = devicePixelRatioF() * scale > 1.25; // the 2x emote images from here on
+
+	QScrollBar *bar = view_->verticalScrollBar();
+	const bool atBottom = bar->value() >= bar->maximum() - 4;
+	view_->setFont(textFont);
+	view_->document()->setDefaultFont(textFont);
+	// One pass over the lines shown, laid out once at the end.
+	QTextCursor cursor(view_->document());
+	cursor.beginEditBlock();
+	if (iconSize != iconSize_ || emoteHeight != emoteHeight_)
+		ResizeImages(cursor, iconSize, emoteHeight);
+	if (config_.timestamps != shownTimestamps_)
+		RewriteTimestamps(cursor, config_.timestamps);
+	cursor.endEditBlock();
+	if (iconSize != iconSize_) {
+		iconSize_ = iconSize;
+		RegisterIcons(); // drawn at the new size, so they stay sharp
+		suggestions_->setIconSize(QSize(iconSize_, iconSize_));
+	}
+	emoteHeight_ = emoteHeight;
+
+	const bool compact = config_.compact;
+	const int margin = compact ? 1 : 4;
+	layout_->setContentsMargins(margin, margin, margin, margin);
+	layout_->setSpacing(compact ? 2 : 4);
+	view_->document()->setDocumentMargin(compact ? 1 : 4);
+	clearButton_->setText(Text(compact ? "Btn.ClearIcon" : "Btn.Clear"));
+	clearButton_->setToolTip(compact ? Text("Btn.Clear") : QString());
+	settingsButton_->setText(Text(compact ? "Btn.SettingsIcon" : "Btn.Settings"));
+	settingsButton_->setToolTip(compact ? Text("Btn.Settings") : QString());
+	UpdateStatusButtons();
+	if (atBottom)
+		bar->setValue(bar->maximum());
+}
+
+void ChatDock::ResizeImages(QTextCursor &cursor, int iconSize, int emoteHeight)
+{
+	// Collected first: changing a fragment's format can merge it with its neighbours.
+	struct Image {
+		int position;
+		QTextImageFormat format;
+	};
+	std::vector<Image> images;
+	for (QTextBlock block = view_->document()->begin(); block.isValid(); block = block.next()) {
+		for (auto it = block.begin(); !it.atEnd(); ++it) {
+			const QTextFragment fragment = it.fragment();
+			if (fragment.isValid() && fragment.charFormat().isImageFormat()) {
+				for (int i = 0; i < fragment.length(); ++i) // each image is one character
+					images.push_back(
+						{fragment.position() + i, fragment.charFormat().toImageFormat()});
+			}
+		}
+	}
+	for (auto &[position, format] : images) {
+		const bool emote = format.name().startsWith(QLatin1String("unified-chat://emote/"));
+		const double ratio = emote ? (double)emoteHeight / emoteHeight_ : (double)iconSize / iconSize_;
+		format.setWidth(qMax(1.0, std::round(format.width() * ratio)));
+		format.setHeight(qMax(1.0, std::round(format.height() * ratio)));
+		cursor.setPosition(position);
+		cursor.setPosition(position + 1, QTextCursor::KeepAnchor);
+		cursor.setCharFormat(format);
+	}
+}
+
+void ChatDock::RewriteTimestamps(QTextCursor &cursor, TimestampStyle style)
+{
+	shownTimestamps_ = style;
+	std::vector<QTextBlock> blocks; // valid across the edits below, unlike positions
+	for (QTextBlock block = view_->document()->begin(); block.isValid(); block = block.next())
+		blocks.push_back(block);
+	for (const QTextBlock &block : blocks) {
+		const int64_t time = block.blockFormat().property(kLineTimeProperty).toLongLong();
+		if (time == 0)
+			continue; // the empty first block of a cleared view
+		cursor.setPosition(block.position());
+		if (const int length = TimestampLength(block); length > 0) {
+			cursor.setPosition(block.position() + length, QTextCursor::KeepAnchor);
+			cursor.removeSelectedText();
+		}
+		if (style != TimestampStyle::Off)
+			InsertTimestamp(cursor, time);
+	}
+}
+
+void ChatDock::InsertTimestamp(QTextCursor &cursor, int64_t unixSeconds)
+{
+	QTextCharFormat format;
+	format.setForeground(QColor(QString::fromUtf8(kTimestampColor)));
+	format.setProperty(kTimestampProperty, true);
+	cursor.insertText(ClockText(unixSeconds) + QLatin1Char(' '), format);
+	cursor.setCharFormat(QTextCharFormat()); // the line itself doesn't continue in the timestamp's colour
+}
+
+QString ChatDock::ClockText(int64_t unixSeconds)
+{
+	const int64_t minute = unixSeconds / 60;
+	if (minute != clockMinute_ || config_.timestamps != clockStyle_) {
+		const time_t time = (time_t)unixSeconds;
+		std::tm local = {};
+#ifdef _WIN32
+		localtime_s(&local, &time);
+#else
+		localtime_r(&time, &local);
+#endif
+		clockText_ = QString::fromStdString(FormatClock(local.tm_hour, local.tm_min, config_.timestamps));
+		clockMinute_ = minute;
+		clockStyle_ = config_.timestamps;
+	}
+	return clockText_;
+}
+
+int ChatDock::TimestampLength(const QTextBlock &block)
+{
+	const auto first = block.begin();
+	if (first.atEnd())
+		return 0;
+	const QTextFragment fragment = first.fragment();
+	return fragment.isValid() && fragment.charFormat().property(kTimestampProperty).toBool() ? fragment.length()
+												 : 0;
 }
 
 void ChatDock::CheckMonitoringDevice()
@@ -601,6 +743,7 @@ void ChatDock::AppendHtml(const std::vector<HtmlLine> &lines)
 	const bool atBottom = bar->value() >= bar->maximum() - 4;
 
 	// The document relayouts the changed range and trims to the maximum block count once, at endEditBlock.
+	const int64_t now = (int64_t)std::time(nullptr);
 	QTextCursor cursor(view_->document());
 	cursor.movePosition(QTextCursor::End);
 	cursor.beginEditBlock();
@@ -611,7 +754,10 @@ void ChatDock::AppendHtml(const std::vector<HtmlLine> &lines)
 		QTextBlockFormat format;
 		if (line.background.isValid())
 			format.setBackground(line.background);
+		format.setProperty(kLineTimeProperty, (qlonglong)now); // when it arrived
 		cursor.setBlockFormat(format);
+		if (config_.timestamps != TimestampStyle::Off)
+			InsertTimestamp(cursor, now);
 		cursor.insertHtml(line.html);
 		cursor.block().setUserState(line.lineId);
 		if (line.info)
@@ -657,7 +803,10 @@ bool ChatDock::ReplaceLine(int lineId, const QString &html, const DisplayLine &l
 		if (block.userState() != lineId)
 			continue;
 		QTextCursor cursor(block);
+		cursor.setPosition(block.position() + TimestampLength(block)); // the timestamp stays
 		cursor.movePosition(QTextCursor::EndOfBlock, QTextCursor::KeepAnchor);
+		cursor.removeSelectedText();
+		cursor.setCharFormat(QTextCharFormat());
 		cursor.insertHtml(html);
 		block.setUserData(new LineData(MakeLineInfo(line, textLength))); // now on both platforms
 		return true;
@@ -1521,10 +1670,23 @@ void ChatDock::UpdateStatusButtons()
 		QToolButton *button = platform == Platform::Twitch ? twitchStatus_ : youtubeStatus_;
 		const LinkState state = platform == Platform::Twitch ? twitchState_ : youtubeState_;
 		const int64_t viewers = platform == Platform::Twitch ? twitchViewers_ : youtubeViewers_;
-		QString text = Text(StateKey(state));
-		if (viewers >= 0)
-			text += QStringLiteral("  \U0001F464 ") + QLocale().toString((qlonglong)viewers);
-		button->setText(text);
+		// Compact: the icon (dimmed unless connected) and the count; the state is in the tooltip.
+		const QString count = viewers >= 0
+					      ? QStringLiteral("\U0001F464 ") + QLocale().toString((qlonglong)viewers)
+					      : QString();
+		if (config_.compact) {
+			const bool connected = state == LinkState::Connected || state == LinkState::ReadOnly;
+			const QIcon icon = PlatformIcon(platform);
+			button->setIcon(connected ? icon
+						  : QIcon(icon.pixmap(QSize(iconSize_, iconSize_), QIcon::Disabled)));
+			button->setToolButtonStyle(count.isEmpty() ? Qt::ToolButtonIconOnly
+								   : Qt::ToolButtonTextBesideIcon);
+			button->setText(count);
+		} else {
+			button->setIcon(PlatformIcon(platform));
+			button->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+			button->setText(count.isEmpty() ? Text(StateKey(state)) : Text(StateKey(state)) + "  " + count);
+		}
 
 		QString tip = QString::fromUtf8(PlatformName(platform).data(), (int)PlatformName(platform).size()) +
 			      ": " + Text(StateKey(state));

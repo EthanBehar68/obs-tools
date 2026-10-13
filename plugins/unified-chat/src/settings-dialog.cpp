@@ -216,6 +216,30 @@ SettingsDialog::SettingsDialog(const ChatConfig &config, const std::string &chat
 	showAlerts_->setChecked(config.showAlerts);
 	showAlerts_->setToolTip(Text("Settings.ShowAlertsTip"));
 	generalForm->addRow(QString(), showAlerts_);
+
+	// Display: applies to the lines already in the dock too.
+	auto display = new QLabel(Text("Settings.Display"), generalBox);
+	QFont bold = display->font();
+	bold.setBold(true);
+	display->setFont(bold);
+	generalForm->addRow(display);
+	textSize_ = new QSpinBox(generalBox);
+	textSize_->setRange(kMinTextSizePercent, kMaxTextSizePercent);
+	textSize_->setSingleStep(10);
+	textSize_->setSuffix(" %");
+	textSize_->setValue(config.textSizePercent);
+	textSize_->setToolTip(Text("Settings.TextSizeHint"));
+	generalForm->addRow(Text("Settings.TextSize"), textSize_);
+	timestamps_ = new QComboBox(generalBox);
+	timestamps_->addItem(Text("Settings.Off"), (int)TimestampStyle::Off);
+	timestamps_->addItem(Text("Settings.Timestamps24"), (int)TimestampStyle::Hours24);
+	timestamps_->addItem(Text("Settings.Timestamps12"), (int)TimestampStyle::Hours12);
+	timestamps_->setCurrentIndex(timestamps_->findData((int)config.timestamps));
+	generalForm->addRow(Text("Settings.Timestamps"), timestamps_);
+	compact_ = new QCheckBox(Text("Settings.Compact"), generalBox);
+	compact_->setChecked(config.compact);
+	compact_->setToolTip(Text("Settings.CompactHint"));
+	generalForm->addRow(QString(), compact_);
 	tabs->addTab(generalBox, Text("Settings.General"));
 
 	tabs->addTab(MakeHighlightsTab(tabs), Text("Settings.Highlights"));
@@ -252,6 +276,9 @@ ChatConfig SettingsDialog::Result() const
 	result.maxMessages = maxMessages_->value();
 	result.mergeBots = SplitNameList(mergeBots_->text().toStdString());
 	result.showAlerts = showAlerts_->isChecked();
+	result.textSizePercent = textSize_->value() / 10 * 10;
+	result.timestamps = (TimestampStyle)timestamps_->currentData().toInt();
+	result.compact = compact_->isChecked();
 	return result;
 }
 

@@ -71,6 +71,9 @@ private:
 	QLineEdit *mergeBots_;
 	QCheckBox *showAlerts_;
 	QSpinBox *viewerCheck_;
+	QSpinBox *textSize_;
+	QComboBox *timestamps_;
+	QCheckBox *compact_;
 
 	// Highlights tab: a working copy, written back by Result().
 	struct HighlightRow {
