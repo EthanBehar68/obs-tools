@@ -29,6 +29,8 @@ target_sources(
     src/core/name-color.cpp
     src/core/name-color.hpp
     src/core/obs-tools.hpp
+    src/core/stream-info.cpp
+    src/core/stream-info.hpp
     src/core/twitch-eventsub.cpp
     src/core/twitch-eventsub.hpp
     src/core/twitch-irc.cpp
@@ -70,6 +72,8 @@ target_sources(
     src/chat-dock.hpp
     src/net/asset-loader.cpp
     src/net/asset-loader.hpp
+    src/net/stream-info-client.cpp
+    src/net/stream-info-client.hpp
     src/net/twitch-connection.cpp
     src/net/twitch-connection.hpp
     src/net/youtube-connection.cpp
@@ -79,6 +83,8 @@ target_sources(
     src/plugin-main.cpp
     src/settings-dialog.cpp
     src/settings-dialog.hpp
+    src/stream-info-dialog.cpp
+    src/stream-info-dialog.hpp
     src/target-switch.cpp
     src/target-switch.hpp
 )
@@ -106,6 +112,7 @@ if(ENABLE_TESTS)
       tests/test-moderation.cpp
       tests/test-name-color.cpp
       tests/test-router-format-config.cpp
+      tests/test-stream-info.cpp
       tests/test-twitch-eventsub.cpp
       tests/test-twitch-irc.cpp
       tests/test-youtube.cpp

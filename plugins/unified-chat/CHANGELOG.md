@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Stream info
+- **Set the title, category and tags from OBS:** ✎ on the dock or **Tools → OBS Tools → Stream Info…**. One title for Twitch and YouTube; the Twitch category is searched as you type, with box art; Twitch tags; the YouTube category. Your recent Twitch categories are one click away and bring back their tags.
+- YouTube changes your live broadcast, or the next upcoming one, so it can be set before going live (51 quota units per change). YouTube's API can't set the specific game.
+- Sign in to Twitch again once to allow it (`channel:manage:broadcast`).
+
 ### Highlights
 - **Alerts stand out in the chat:** follows, subs, gift subs, cheers, raids, YouTube subscribers, Super Chats and memberships are tinted lines with their own emoji, and the viewer's message is part of the same line. Twitch subs and raids used to be grey notices, and follows bold lines in the same purple as names.
 - **YouTube Jewels gifts** show as event lines (💠 Fan sent 3 × Rose (30 Jewels)) and are passed on to Stream Alerts. A combo shows the gifts each update adds, never the same gift twice.

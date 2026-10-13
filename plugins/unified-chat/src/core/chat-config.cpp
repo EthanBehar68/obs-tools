@@ -103,6 +103,48 @@ static void HighlightsFromJson(const json &obj, Highlights &highlights)
 	}
 }
 
+static json StreamInfoToJson(const ChatConfig &config)
+{
+	json recent = json::array();
+	for (const auto &r : config.recentCategories) {
+		recent.push_back({{"id", r.category.id},
+				  {"name", r.category.name},
+				  {"box_art_url", r.category.boxArtUrl},
+				  {"tags", r.tags}});
+	}
+	return {{"twitch", config.streamInfoTwitch},
+		{"youtube", config.streamInfoYouTube},
+		{"recent_categories", recent}};
+}
+
+static void StreamInfoFromJson(const json &obj, ChatConfig &config)
+{
+	config.streamInfoTwitch = Get<bool>(obj, "twitch", config.streamInfoTwitch);
+	config.streamInfoYouTube = Get<bool>(obj, "youtube", config.streamInfoYouTube);
+	auto recent = obj.find("recent_categories");
+	if (recent == obj.end() || !recent->is_array())
+		return;
+	for (auto it = recent->rbegin(); it != recent->rend(); ++it) { // oldest first, so the newest ends up first
+		if (!it->is_object())
+			continue;
+		RecentCategory r;
+		r.category = {Get<std::string>(*it, "id", {}), Get<std::string>(*it, "name", {}),
+			      Get<std::string>(*it, "box_art_url", {})};
+		if (r.category.name.empty())
+			continue;
+		if (auto tags = it->find("tags"); tags != it->end() && tags->is_array()) {
+			// A hand-edited file can't hold tags Twitch would refuse.
+			for (const auto &tag : *tags) {
+				const std::string normalized = tag.is_string() ? NormalizeTag(tag.get<std::string>())
+									       : "";
+				if (!normalized.empty() && r.tags.size() < kTwitchMaxTags)
+					r.tags.push_back(normalized);
+			}
+		}
+		RememberCategory(config.recentCategories, std::move(r));
+	}
+}
+
 std::string SerializeConfig(const ChatConfig &config)
 {
 	json obj = {
@@ -119,6 +161,7 @@ std::string SerializeConfig(const ChatConfig &config)
 		{"merge_bots", config.mergeBots},
 		{"show_alerts", config.showAlerts},
 		{"highlights", HighlightsToJson(config.highlights)},
+		{"stream_info", StreamInfoToJson(config)},
 	};
 	return obj.dump(4);
 }
@@ -161,6 +204,8 @@ ChatConfig ParseConfig(const std::string &text, Accounts *legacy, const SecretCo
 
 	if (auto highlights = obj.find("highlights"); highlights != obj.end() && highlights->is_object())
 		HighlightsFromJson(*highlights, config.highlights);
+	if (auto streamInfo = obj.find("stream_info"); streamInfo != obj.end() && streamInfo->is_object())
+		StreamInfoFromJson(*streamInfo, config);
 	auto showAlerts = obj.find("show_alerts");
 	if (showAlerts != obj.end() && showAlerts->is_boolean())
 		config.showAlerts = showAlerts->get<bool>();

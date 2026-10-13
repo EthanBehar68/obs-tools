@@ -47,6 +47,18 @@ public:
 		(void)headers;
 		return {0, {}, "DELETE is not supported by this client"};
 	}
+	// A request with a body and another method: "PATCH" (Twitch Modify Channel Information) or "PUT" (YouTube
+	// videos.update).
+	virtual HttpResponse Send(const std::string &method, const std::string &url,
+				  const std::vector<std::string> &headers, const std::string &body,
+				  const std::string &contentType)
+	{
+		(void)url;
+		(void)headers;
+		(void)body;
+		(void)contentType;
+		return {0, {}, method + " is not supported by this client"};
+	}
 
 	// A GET whose 2xx body is handed to onData as it arrives instead of being collected (error bodies are still
 	// collected in body). Returning false from onData, or true from interrupt (checked about once a second),

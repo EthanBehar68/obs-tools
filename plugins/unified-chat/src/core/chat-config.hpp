@@ -22,6 +22,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include "chat-router.hpp"
 #include "highlights.hpp"
+#include "stream-info.hpp"
 #include "core/accounts.hpp"
 
 #include <functional>
@@ -54,6 +55,10 @@ struct ChatConfig {
 	bool showAlerts = true;
 	// How each kind of highlighted line looks, and whether it's shown.
 	Highlights highlights;
+	// The stream info window: which platforms Apply changes, and recently used Twitch categories with their tags.
+	bool streamInfoTwitch = true;
+	bool streamInfoYouTube = true;
+	std::vector<RecentCategory> recentCategories;
 };
 
 // "Nightbot, StreamElements" <-> {"Nightbot", "StreamElements"}; empty entries are dropped.

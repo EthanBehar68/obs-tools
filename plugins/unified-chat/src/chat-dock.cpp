@@ -20,6 +20,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "platform-icons.hpp"
 #include "net/secret-store.hpp"
 #include "settings-dialog.hpp"
+#include "stream-info-dialog.hpp"
 #include "target-switch.hpp"
 #include "core/chat-format.hpp"
 #include "core/moderation.hpp"
@@ -121,10 +122,15 @@ ChatDock::ChatDock(QWidget *parent) : QWidget(parent)
 	settingsButton_ = new QToolButton(this);
 	settingsButton_->setText(Text("Btn.Settings"));
 	settingsButton_->setAutoRaise(true);
+	streamInfoButton_ = new QToolButton(this);
+	streamInfoButton_->setText(Text("Btn.StreamInfo"));
+	streamInfoButton_->setToolTip(Text("Btn.StreamInfoHint"));
+	streamInfoButton_->setAutoRaise(true);
 	header->addWidget(twitchStatus_);
 	header->addWidget(youtubeStatus_);
 	header->addStretch();
 	header->addWidget(clearButton_);
+	header->addWidget(streamInfoButton_);
 	header->addWidget(settingsButton_);
 	layout->addLayout(header);
 
@@ -209,6 +215,7 @@ ChatDock::ChatDock(QWidget *parent) : QWidget(parent)
 			UpdateSuggestions();
 	});
 	connect(settingsButton_, &QToolButton::clicked, this, &ChatDock::OpenSettings);
+	connect(streamInfoButton_, &QToolButton::clicked, this, &ChatDock::OpenStreamInfo);
 	connect(twitchStatus_, &QToolButton::clicked, this, &ChatDock::OpenSettings);
 	connect(youtubeStatus_, &QToolButton::clicked, this, &ChatDock::OpenSettings);
 	connect(clearButton_, &QToolButton::clicked, this, [this]() {
@@ -255,6 +262,7 @@ void ChatDock::Start()
 
 void ChatDock::Shutdown()
 {
+	delete streamInfo_.data(); // ends its requests now, not when the main window goes
 	if (!started_)
 		return;
 	Disconnect();
@@ -480,7 +488,12 @@ void ChatDock::OpenSettings()
 	if (dialog.exec() != QDialog::Accepted)
 		return;
 
-	config_ = dialog.Result();
+	// The stream info window may have saved its settings meanwhile; the settings window doesn't change those.
+	ChatConfig result = dialog.Result();
+	result.streamInfoTwitch = config_.streamInfoTwitch;
+	result.streamInfoYouTube = config_.streamInfoYouTube;
+	result.recentCategories = config_.recentCategories;
+	config_ = std::move(result);
 	UpdateHighlightStyles();
 	view_->document()->setMaximumBlockCount(config_.maxMessages);
 	botMerger_.SetBots(config_.mergeBots);
@@ -492,6 +505,23 @@ void ChatDock::OpenSettings()
 			historyCutoff_ = (int64_t)std::time(nullptr);
 		Connect();
 	}
+}
+
+void ChatDock::OpenStreamInfo()
+{
+	if (!streamInfo_) {
+		auto save = [this](bool twitch, bool youtube, const std::vector<RecentCategory> &recent) {
+			config_.streamInfoTwitch = twitch;
+			config_.streamInfoYouTube = youtube;
+			config_.recentCategories = recent;
+			SaveConfig();
+		};
+		streamInfo_ = new StreamInfoDialog(config_, save, this);
+		streamInfo_->setAttribute(Qt::WA_DeleteOnClose);
+	}
+	streamInfo_->show();
+	streamInfo_->raise();
+	streamInfo_->activateWindow();
 }
 
 void ChatDock::UpdatePlaceholder()

@@ -34,6 +34,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include <QColor>
 #include <QImage>
+#include <QPointer>
 #include <QString>
 #include <QWidget>
 
@@ -56,6 +57,7 @@ class QUrl;
 
 namespace unified_chat {
 
+class StreamInfoDialog;
 class TargetSwitch;
 struct ModerationTag;
 
@@ -73,6 +75,8 @@ public:
 	// The shared Accounts window changed these sign-ins or client IDs.
 	void OnAccountsChanged(bool twitch, bool google);
 	void OpenSettings();
+	// The title, category and tags for Twitch and YouTube; one window, raised if already open.
+	void OpenStreamInfo();
 	// A new follower or subscriber from Stream Alerts.
 	void OnAlert(bool follow, const std::string &name, bool test);
 
@@ -245,6 +249,8 @@ private:
 	QToolButton *youtubeStatus_;
 	QToolButton *clearButton_;
 	QToolButton *settingsButton_;
+	QToolButton *streamInfoButton_;
+	QPointer<StreamInfoDialog> streamInfo_;
 	QTextBrowser *view_;
 	QWidget *replyBar_;
 	QLabel *replyLabel_;
