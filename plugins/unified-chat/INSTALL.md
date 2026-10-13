@@ -32,11 +32,11 @@ Reading Twitch chat only needs a channel name. Sending messages needs a sign-in,
    - The window shows **Signed in as ...**. Click **Close**.
 5. In the dock's **Settings → Twitch**, set **Channel** to your channel name or a `twitch.tv/...` URL. If it's empty when you sign in, your own channel is filled in.
 
-Sign-ins are shared by every OBS Tools plugin, so you only sign in once. The sign-in also allows follower alerts for the Stream Alerts plugin. It's refreshed automatically and validated hourly, as Twitch requires. If you sign in with a different account than the channel (e.g. a bot account), messages are sent from that account.
+Sign-ins are shared by every OBS Tools plugin, so you only sign in once. The sign-in also allows follower and cheer alerts in the Stream Alerts plugin, and changing your title, category and tags (Stream Info). It's refreshed automatically and validated hourly, as Twitch requires. If you sign in with a different account than the channel (e.g. a bot account), messages are sent from that account.
 
 ### How Twitch chat connects
 
-Signed in, chat uses **EventSub** to read and the **Twitch API** to send, which is what Twitch recommends. Signed out, it reads over **IRC** (read-only). Updating from 1.3.0 or older: **sign in to Twitch again once** to allow EventSub; until then the dock says so and keeps using IRC. **Settings → Twitch → Chat connection: IRC** forces IRC if EventSub ever misbehaves.
+Signed in, chat uses **EventSub** to read and the **Twitch API** to send, which is what Twitch recommends. Signed out, it reads over **IRC** (read-only). Updating from 1.3.0 or older: **sign in to Twitch again once** to allow EventSub (the same sign-in also allows Stream Info and Stream Alerts' cheer alerts); until then the dock says so and keeps using IRC. **Settings → Twitch → Chat connection: IRC** forces IRC if EventSub ever misbehaves.
 
 EventSub uses one of the 3 WebSocket connections Twitch allows per account and application; Stream Alerts uses another.
 
@@ -111,17 +111,17 @@ If YouTube goes live some other way (another app, or a multistream output with a
   - Images download once per session in the background. A line appears at once with the right spacing and the picture fills in a moment later.
   - Your own sent messages show at once and fill in Twitch's emotes, your badges and colour a moment later, when Twitch's copy arrives (EventSub). Over IRC, Twitch's own emotes in your messages stay as words, because IRC doesn't send your message back.
 - **Moderate from the dock:** right-click someone's line for **Delete message**, **Timeout** (1 minute, 10 minutes, 1 hour, 24 hours or Custom…), **Ban…** (with an optional reason on Twitch) and, on lines already marked timed out or banned, **Unban**. Every action asks first. You must be the broadcaster or a moderator of that chat.
-  - **Twitch:** after updating to this version, **sign in to Twitch again once** (Tools → OBS Tools → Accounts… → Sign in). The new sign-in adds the moderation permissions. Until then the dock tells you when you try.
+  - **Twitch:** if you last signed in before 1.3.0, **sign in to Twitch again once** (Tools → OBS Tools → Accounts… → Sign in) to add the moderation permissions. Until then the dock tells you when you try.
   - **YouTube:** deleting a message uses **20 quota units**; a timeout, ban or unban **200** (the confirmation says so). YouTube can only lift bans made from the dock during this session; use YouTube Studio for older ones.
 - **Display** (Settings → General): **Text size** scales the chat text and its icons, badges and emotes (80 to 200%). **Timestamps** puts the time each line arrived before it. **Compact** fits more into a small dock: smaller emotes, the status buttons as icons (dimmed when not connected) with viewer counts, Clear and Settings as 🗑 and ⚙, tighter margins. Changes apply to the chat already shown, too.
 - **Stream info:** press **✎** on the dock (or **Tools → OBS Tools → Stream Info…**). The window opens with what's set now.
-  - **Title:** one box for both platforms. The count shows the limit: 140 characters on Twitch, 100 on YouTube (which also refuses `<` and `>`).
+  - **Title:** one box for both platforms. The count shows the limit of the platforms ticked under **Change**: 100 characters with YouTube, otherwise 140 (Twitch). YouTube also refuses `<` and `>`.
   - **Twitch category:** type to search, then click a match. With the box empty, the list shows your recent categories; picking one brings back the tags you last used with it.
-  - **Twitch tags:** up to 10, separated by commas, letters and digits only, up to 25 each.
+  - **Twitch tags:** up to 10, separated by commas or spaces (so a tag can't contain a space), letters and digits only, up to 25 each. A leading `#` is dropped, and repeats are ignored.
   - **YouTube category:** e.g. Gaming. YouTube's API has no way to set the specific game; that stays in YouTube Studio.
-  - **Change:** which platforms **Apply** updates. Only what you changed is sent. YouTube updates your live broadcast, or the next upcoming one, so you can set it before going live; each change uses **51 quota units**.
-  - **Category by scene:** pick a category, then **Use for scene ▾** and the scene, e.g. Gaming → Elden Ring, Chatting → Just Chatting. Tick **Switch the Twitch category with the scene while streaming**. Once a linked scene has been live (not just previewed) for the delay, 10 s by default, Twitch gets its category; BRB and other unlinked scenes keep whatever is set. Title and tags never change this way. The list shows the links; **Remove** drops one.
-  - **Twitch:** after updating to this version, **sign in to Twitch again once** to allow it (the window has a **Sign in again…** button). Until then it shows what's set but can't change it.
+  - **Change:** which platforms **Apply** updates. Only what you changed is sent. YouTube updates your live broadcast, or the next upcoming one, so you can set it before going live; each change uses **51 quota units**, and opening the window or pressing **Reload** uses 2 to 3.
+  - **Category by scene:** pick a category, then **Use for scene ▾** and the scene, e.g. Gaming → Elden Ring, Chatting → Just Chatting. Tick **Switch the Twitch category with the scene while streaming** (off by default) and set the seconds after it (0 to 60). Once a linked scene has been live (not just previewed) for the delay, 10 s by default, Twitch gets its category; BRB and other unlinked scenes keep whatever is set. Title and tags never change this way. The list shows the links; **Remove** drops one.
+  - **Twitch:** the one Twitch re-sign-in this version asks for (see EventSub above) also allows this; the window has a **Sign in again…** button. Until then it shows what's set but can't change it.
 - **Moderation stays visible.** Nothing a moderator removes disappears from the dock. The message text is struck through and dimmed, but you can still read it, and a coloured tag says why:
   - *(deleted)*, grey: a single message was deleted (Twitch only; YouTube no longer reports single deletions).
   - *(timed out 10 minutes)*, amber: the author was timed out, and all their lines get the tag.
@@ -133,11 +133,11 @@ If YouTube goes live some other way (another app, or a multistream output with a
 - **Clear** empties the view. **Messages to keep** in Settings caps how much history the dock holds (default 500).
 - System notices (connection changes, errors) appear as grey italic lines.
 - **Alerts in the chat** stand out as tinted lines with their own emoji: Twitch follows, subs and resubs, gift subs, cheers and raids; YouTube subscribers, Super Chats and Stickers, memberships, gifted memberships and Jewels gifts. The viewer's own message (a resub message, a cheer or Super Chat comment) follows the dash in the same colour, e.g. **💎 Fan cheered 500 bits** — love the stream. Follows and YouTube subscribers need the [Stream Alerts](../stream-alerts/README.md) plugin; everyone gets a line, including people a combined "+N more" alert covers. The lines are only in the dock, never sent to chat. **Settings → General → Show alerts in chat** turns them all off.
-- **Settings → Highlights** sets, for each alert kind, first-time chatters and mentions: whether it's shown, its colour (the dock keeps the text readable on your theme), and its emoji (any emoji; **Win + .** opens the Windows emoji picker). A preview shows the result on your dock's background; **Reset** brings back a row's default.
+- **Settings → Highlights** sets, for each alert kind, first-time chatters and mentions: whether it's shown, its colour (the dock keeps the text readable on your theme), and its emoji (not for mentions; any emoji; **Win + .** opens the Windows emoji picker). A preview shows the result on your dock's background; **Reset** brings back a row's default.
 
 ## 5. Where settings are stored
 
-- `%APPDATA%\obs-studio\plugin_config\obs-unified-chat\config.json`: the chat settings (channel, YouTube options, message limit, merged bots). No sign-ins.
+- `%APPDATA%\obs-studio\plugin_config\obs-unified-chat\config.json`: the chat settings (channel, YouTube options, message limit, merged bots, viewer checks, highlights, display, and Stream Info's recent categories and scene links). No sign-ins.
 - `%APPDATA%\obs-studio\plugin_config\obs-tools\accounts.json`: the client IDs and sign-ins shared by every OBS Tools plugin. Tokens and the Google client secret are encrypted for your Windows account, so the file can't be used on another PC or account. Don't share it anyway.
 
 Versions up to 1.2.0 kept the sign-ins in `config.json`. The first start of a newer version moves them to `accounts.json` and removes them from `config.json` and its `.bak`, so you don't have to sign in again.

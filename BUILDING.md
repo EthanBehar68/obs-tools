@@ -68,13 +68,20 @@ Each library and plugin keeps its unit tests in its own `tests\` folder. They us
 | EventSub welcome / keepalive / reconnect / notification / revocation (Twitch's own examples), subscription bodies | `test-eventsub.cpp` |
 | Chunked JSON array splitting for the YouTube chat stream | `test-json-array-reader.cpp` |
 | OAuth device flow request bodies and Twitch/Google response mapping | `test-oauth.cpp` |
-| Text helpers (UTF-8 length, escaping, URL encoding) | `test-text-util.cpp` |
+| Shared accounts file: JSON round trip, keeping a newer plugin's fields, encrypted secrets, which plugin may spend a refresh token, adopting legacy sign-ins | `test-accounts.cpp` |
+| Text helpers (trim, UTF-8 / UTF-16 length, escaping, colours, RFC 3339 times, durations, Base64, URL encoding) | `test-text-util.cpp` |
 | YouTube paid and membership events passed between plugins | `test-youtube-events.cpp` |
 | **plugins\unified-chat** (`unified-chat-tests.exe`) | |
-| Twitch IRC parsing, tag unescaping, login/PING/RECONNECT state machine, `/me`, CRLF injection | `test-twitch-irc.cpp` |
-| Twitch EventSub chat events (messages, emote fragments, replies, deletions, clears, bans), chat subscriptions, Send Chat Message, echo updates | `test-twitch-eventsub.cpp` |
-| YouTube response parsing, video URL parsing, dedupe, and the full `ChatSession` against a scripted fake HTTP server (broadcast discovery, paging, token refresh, 401 retry, quota backoff, chat end, send + echo) | `test-youtube.cpp` |
+| Twitch IRC parsing, tag unescaping, login/PING/RECONNECT state machine, `/me`, replies, CRLF injection, viewer count and validate parsing | `test-twitch-irc.cpp` |
+| Twitch EventSub chat events (messages, emote fragments, replies, deletions, clears, bans), chat notifications (subs, raids, announcements), chat subscriptions, Get Users, Send Chat Message, echo updates | `test-twitch-eventsub.cpp` |
+| YouTube response parsing, video URL parsing, dedupe, and the full `ChatSession` against a scripted fake HTTP server (broadcast discovery, paging, streaming and its fallback to polling, token refresh, 401 retry, quota backoff, chat end, send + echo, bans, viewer counts, Super Chats / memberships / Jewels) | `test-youtube.cpp` |
 | Send routing (targets, length limits, partial delivery), HTML escaping of chat lines and event lines, timestamps, config round trip (display settings too), 1.2.0 sign-in migration | `test-router-format-config.cpp` |
+| Emotes: Twitch emote tags, message splitting (also after emoji), BTTV / FFZ / 7TV lists and precedence, image URLs, role badges and Helix badge lists | `test-emotes.cpp` |
+| Name colours readable on the chat background (WCAG contrast), cached and bounded | `test-name-color.cpp` |
+| Your own Both message shown as one line: echoes from both platforms, failures, timeouts | `test-echo-merger.cpp` |
+| A bot's identical Twitch + YouTube lines folded into one | `test-bot-merger.cpp` |
+| Mention links, "mentions you" matching, recent chatters for @ completion | `test-mentions.cpp` |
+| Moderation requests for Twitch and YouTube, token identity and scopes, error messages | `test-moderation.cpp` |
 | Monitoring device: present / default / new ID for the same name / missing / ambiguous | `test-monitoring-device.cpp` |
 | Highlight defaults, readable styles for any colour, emoji limits, event lines, the chatter list | `test-highlights.cpp` |
 | Stream info: Helix channel / category search parsing, box art sizes, Modify Channel bodies, tag rules, recent categories, scene links, YouTube broadcast choice and videos.update snippet, config round trip | `test-stream-info.cpp` |
@@ -113,7 +120,8 @@ libs\
 │   │   └── device-login.*       sign-in flow
 │   └── ui\           -> obs-tools-ui (Qt, obs-frontend-api)
 │       ├── obs-tools-menu.*     Tools > OBS Tools: the first plugin loaded creates it and publishes it through the
-│       │                        libobs proc handler; the accounts-changed signal
+│       │                        libobs proc handler; the plugin registry, protocol numbers, and the accounts,
+│       │                        alert and YouTube-event signals
 │       └── accounts-dialog.*    the shared Accounts window
 ├── common\data\locale\  the shared UI's strings, appended to each plugin's locale (plugin_merge_data)
 └── obs-support\     plugin-support.c.in / .h: each plugin gets its own obs_log prefix and version
@@ -125,6 +133,7 @@ plugins\unified-chat\
 │   │   ├── twitch-eventsub.* EventSub chat events -> chat lines and moderation; Send Chat Message; Get Users
 │   │   ├── youtube-api.*     Data API v3 parsing + ChatSession (drives an injected HttpClient); streams chat
 │   │   │                     via liveChat/messages/stream by default, falls back to polling
+│   │   ├── chat-message.hpp  ChatMessage, ChatEvent and moderation types shared by the cores
 │   │   ├── chat-router.*     Twitch / YouTube / Both routing and length rules
 │   │   ├── chat-format.*     chat line -> escaped Qt rich text
 │   │   ├── name-color.*      readable name colors (WCAG contrast vs. the chat background), cached per color
@@ -138,13 +147,14 @@ plugins\unified-chat\
 │   │   ├── moderation.*      Helix and YouTube moderation requests (delete, timeout, ban, unban), token identity/scopes
 │   │   ├── monitoring-device.*  whether OBS's monitoring device lost its Windows ID, and which device it is now
 │   │   ├── stream-info.*     title / category / tags: Helix channel and category search, YouTube broadcast + video
-│   │   │                     snippet requests, tag rules, recent categories
+│   │   │                     snippet requests, tag rules, recent categories, scene-category links
 │   │   └── chat-config.*     config.json (de)serialization
 │   ├── net\         worker threads
 │   │   ├── twitch-connection.*   Twitch chat: EventSub + Helix when signed in with its scopes, else TLS IRC to
 │   │   │                         irc.chat.twitch.tv:6697 via CURLOPT_CONNECT_ONLY
 │   │   ├── asset-loader.*        one background thread downloading emote/badge lists and images
-│   │   ├── stream-info-client.*  the Stream Info window's requests, on a thread that exists only while it's open
+│   │   ├── stream-info-client.*  Stream Info's and category-by-scene's requests, on a thread that exists only
+│   │   │                         while they run
 │   │   └── youtube-connection.*  YouTube poll/send loop
 │   ├── chat-dock.*        the dock widget
 │   ├── monitoring-repair.*   reselects and saves a monitoring device whose ID changed (load, stream start, profile)
@@ -160,7 +170,7 @@ plugins\stream-alerts\
 ├── plugin.json
 ├── src\
 │   ├── core\        no libobs, no Qt, no I/O  -> static library stream-alerts-core
-│   │   ├── alert-queue.*      9 kinds; follows/subscribers once per person per stream and "+N more" past 10;
+│   │   ├── alert-queue.*      10 kinds; follows/subscribers once per person per stream and "+N more" past 10;
 │   │   │                      paid alerts and raids every time, never combined, ahead of follows; placeholders
 │   │   ├── platform-events.*  Twitch subscriptions and follow / chat notification / cheer events, YouTube events
 │   │   │                      from Unified Chat, validate; recent subscribers + SubscriberWatch

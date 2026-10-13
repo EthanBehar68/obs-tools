@@ -14,7 +14,7 @@ Each plugin is a separate DLL with its own version and settings, and installs an
 ```
 libs\common\        shared code: tested core, networking, the shared Accounts window
 libs\obs-support\   per-plugin obs_log / PLUGIN_NAME / PLUGIN_VERSION template
-plugins\<name>\     one folder per plugin: plugin.json (name, version), src, data, tests, docs
+plugins\<name>\     one folder per plugin: plugin.json (name, version), src, data, tests; README, CHANGELOG (and INSTALL) beside them
 dep\                vendored nlohmann/json and doctest
 cmake\ scripts\     build system (obs-plugintemplate based) and Build.ps1
 ```

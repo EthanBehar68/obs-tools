@@ -29,18 +29,18 @@ Close OBS and extract `obs-stream-alerts-<version>-windows-x64.zip` into `C:\Pro
 
 ## Setup
 
-1. **Quickest: let the plugin build it.** In **Tools → OBS Tools → Stream Alerts…**, pick an alert kind and press **Create group…**. Choose a picture (image, GIF or video) and a sound, both optional. The plugin adds a hidden group with them and a text source to the current scene (and, by default, to every scene as a reference), fills it in on the page, and you press OK. Move or restyle it in OBS as you like. Or:
+1. **Quickest: let the plugin build it.** In **Tools → OBS Tools → Stream Alerts…**, pick an alert kind and press **Create group…**. Choose a picture (image, GIF or video) and a sound, both optional. The plugin adds a hidden group with them and a text source to the current scene (the preview scene in Studio Mode) (and, by default, to every scene as a reference), fills it in on the page, and you press OK. Move or restyle it in OBS as you like. Or:
 1. **Build the alert in OBS.** For example, add a **group** named `Follow Alert` to your scenes containing:
    - a **Media Source** with your animation or sound (keep "Restart playback when source becomes active" on), and
    - a **Text (GDI+)** source named `Follow Text`.
 
    **Hide the group** (the eye icon). The plugin shows it for each alert and hides it again. The same source can sit in several scenes; all of its copies are shown.
 2. Open **Tools → OBS Tools → Stream Alerts…**. Pick an alert kind on the left, then:
-   - **Show source:** the group (or any source or nested scene) to show. Or select it in OBS's Sources list and press **Use selected**: the window can stay open while you do. A group with one text source in it fills in the text source too.
+   - **Show source:** the group (or any source or nested scene) to show. Or select it in OBS's Sources list and press **Use selected**: the window can stay open while you do. A group with one text source in it fills in the text source too, and the kind's **Show alerts** is ticked.
    - **Text source:** the text source that gets the message. Optional.
-   - **Message:** the placeholders under it are replaced, e.g. `{name}`, `{months}`, `{count}`, `{amount}`, `{viewers}`, `{message}`, `{level}`. Press Enter for a new line (Text (GDI+) shows it as typed). Subs and members have a second message for resubs and milestones.
+   - **Message:** the placeholders under it are replaced, e.g. `{name}`, `{months}`, `{count}`, `{amount}`, `{viewers}`, `{message}`, `{level}`, `{gift}`. Press Enter for a new line (Text (GDI+) shows it as typed). Subs, members and Jewels gifts have a second message: for resubs, milestones and several gifts at once.
    - **When more than 10 wait** (follows and subscribers): `{count}` is replaced by how many more.
-   - **Only alert from** (cheers and raids): the smallest cheer in bits, or raid in viewers, that alerts.
+   - **Only alert from** (cheers, raids and Jewels gifts): the smallest cheer in bits, raid in viewers, or gift in Jewels that alerts.
    - **Test alert** plays one straight away with the values as entered and made-up details, so you can try the look without a real event. Cancel puts the previous settings back.
 
    Each kind can use its own group, or several can share one.

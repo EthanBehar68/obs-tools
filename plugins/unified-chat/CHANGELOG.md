@@ -12,7 +12,7 @@
 - **Set the title, category and tags from OBS:** ✎ on the dock or **Tools → OBS Tools → Stream Info…**. One title for Twitch and YouTube; the Twitch category is searched as you type, with box art; Twitch tags; the YouTube category. Your recent Twitch categories are one click away and bring back their tags.
 - YouTube changes your live broadcast, or the next upcoming one, so it can be set before going live (51 quota units per change). YouTube's API can't set the specific game.
 - **Category by scene:** in Stream Info, **Use for scene ▾** links the selected Twitch category to a scene. While streaming, once a linked scene has been live for 10 seconds (adjustable, 0 to 60), the category changes to it; other scenes leave it alone. Only the category changes, and only when Twitch has another one; the dock says when it does.
-- Sign in to Twitch again once to allow it (`channel:manage:broadcast`).
+- It needs `channel:manage:broadcast`, covered by the same one Twitch re-sign-in as EventSub below.
 
 ### Highlights
 - **Alerts stand out in the chat:** follows, subs, gift subs, cheers, raids, YouTube subscribers, Super Chats and memberships are tinted lines with their own emoji, and the viewer's message is part of the same line. Twitch subs and raids used to be grey notices, and follows bold lines in the same purple as names.
@@ -26,7 +26,7 @@
 - **Twitch's own emotes now show in your sent messages too:** your line appears at once and fills in emotes, badges and colour when Twitch's copy arrives.
 - **`/me` messages are italic again** over EventSub (they showed as plain text), your own included.
 - **A message Twitch refuses says why** (e.g. a duplicate message, or follower-only mode) instead of quietly not appearing.
-- **Twitch subs, gifts, raids and announcements** show as notices, as they did over IRC.
+- **Twitch announcements** show as notices, as they did over IRC (subs, gifts and raids are alert lines, see Highlights).
 - **YouTube Super Chats, Super Stickers and memberships** are passed on to Stream Alerts, which can now alert on them.
 - **Twitch's Watching without audio and Listening only badges** show after the role badges, so you can tell who can't hear or see the stream (Legend rows included).
 - **Settings → General → Check viewer counts every:** 1 to 60 minutes, or Off (5 minutes by default).
