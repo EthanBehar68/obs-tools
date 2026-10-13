@@ -38,7 +38,6 @@ OBS has no plugin API for the Sources right-click menu, so instead:
 ## Later
 
 - Set the Twitch category on scene switch: one per scene, or guessed from a game capture's `.exe`.
-- Stream Alerts **Create from template**: builds a group (text source plus an image) in the current scene and assigns it to an alert.
 
 ## Still unverified (keep open)
 
@@ -50,6 +49,8 @@ Built 2026-10-13 (sections 1 and 2 above), not yet tried in OBS:
 8. Monitoring repair: change one character of `MonitoringDeviceId` in the profile's `basic.ini` (OBS closed), start OBS: a dock notice, and alerts play in the headphones again.
 
 9. Display (Settings → General): text size up and down with chat on screen (text, icons, badges, emotes resize; moderation strikes still right), timestamps on/off/12h on existing lines and new ones (also after a bot merge and your own Twitch line's update), compact on and off (header icons, dimmed when offline, viewer counts).
+
+10. Stream Alerts Create group…: with a picture and a sound, with neither, and with a video; the group lands hidden in every scene (Studio Mode: built in the preview scene), Test alert plays it with sound you hear, OK keeps it assigned; a second Create gives "… 2".
 
 From 2026-10-12:
 
