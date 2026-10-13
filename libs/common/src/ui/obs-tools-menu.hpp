@@ -30,13 +30,16 @@ namespace obs_tools {
 // What OBS Tools plugins exchange: the accounts file, the Twitch scopes, the signals below and their JSON. Bump it
 // when any of that changes in a way an older plugin would get wrong, and release both plugins together.
 constexpr long long kObsToolsProtocol = 2;
+// The oldest protocol this plugin still works with. Raise it to kObsToolsProtocol when a bump breaks the older
+// one; leave it when the change is only an addition the older plugin can ignore (then no warning is shown).
+constexpr long long kObsToolsMinProtocol = 2;
 
 // Call from obs_module_load. Adds this plugin to the shared registry and publishes its version, protocol and Twitch
 // scopes (through the libobs proc handler, independent of load order) so the others can find them. name: a proc-safe
 // id such as "unified_chat"; module: the DLL name (PLUGIN_NAME).
 void RegisterObsToolsPlugin(const char *name, const char *module, const char *version);
 // Call at OBS_FRONTEND_EVENT_FINISHED_LOADING: logs the other OBS Tools plugins loaded and their versions, and
-// warns when one is from an older or newer release (its sign-ins, permissions or events may not match).
+// warns when one can't work with this one (its sign-ins, permissions or events may not match).
 void CheckObsToolsPlugins();
 // Empty, or a sentence for the Accounts window saying which plugin to update.
 std::string ObsToolsVersionWarning();

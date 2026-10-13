@@ -134,6 +134,7 @@ struct PluginInfo {
 	std::string name;
 	std::string version;
 	long long protocol = 0;
+	long long minProtocol = 0; // the oldest protocol it works with
 	std::string twitchScopes;
 };
 static PluginInfo &OwnInfo()
@@ -147,15 +148,17 @@ static void PublishInfo(void *, calldata_t *cd)
 	const PluginInfo &info = OwnInfo();
 	calldata_set_string(cd, "version", info.version.c_str());
 	calldata_set_int(cd, "protocol", info.protocol);
+	calldata_set_int(cd, "min_protocol", info.minProtocol);
 	calldata_set_string(cd, "twitch_scopes", info.twitchScopes.c_str());
 }
 
 void RegisterObsToolsPlugin(const char *name, const char *module, const char *version)
 {
 	PluginInfo &info = OwnInfo();
-	info = {name, version, kObsToolsProtocol, oauth::TwitchProvider({}).scope};
-	const std::string decl = std::string("void obs_tools_plugin_") + name +
-				 "(out string version, out int protocol, out string twitch_scopes)";
+	info = {name, version, kObsToolsProtocol, kObsToolsMinProtocol, oauth::TwitchProvider({}).scope};
+	const std::string decl =
+		std::string("void obs_tools_plugin_") + name +
+		"(out string version, out int protocol, out int min_protocol, out string twitch_scopes)";
 	proc_handler_add(obs_get_proc_handler(), decl.c_str(), PublishInfo, nullptr);
 
 	calldata_t cd;
@@ -200,7 +203,11 @@ static std::vector<Peer> Peers()
 			peer.answered = true;
 			const char *version = calldata_string(&cd, "version");
 			const char *scopes = calldata_string(&cd, "twitch_scopes");
-			peer.info = {candidate.name, version ? version : "", calldata_int(&cd, "protocol"),
+			const long long protocol = calldata_int(&cd, "protocol");
+			long long minProtocol = 0;
+			if (!calldata_get_int(&cd, "min_protocol", &minProtocol))
+				minProtocol = protocol; // a release from before min_protocol: only its own protocol
+			peer.info = {candidate.name, version ? version : "", protocol, minProtocol,
 				     scopes ? scopes : ""};
 		}
 		calldata_free(&cd);
@@ -209,13 +216,23 @@ static std::vector<Peer> Peers()
 	return peers;
 }
 
+// Each side must speak at least the other's oldest supported protocol.
+static bool PeerTooOld(const Peer &peer)
+{
+	return !peer.answered || peer.info.protocol < kObsToolsMinProtocol;
+}
+static bool PeerTooNew(const Peer &peer)
+{
+	return peer.answered && peer.info.minProtocol > kObsToolsProtocol;
+}
+
 void CheckObsToolsPlugins()
 {
 	for (const Peer &peer : Peers()) {
 		if (!peer.answered)
 			obs_log(LOG_WARNING, "OBS Tools: %s is from an older release; update it to match this one",
 				peer.module.c_str());
-		else if (peer.info.protocol != kObsToolsProtocol)
+		else if (PeerTooOld(peer) || PeerTooNew(peer))
 			obs_log(LOG_WARNING, "OBS Tools: %s %s uses protocol %lld, this plugin %lld: update both",
 				peer.module.c_str(), peer.info.version.c_str(), peer.info.protocol, kObsToolsProtocol);
 		else
@@ -227,11 +244,11 @@ void CheckObsToolsPlugins()
 std::string ObsToolsVersionWarning()
 {
 	for (const Peer &peer : Peers()) {
-		if (!peer.answered || peer.info.protocol < kObsToolsProtocol)
+		if (PeerTooOld(peer))
 			return peer.module +
 			       " is older than this plugin. Update it too, or a sign-in may miss permissions "
 			       "and some events won't arrive.";
-		if (peer.info.protocol > kObsToolsProtocol)
+		if (PeerTooNew(peer))
 			return std::string("Another OBS Tools plugin (") + peer.module +
 			       ") is newer than this one. Update every OBS Tools plugin to the same release.";
 	}
