@@ -5,7 +5,7 @@ OBS Studio plugins for streaming to Twitch and YouTube at the same time, built f
 | Plugin | What it does |
 |--------|--------------|
 | [Unified Chat](plugins/unified-chat/README.md) (`obs-unified-chat`) | One dock with Twitch and YouTube live chat together: send to either or both, emotes, badges, moderation, viewer counts. |
-| [Stream Alerts](plugins/stream-alerts/README.md) (`obs-stream-alerts`) | Alerts that show an OBS source you build, with no browser source or third-party service: Twitch follows, subs, gift subs, cheers and raids; YouTube subscribers, Super Chats and memberships. |
+| [Stream Alerts](plugins/stream-alerts/README.md) (`obs-stream-alerts`) | Alerts that show an OBS source you build, with no browser source or third-party service: Twitch follows, subs, gift subs, cheers and raids; YouTube subscribers, Super Chats, memberships and Jewels gifts. |
 
 Each plugin is a separate DLL with its own version and settings, and installs and updates on its own. They share one set of Twitch and YouTube sign-ins (**Tools → OBS Tools → Accounts…**) and tested code in `libs/common` (OAuth device sign-in, the shared accounts file, HTTP over libcurl, encryption, text helpers).
 

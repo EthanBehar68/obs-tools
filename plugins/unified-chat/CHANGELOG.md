@@ -4,6 +4,7 @@
 
 ### Highlights
 - **Alerts stand out in the chat:** follows, subs, gift subs, cheers, raids, YouTube subscribers, Super Chats and memberships are tinted lines with their own emoji, and the viewer's message is part of the same line. Twitch subs and raids used to be grey notices, and follows bold lines in the same purple as names.
+- **YouTube Jewels gifts** show as event lines (💠 Fan sent 3 × Rose (30 Jewels)) and are passed on to Stream Alerts. A combo shows the gifts each update adds, never the same gift twice.
 - **First-time chatters** are tinted and marked ✨, on Twitch and YouTube.
 - **Settings → Highlights:** show or hide each kind, pick its colour (text stays readable) and any emoji, with a live preview.
 - "Show follows and subscribers" is now **Show alerts in chat**.

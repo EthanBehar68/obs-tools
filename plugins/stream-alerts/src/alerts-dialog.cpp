@@ -156,6 +156,18 @@ AlertsDialog::AlertsDialog(AlertsController *controller, QWidget *parent)
 	UpdateStatus();
 }
 
+// The minimum setting on a kind's page: bits, raid viewers or Jewels.
+static int &Minimum(AlertsConfig &config, AlertKind kind)
+{
+	return kind == AlertKind::Cheer  ? config.minBits
+	       : kind == AlertKind::Raid ? config.minRaidViewers
+					 : config.minJewels;
+}
+static int Minimum(const AlertsConfig &config, AlertKind kind)
+{
+	return Minimum(const_cast<AlertsConfig &>(config), kind);
+}
+
 QWidget *AlertsDialog::MakePage(AlertKind kind, const QStringList &sources, const QStringList &textSources)
 {
 	const AlertSettings &settings = original_.For(kind);
@@ -184,10 +196,13 @@ QWidget *AlertsDialog::MakePage(AlertKind kind, const QStringList &sources, cons
 	page.message = MakeMessageEdit(settings.message, widget);
 	form->addRow(Text("Alerts.Message"), page.message);
 
-	const bool hasVariant = kind == AlertKind::TwitchSub || kind == AlertKind::Member;
+	const bool hasVariant = kind == AlertKind::TwitchSub || kind == AlertKind::Member || kind == AlertKind::Jewels;
+	const char *variantName = kind == AlertKind::TwitchSub ? "Resub"
+				  : kind == AlertKind::Member  ? "Milestone"
+							       : "Several";
 	if (hasVariant) {
 		page.variant = MakeMessageEdit(settings.variantMessage, widget);
-		form->addRow(Text(kind == AlertKind::TwitchSub ? "Alerts.Resub" : "Alerts.Milestone"), page.variant);
+		form->addRow(Text((std::string("Alerts.") + variantName).c_str()), page.variant);
 	}
 	if (!IsPriority(kind)) {
 		page.overflow = MakeMessageEdit(settings.overflowMessage, widget);
@@ -198,11 +213,13 @@ QWidget *AlertsDialog::MakePage(AlertKind kind, const QStringList &sources, cons
 	placeholders->setWordWrap(true);
 	form->addRow(QString(), placeholders);
 
-	if (kind == AlertKind::Cheer || kind == AlertKind::Raid) {
+	if (kind == AlertKind::Cheer || kind == AlertKind::Raid || kind == AlertKind::Jewels) {
 		page.minimum = new QSpinBox(widget);
 		page.minimum->setRange(1, 1000000);
-		page.minimum->setValue(kind == AlertKind::Cheer ? original_.minBits : original_.minRaidViewers);
-		page.minimum->setSuffix(Text(kind == AlertKind::Cheer ? "Alerts.BitsSuffix" : "Alerts.ViewersSuffix"));
+		page.minimum->setValue(Minimum(original_, kind));
+		page.minimum->setSuffix(Text(kind == AlertKind::Cheer  ? "Alerts.BitsSuffix"
+					     : kind == AlertKind::Raid ? "Alerts.ViewersSuffix"
+								       : "Alerts.JewelsSuffix"));
 		form->addRow(Text("Alerts.Minimum"), page.minimum);
 	}
 
@@ -239,7 +256,7 @@ QWidget *AlertsDialog::MakePage(AlertKind kind, const QStringList &sources, cons
 	};
 	addTest("Alerts.Test", false);
 	if (hasVariant)
-		addTest(kind == AlertKind::TwitchSub ? "Alerts.TestResub" : "Alerts.TestMilestone", true);
+		addTest((std::string("Alerts.Test") + variantName).c_str(), true);
 	tests->addStretch();
 	form->addRow(QString(), tests);
 	return widget;
@@ -259,7 +276,7 @@ AlertsConfig AlertsDialog::Current() const
 		if (page.variant)
 			settings.variantMessage = ToStd(page.variant->toPlainText());
 		if (page.minimum)
-			(kind == AlertKind::Cheer ? config.minBits : config.minRaidViewers) = page.minimum->value();
+			Minimum(config, kind) = page.minimum->value();
 		if (page.interval)
 			config.subscriberCheckSeconds = page.interval->value();
 	}

@@ -137,7 +137,7 @@ AlertEvent FromYouTubeEvent(const obs_tools::YouTubeEvent &event)
 {
 	using Kind = obs_tools::YouTubeEvent::Kind;
 	AlertEvent alert;
-	alert.id = event.id; // the chat message's id: the queue drops a repeat
+	alert.id = event.id; // the chat message's id (Jewels: with the combo): the queue drops a repeat
 	alert.name = event.name;
 	alert.amount = event.amount;
 	alert.message = event.message;
@@ -155,6 +155,13 @@ AlertEvent FromYouTubeEvent(const obs_tools::YouTubeEvent &event)
 	case Kind::MemberMilestone:
 		alert.kind = AlertKind::Member;
 		alert.variant = true;
+		break;
+	case Kind::Jewels:
+		alert.kind = AlertKind::Jewels;
+		alert.gift = event.gift;
+		alert.variant = event.count > 1;
+		alert.jewels = obs_tools::JewelsTotal(event);
+		alert.amount = std::to_string(alert.jewels);
 		break;
 	default:
 		alert.kind = AlertKind::GiftMemberships;

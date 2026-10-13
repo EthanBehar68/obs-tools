@@ -179,6 +179,87 @@ TEST_CASE("ParseMessagesPage reads Super Chats, Super Stickers and membership ev
 	CHECK_FALSE(page->messages[5].youtubeEvent);
 }
 
+namespace {
+
+std::string Gift(const std::string &id, int combo, const char *display = "")
+{
+	return R"({"id":")" + id + R"(","snippet":{"type":"giftEvent","displayMessage":")" + display +
+	       R"(","giftDetails":{"jewelsAmount":10,"giftName":"Rose","comboCount":)" + std::to_string(combo) +
+	       R"(,"altText":"a rose"}},"authorDetails":{"displayName":"@gifter","channelId":"UC7"}})";
+}
+
+} // namespace
+
+TEST_CASE("ParseMessagesPage reads Jewels gifts")
+{
+	auto page = ParseMessagesPage(R"({"items":[)" + Gift("j1", 0) + "]}");
+	REQUIRE(page);
+	REQUIRE(page->messages.size() == 1);
+	const auto &gift = page->messages[0];
+	REQUIRE(gift.youtubeEvent);
+	CHECK(gift.youtubeEvent->kind == YouTubeEvent::Kind::Jewels);
+	CHECK(gift.youtubeEvent->gift == "Rose");
+	CHECK(gift.youtubeEvent->jewels == 10);
+	CHECK(gift.youtubeEvent->combo == 1); // 0 = not a combo: one gift
+	CHECK(gift.youtubeEvent->name == "@gifter");
+	CHECK(gift.text == "sent Rose"); // no display text: described
+}
+
+TEST_CASE("GiftCombos counts only the gifts each combo update adds")
+{
+	GiftCombos combos(2);
+	auto gift = [](const char *id, int64_t combo) {
+		YouTubeEvent event;
+		event.kind = YouTubeEvent::Kind::Jewels;
+		event.id = id;
+		event.combo = combo;
+		event.count = combo;
+		return event;
+	};
+	auto first = gift("a", 2);
+	REQUIRE(combos.Apply(first));
+	CHECK(first.count == 2);
+	CHECK(first.id == "a#2");
+	auto grown = gift("a", 5);
+	REQUIRE(combos.Apply(grown));
+	CHECK(grown.count == 3); // gifts 3 to 5
+	CHECK(grown.id == "a#5");
+	auto repeat = gift("a", 5);
+	CHECK_FALSE(combos.Apply(repeat));
+	auto late = gift("a", 4); // an older update arriving after a newer one
+	CHECK_FALSE(combos.Apply(late));
+
+	auto b = gift("b", 1), c = gift("c", 1);
+	CHECK(combos.Apply(b));
+	CHECK(combos.Apply(c)); // forgets "a"
+	auto noId = gift("", 1);
+	CHECK(combos.Apply(noId));
+	CHECK(noId.count == 1);
+}
+
+TEST_CASE("ChatSession shows a growing Jewels combo once per update")
+{
+	FakeHttp http;
+	ChatSession session(http, oauth::GoogleProvider("id", "sec"), FreshToken(), "", 5000, nullptr);
+	http.Queue(200, kBroadcastLive);
+	http.Queue(200, kChannel);
+	session.Step(0);
+	http.Queue(200, Page(Gift("j1", 2) + "," + Item("m1", "Ann", "hi")));
+	auto first = session.Step(1);
+	REQUIRE(first.messages.size() == 2);
+	REQUIRE(first.messages[0].youtubeEvent);
+	CHECK(first.messages[0].youtubeEvent->count == 2);
+	CHECK(first.messages[0].id == "j1"); // the chat line keeps YouTube's id, for moderation
+	CHECK(http.requests.back().url.find("giftDetails(jewelsAmount,giftName,comboCount,altText)") !=
+	      std::string::npos);
+
+	http.Queue(200, Page(Gift("j1", 2) + "," + Gift("j1", 6) + "," + Item("m1", "Ann", "hi"), "p3"));
+	auto next = session.Step(2);
+	REQUIRE(next.messages.size() == 1);
+	CHECK(next.messages[0].youtubeEvent->count == 4);
+	CHECK(next.messages[0].youtubeEvent->id == "j1#6");
+}
+
 TEST_CASE("ParseMessagesPage detects the end of chat")
 {
 	auto offline = ParseMessagesPage(R"({"offlineAt":"2026-09-23T00:00:00Z","items":[]})");

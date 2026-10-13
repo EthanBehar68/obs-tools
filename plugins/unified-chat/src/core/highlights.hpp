@@ -40,6 +40,7 @@ enum class HighlightKind {
 	SuperChat,  // Super Chats and Super Stickers
 	Member,
 	GiftMemberships,
+	Jewels, // YouTube Jewels gifts
 	FirstChatter,
 	Mention,
 	Count,
@@ -77,7 +78,7 @@ struct HighlightStyle {
 HighlightStyle ComputeHighlightStyle(std::string_view accent, std::string_view background);
 
 // An alert shown in the chat: from Stream Alerts (follows, YouTube subscribers), Twitch chat (subs, gifts, raids,
-// cheers) or YouTube chat (Super Chats, memberships). text is what happened, comment the viewer's own words.
+// cheers) or YouTube chat (Super Chats, memberships, Jewels gifts). text is what happened, comment the viewer's own words.
 struct ChatEvent {
 	Platform platform = Platform::Twitch;
 	HighlightKind kind = HighlightKind::Follow;
@@ -85,8 +86,8 @@ struct ChatEvent {
 	std::string comment;
 };
 
-// The event line for a YouTube Super Chat / Sticker / membership message, or a Twitch cheer; nullopt for any other
-// message.
+// The event line for a YouTube Super Chat / Sticker / membership / Jewels gift message, or a Twitch cheer; nullopt
+// for any other message.
 std::optional<ChatEvent> EventFromMessage(const ChatMessage &message);
 
 } // namespace unified_chat

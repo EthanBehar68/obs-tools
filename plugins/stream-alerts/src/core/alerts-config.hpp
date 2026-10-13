@@ -30,7 +30,7 @@ struct AlertSettings {
 	std::string textSource; // gets the message; optional
 	std::string message;
 	std::string overflowMessage; // Follow, Subscriber: past kMaxQueued waiting
-	std::string variantMessage;  // TwitchSub: a resub; Member: a milestone
+	std::string variantMessage;  // TwitchSub: a resub; Member: a milestone; Jewels: several gifts at once
 
 	// An alert with neither source shows nothing, so it isn't queued (it would only hold up the others).
 	bool IsSetUp() const { return enabled && (!source.empty() || !textSource.empty()); }
@@ -48,8 +48,10 @@ struct AlertsConfig {
 	AlertSettings member{
 		true, {}, {}, "{name} just became a member!", {}, "{name} has been a member for {months} months!"};
 	AlertSettings giftMemberships{true, {}, {}, "{name} gifted {count} memberships!"};
+	AlertSettings jewels{true, {}, {}, "{name} sent {gift}!", {}, "{name} sent {count} × {gift}!"};
 	int minBits = 1;        // smaller cheers don't alert
 	int minRaidViewers = 1; // nor smaller raids
+	int minJewels = 1;      // nor smaller Jewels gifts
 	int durationSeconds = 5;
 	int subscriberCheckSeconds = 120; // YouTube subscribers: 1 quota unit per check, so 30 an hour
 

@@ -156,4 +156,24 @@ TEST_CASE("YouTube events from the chat become alerts")
 	sticker.kind = obs_tools::YouTubeEvent::Kind::SuperSticker;
 	sticker.amount = "$2.00";
 	CHECK(FromYouTubeEvent(sticker).kind == AlertKind::SuperChat);
+
+	obs_tools::YouTubeEvent gift;
+	gift.kind = obs_tools::YouTubeEvent::Kind::Jewels;
+	gift.id = "LCC.g#5";
+	gift.gift = "Rose";
+	gift.combo = 5;
+	gift.count = 3; // gifts 3 to 5 of a combo
+	gift.jewels = 10;
+	alert = FromYouTubeEvent(gift);
+	CHECK(alert.kind == AlertKind::Jewels);
+	CHECK(alert.id == "LCC.g#5");
+	CHECK(alert.variant); // several gifts
+	CHECK(alert.count == 3);
+	CHECK(alert.jewels == 30);
+	CHECK(alert.amount == "30");
+	CHECK(alert.gift == "Rose");
+	CHECK(IsPriority(alert.kind));
+	CHECK_FALSE(IsTwitch(alert.kind));
+	gift.count = 1;
+	CHECK_FALSE(FromYouTubeEvent(gift).variant);
 }

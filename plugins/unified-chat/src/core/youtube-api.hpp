@@ -85,6 +85,22 @@ private:
 	std::unordered_set<uint64_t> ids_;
 };
 
+// YouTube sends a Jewels gift again under the same message id each time its combo grows. Remembers the highest combo
+// seen for the most recent `capacity` gifts, so an update counts only the gifts it adds and a repeat none.
+class GiftCombos {
+public:
+	explicit GiftCombos(size_t capacity = 200) : capacity_(capacity) {}
+
+	// For a Jewels event: false when it adds no gifts. Otherwise sets count to the gifts it adds, and id to
+	// "<id>#<combo>" so Stream Alerts tells the updates apart.
+	bool Apply(YouTubeEvent &event);
+
+private:
+	size_t capacity_;
+	std::deque<uint64_t> order_;
+	std::unordered_map<uint64_t, int64_t> combos_;
+};
+
 enum class State { SignedOut, WaitingForBroadcast, Polling, Error };
 
 struct StepResult {
@@ -164,6 +180,8 @@ private:
 	void CheckViewers(int64_t now, StepResult &out);
 	void FallBackToPolling(const std::string &reason, StepResult &out);
 	void EndChat(StepResult &out);
+	// Not shown before (a Jewels combo update counts as new when it adds gifts) and not history.
+	bool IsNew(ChatMessage &chat);
 	void Deliver(std::vector<ChatMessage> &messages, StepResult &out);
 	void DeliverModeration(std::vector<ModerationEvent> &events, StepResult &out, bool live);
 	bool IsHistory(const ChatMessage &chat) const
@@ -188,6 +206,7 @@ private:
 	std::string ownChannelId_;
 	std::string ownName_;
 	RecentIds seen_;
+	GiftCombos gifts_;
 	bool announcedWaiting_ = false;
 
 	int64_t historyCutoff_ = 0;

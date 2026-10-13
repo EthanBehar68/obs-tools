@@ -69,7 +69,7 @@ TEST_CASE("Highlights round trip through the config; bad values fall back")
 	CHECK(ParseConfig("{}").highlights[HighlightKind::Follow].show);
 }
 
-TEST_CASE("Cheers, Super Chats and memberships become event lines; other messages don't")
+TEST_CASE("Cheers, Super Chats, memberships and Jewels become event lines; other messages don't")
 {
 	ChatMessage cheer;
 	cheer.author = "Fan";
@@ -96,6 +96,18 @@ TEST_CASE("Cheers, Super Chats and memberships become event lines; other message
 	superChat.youtubeEvent->level = "Gold";
 	CHECK(EventFromMessage(superChat)->text == "@viewer has been a member for 12 months (Gold)");
 	CHECK(EventFromMessage(superChat)->kind == HighlightKind::Member);
+
+	YouTubeEvent gift;
+	gift.kind = YouTubeEvent::Kind::Jewels;
+	gift.gift = "Rose";
+	gift.jewels = 10;
+	gift.combo = gift.count = 1;
+	superChat.youtubeEvent = gift;
+	CHECK(EventFromMessage(superChat)->kind == HighlightKind::Jewels);
+	CHECK(EventFromMessage(superChat)->text == "@viewer sent Rose (10 Jewels)");
+	superChat.youtubeEvent->combo = 5;
+	superChat.youtubeEvent->count = 3; // a combo update: gifts 3 to 5
+	CHECK(EventFromMessage(superChat)->text == "@viewer sent 3 × Rose (30 Jewels), 5 in a row");
 
 	CHECK_FALSE(EventFromMessage(ChatMessage{}));
 }

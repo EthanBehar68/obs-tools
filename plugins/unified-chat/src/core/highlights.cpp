@@ -31,10 +31,10 @@ static constexpr const char *kFirstChatterColor = "#3fb950";
 
 const char *HighlightKey(HighlightKind kind)
 {
-	static constexpr const char *kKeys[] = {"follow",        "twitch_sub", "gift_subs",
-						"cheer",         "raid",       "subscriber",
-						"super_chat",    "member",     "gift_memberships",
-						"first_chatter", "mention"};
+	static constexpr const char *kKeys[] = {"follow",     "twitch_sub",    "gift_subs",
+						"cheer",      "raid",          "subscriber",
+						"super_chat", "member",        "gift_memberships",
+						"jewels",     "first_chatter", "mention"};
 	static_assert(std::size(kKeys) == kHighlightKinds);
 	return kKeys[(size_t)kind];
 }
@@ -58,6 +58,8 @@ Highlight DefaultHighlight(HighlightKind kind)
 		return {true, kAlertColor, "\U0001F4B2"}; // 💲
 	case HighlightKind::Member:
 		return {true, kAlertColor, "\U0001F3C5"}; // 🏅
+	case HighlightKind::Jewels:
+		return {true, kAlertColor, "\U0001F4A0"}; // 💠 (💎 is the cheer's)
 	case HighlightKind::FirstChatter:
 		return {true, kFirstChatterColor, "✨"}; // ✨
 	default:
@@ -165,6 +167,16 @@ std::optional<ChatEvent> EventFromMessage(const ChatMessage &message)
 		event.text = message.author + " has been a member for " + std::to_string(yt.months) + " months" + level;
 		event.comment = yt.message;
 		break;
+	case YouTubeEvent::Kind::Jewels: {
+		event.kind = HighlightKind::Jewels;
+		const std::string gift = yt.gift.empty() ? std::string("a gift") : yt.gift;
+		event.text = message.author + " sent " + (yt.count > 1 ? std::to_string(yt.count) + " × " : "") + gift;
+		if (const int64_t jewels = JewelsTotal(yt); jewels > 0)
+			event.text += " (" + std::to_string(jewels) + " Jewels)";
+		if (yt.combo > yt.count)
+			event.text += ", " + std::to_string(yt.combo) + " in a row";
+		break;
+	}
 	default:
 		event.kind = HighlightKind::GiftMemberships;
 		event.text = message.author + " gifted " + std::to_string(yt.count) + " memberships" + level;

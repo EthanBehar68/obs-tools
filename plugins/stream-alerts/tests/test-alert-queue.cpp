@@ -143,6 +143,13 @@ TEST_CASE("Alert messages fill in each kind's details")
 	superChat.message = "great stream";
 	CHECK(FormatAlert({superChat.kind, {superChat.name}, false, superChat}, config.superChat.message, {}) ==
 	      "@viewer sent $5.00!\ngreat stream");
+
+	AlertEvent jewels{AlertKind::Jewels, "4#3", "@fan"};
+	jewels.gift = "Rose";
+	jewels.count = 3;
+	CHECK(FormatAlert({jewels.kind, {jewels.name}, false, jewels}, config.jewels.message, {}) == "@fan sent Rose!");
+	CHECK(FormatAlert({jewels.kind, {jewels.name}, false, jewels}, config.jewels.variantMessage, {}) ==
+	      "@fan sent 3 × Rose!");
 }
 
 TEST_CASE("A kind is set up only with something to show")
@@ -163,6 +170,7 @@ TEST_CASE("Every kind, the minimums and variant messages round trip")
 	config.member.variantMessage = "{months}!";
 	config.minBits = 500;
 	config.minRaidViewers = 10;
+	config.minJewels = 50;
 	config.subscriberCheckSeconds = 300;
 	AlertsConfig loaded = ParseAlertsConfig(SerializeAlertsConfig(config));
 	for (AlertKind kind : kAllKinds)
@@ -170,6 +178,7 @@ TEST_CASE("Every kind, the minimums and variant messages round trip")
 	CHECK(loaded.member.variantMessage == "{months}!");
 	CHECK(loaded.minBits == 500);
 	CHECK(loaded.minRaidViewers == 10);
+	CHECK(loaded.minJewels == 50);
 	CHECK(loaded.subscriberCheckSeconds == 300);
 	CHECK(ParseAlertsConfig(R"({"subscriber_check_seconds":5})").subscriberCheckSeconds == 30);
 
@@ -178,6 +187,8 @@ TEST_CASE("Every kind, the minimums and variant messages round trip")
 	CHECK(old.follow.source == "F");
 	CHECK(old.giftSubs.message == "{name} gifted {count} subs!");
 	CHECK(old.minBits == 1);
+	CHECK(old.minJewels == 1);
+	CHECK(old.jewels.message == "{name} sent {gift}!");
 	CHECK(old.subscriberCheckSeconds == 120);
 	CHECK(ParseAlertsConfig(R"({"min_bits":0})").minBits == 1);
 }

@@ -1017,9 +1017,14 @@ void ChatDock::AppendMessages(const std::vector<ChatMessage> &messages)
 	std::vector<DisplayLine> lines;
 	lines.reserve(messages.size());
 	for (const auto &message : messages) {
-		// Super Chats and memberships only arrive in the chat: Stream Alerts alerts on them.
-		if (message.youtubeEvent)
-			NotifyYouTubeEvent(SerializeYouTubeEvent(*message.youtubeEvent));
+		// Super Chats, memberships and Jewels only arrive in the chat: Stream Alerts alerts on them.
+		if (message.youtubeEvent) {
+			const YouTubeEvent &event = *message.youtubeEvent;
+			if (event.kind == YouTubeEvent::Kind::Jewels) // YouTube's own figures, to check JewelsTotal by
+				obs_log(LOG_INFO, "YouTube Jewels gift: combo %lld, %lld new, jewelsAmount %lld",
+					(long long)event.combo, (long long)event.count, (long long)event.jewels);
+			NotifyYouTubeEvent(SerializeYouTubeEvent(event));
+		}
 		auto released = merger_.Offer(message);
 		std::move(released.begin(), released.end(), std::back_inserter(lines));
 	}

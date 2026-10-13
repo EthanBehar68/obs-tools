@@ -104,6 +104,7 @@ std::string FormatAlert(const Alert &alert, const std::string &single, const std
 		text = ReplaceAll(text, "{viewers}", std::to_string(event.viewers));
 		text = ReplaceAll(text, "{amount}", event.amount);
 		text = ReplaceAll(text, "{level}", event.level);
+		text = ReplaceAll(text, "{gift}", event.gift);
 		return ReplaceAll(text, "{message}", event.message); // last: the viewer's text is never expanded
 	}
 

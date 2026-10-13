@@ -58,6 +58,8 @@ static const char *KindName(AlertKind kind)
 		return "YouTube Super Chat";
 	case AlertKind::Member:
 		return "YouTube member";
+	case AlertKind::Jewels:
+		return "YouTube Jewels";
 	default:
 		return "YouTube gifted memberships";
 	}
@@ -227,20 +229,24 @@ static bool operator!=(const TwitchWants &a, const TwitchWants &b)
 void AlertsController::ApplyConfig(const AlertsConfig &config, bool save)
 {
 	const TwitchWants before = Wants();
-	const bool minimumsRaised = config.minBits > config_.minBits || config.minRaidViewers > config_.minRaidViewers;
+	const bool minimumsRaised = config.minBits > config_.minBits ||
+				    config.minRaidViewers > config_.minRaidViewers ||
+				    config.minJewels > config_.minJewels;
 	const bool subscriberChanged = config.subscriber.enabled != config_.subscriber.enabled ||
 				       config.subscriberCheckSeconds != config_.subscriberCheckSeconds;
 	config_ = config;
 	if (save)
 		SaveConfig();
 	if (minimumsRaised) {
-		// Waiting cheers and raids below the new minimum won't play after all.
+		// Waiting cheers, raids and Jewels gifts below the new minimum won't play after all.
 		const size_t dropped = queue_.RemoveIf([this](const Alert &alert) {
 			return (alert.kind == AlertKind::Cheer && alert.event.count < config_.minBits) ||
-			       (alert.kind == AlertKind::Raid && alert.event.viewers < config_.minRaidViewers);
+			       (alert.kind == AlertKind::Raid && alert.event.viewers < config_.minRaidViewers) ||
+			       (alert.kind == AlertKind::Jewels && alert.event.jewels < config_.minJewels);
 		});
 		if (dropped > 0)
-			obs_log(LOG_INFO, "%zu waiting cheers or raids dropped: below the new minimum", dropped);
+			obs_log(LOG_INFO, "%zu waiting cheers, raids or Jewels gifts dropped: below the new minimum",
+				dropped);
 	}
 	const bool twitchChanged = Wants() != before;
 	if (streaming_ && (twitchChanged || subscriberChanged))
@@ -347,6 +353,14 @@ static AlertEvent TestEvent(AlertKind kind, bool variant, int n)
 		event.count = 5;
 		event.level = "Member";
 		break;
+	case AlertKind::Jewels:
+		event.name = "TestGifter";
+		event.gift = "Rose";
+		event.count = variant ? 3 : 1;
+		event.jewels = 10 * event.count;
+		event.amount = std::to_string(event.jewels);
+		event.message.clear();
+		break;
 	default:
 		event.name = kind == AlertKind::Member ? "TestMember" : "TestSub";
 		event.level = "Member";
@@ -368,6 +382,8 @@ void AlertsController::Push(const AlertEvent &event, bool test)
 					      ? "below the minimum bits"
 				      : !test && event.kind == AlertKind::Raid && event.viewers < config_.minRaidViewers
 					      ? "below the minimum raid size"
+				      : !test && event.kind == AlertKind::Jewels && event.jewels < config_.minJewels
+					      ? "below the minimum Jewels"
 					      : nullptr;
 		if (skipped) {
 			obs_log(LOG_INFO, "%s from %s not shown: %s", KindName(event.kind), event.name.c_str(),

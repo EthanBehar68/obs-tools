@@ -74,6 +74,8 @@ AlertSettings &AlertsConfig::For(AlertKind kind)
 		return superChat;
 	case AlertKind::Member:
 		return member;
+	case AlertKind::Jewels:
+		return jewels;
 	default:
 		return giftMemberships;
 	}
@@ -98,6 +100,8 @@ const char *KindKey(AlertKind kind)
 		return "super_chat";
 	case AlertKind::Member:
 		return "member";
+	case AlertKind::Jewels:
+		return "jewels";
 	default:
 		return "gift_memberships";
 	}
@@ -108,6 +112,7 @@ std::string SerializeAlertsConfig(const AlertsConfig &config)
 	json obj = {{"duration_seconds", config.durationSeconds},
 		    {"min_bits", config.minBits},
 		    {"min_raid_viewers", config.minRaidViewers},
+		    {"min_jewels", config.minJewels},
 		    {"subscriber_check_seconds", config.subscriberCheckSeconds}};
 	for (AlertKind kind : kAllKinds)
 		obj[KindKey(kind)] = ToJson(config.For(kind));
@@ -130,6 +135,7 @@ AlertsConfig ParseAlertsConfig(const std::string &text)
 	number("duration_seconds", config.durationSeconds, 1, 60);
 	number("min_bits", config.minBits, 1, 1000000);
 	number("min_raid_viewers", config.minRaidViewers, 1, 1000000);
+	number("min_jewels", config.minJewels, 1, 1000000);
 	number("subscriber_check_seconds", config.subscriberCheckSeconds, kMinSubscriberCheckSeconds,
 	       kMaxSubscriberCheckSeconds);
 	return config;

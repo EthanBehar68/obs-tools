@@ -96,7 +96,7 @@ libs\
 │   │   ├── oauth-device.*       RFC 8628 device flow for Twitch and Google; the Twitch scopes of every plugin
 │   │   ├── json-array-reader.*  splits a chunked JSON array into complete objects
 │   │   ├── text-util.*          UTF-8, escaping, URL encoding
-│   │   ├── youtube-events.*     YouTube Super Chats / memberships as JSON, from Unified Chat to Stream Alerts
+│   │   ├── youtube-events.*     YouTube Super Chats / memberships / Jewels as JSON, from Unified Chat to Stream Alerts
 │   │   ├── http-client.hpp      the HttpClient interface the cores are tested against
 │   │   └── secret-codec.*       the SecretCodec interface, "enc:v1:" sealing
 │   ├── net\          -> obs-tools-net (libcurl, libobs file helpers)
@@ -127,7 +127,7 @@ plugins\unified-chat\
 │   │   ├── name-color.*      readable name colors (WCAG contrast vs. the chat background), cached per color
 │   │   ├── echo-merger.*     your own Both message shown as one line
 │   │   ├── highlights.*      highlight kinds (alerts, first-time chatter, mention): defaults, readable tint + text
-│   │   │                     for any colour, event lines from cheers / Super Chats / memberships
+│   │   │                     for any colour, event lines from cheers / Super Chats / memberships / Jewels
 │   │   ├── chatter-log.*     who has chatted before (chatters.json), for first-time chatters
 │   │   ├── bot-merger.*      a bot's identical Twitch + YouTube lines folded into one (line shown first, icon added later)
 │   │   ├── mentions.*        clickable-name links, "mentions you" matching, recent chatters for @ + Tab completion
