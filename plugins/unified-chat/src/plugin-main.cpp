@@ -70,6 +70,10 @@ bool obs_module_load(void)
 		if (guarded)
 			guarded->OpenSettings();
 	});
+	obs_tools::AddObsToolsMenuEntry(QString::fromUtf8(obs_module_text("Tools.StreamInfo")), [guarded]() {
+		if (guarded)
+			guarded->OpenStreamInfo();
+	});
 	obs_tools::SetAccountsChangedHandler([guarded](bool twitch, bool google) {
 		if (guarded)
 			guarded->OnAccountsChanged(twitch, google);

@@ -50,6 +50,8 @@ public:
 	HttpResponse Post(const std::string &url, const std::vector<std::string> &headers, const std::string &body,
 			  const std::string &contentType) override;
 	HttpResponse Delete(const std::string &url, const std::vector<std::string> &headers) override;
+	HttpResponse Send(const std::string &method, const std::string &url, const std::vector<std::string> &headers,
+			  const std::string &body, const std::string &contentType) override;
 	// Off for requests that fail by design, such as the sign-in's "still waiting" polls.
 	void SetLogFailures(bool enabled) { logFailures_ = enabled; }
 	// Off where 404 is an ordinary answer (e.g. a channel that doesn't use an emote service).
@@ -61,7 +63,7 @@ public:
 private:
 	HttpResponse Perform(const std::string &url, const std::vector<std::string> &headers, const std::string *body,
 			     const std::string &contentType, const std::function<bool(std::string_view)> *onData,
-			     const std::function<bool()> *interrupt, bool deleteMethod = false);
+			     const std::function<bool()> *interrupt, const char *method = nullptr);
 
 	void Count(bool newConnection, bool failed, bool serverError);
 

@@ -113,6 +113,13 @@ If YouTube goes live some other way (another app, or a multistream output with a
 - **Moderate from the dock:** right-click someone's line for **Delete message**, **Timeout** (1 minute, 10 minutes, 1 hour, 24 hours or Custom…), **Ban…** (with an optional reason on Twitch) and, on lines already marked timed out or banned, **Unban**. Every action asks first. You must be the broadcaster or a moderator of that chat.
   - **Twitch:** after updating to this version, **sign in to Twitch again once** (Tools → OBS Tools → Accounts… → Sign in). The new sign-in adds the moderation permissions. Until then the dock tells you when you try.
   - **YouTube:** deleting a message uses **20 quota units**; a timeout, ban or unban **200** (the confirmation says so). YouTube can only lift bans made from the dock during this session; use YouTube Studio for older ones.
+- **Stream info:** press **✎** on the dock (or **Tools → OBS Tools → Stream Info…**). The window opens with what's set now.
+  - **Title:** one box for both platforms. The count shows the limit: 140 characters on Twitch, 100 on YouTube (which also refuses `<` and `>`).
+  - **Twitch category:** type to search, then click a match. With the box empty, the list shows your recent categories; picking one brings back the tags you last used with it.
+  - **Twitch tags:** up to 10, separated by commas, letters and digits only, up to 25 each.
+  - **YouTube category:** e.g. Gaming. YouTube's API has no way to set the specific game; that stays in YouTube Studio.
+  - **Change:** which platforms **Apply** updates. Only what you changed is sent. YouTube updates your live broadcast, or the next upcoming one, so you can set it before going live; each change uses **51 quota units**.
+  - **Twitch:** after updating to this version, **sign in to Twitch again once** to allow it (the window has a **Sign in again…** button). Until then it shows what's set but can't change it.
 - **Moderation stays visible.** Nothing a moderator removes disappears from the dock. The message text is struck through and dimmed, but you can still read it, and a coloured tag says why:
   - *(deleted)*, grey: a single message was deleted (Twitch only; YouTube no longer reports single deletions).
   - *(timed out 10 minutes)*, amber: the author was timed out, and all their lines get the tag.

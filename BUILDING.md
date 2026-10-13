@@ -76,6 +76,7 @@ Each library and plugin keeps its unit tests in its own `tests\` folder. They us
 | YouTube response parsing, video URL parsing, dedupe, and the full `ChatSession` against a scripted fake HTTP server (broadcast discovery, paging, token refresh, 401 retry, quota backoff, chat end, send + echo) | `test-youtube.cpp` |
 | Send routing (targets, length limits, partial delivery), HTML escaping of chat lines and event lines, config round trip, 1.2.0 sign-in migration | `test-router-format-config.cpp` |
 | Highlight defaults, readable styles for any colour, emoji limits, event lines, the chatter list | `test-highlights.cpp` |
+| Stream info: Helix channel / category search parsing, box art sizes, Modify Channel bodies, tag rules, recent categories, YouTube broadcast choice and videos.update snippet, config round trip | `test-stream-info.cpp` |
 | **plugins\stream-alerts** (`stream-alerts-tests.exe`) | |
 | Alert queue (order, once per person per stream, combining past 10, priority alerts), message placeholders, config round trip and 0.1.0 configs | `test-alert-queue.cpp` |
 | Twitch subscriptions, follow / chat notification / cheer events, YouTube events to alerts, validate scopes, recent-subscriber baseline and new-subscriber detection | `test-platform-events.cpp` |
@@ -133,14 +134,18 @@ plugins\unified-chat\
 │   │   ├── mentions.*        clickable-name links, "mentions you" matching, recent chatters for @ + Tab completion
 │   │   ├── emotes.*          Twitch emote/badge tags, BTTV/FFZ/7TV lists, emote index, message splitting, image URLs
 │   │   ├── moderation.*      Helix and YouTube moderation requests (delete, timeout, ban, unban), token identity/scopes
+│   │   ├── stream-info.*     title / category / tags: Helix channel and category search, YouTube broadcast + video
+│   │   │                     snippet requests, tag rules, recent categories
 │   │   └── chat-config.*     config.json (de)serialization
 │   ├── net\         worker threads
 │   │   ├── twitch-connection.*   Twitch chat: EventSub + Helix when signed in with its scopes, else TLS IRC to
 │   │   │                         irc.chat.twitch.tv:6697 via CURLOPT_CONNECT_ONLY
 │   │   ├── asset-loader.*        one background thread downloading emote/badge lists and images
+│   │   ├── stream-info-client.*  the Stream Info window's requests, on a thread that exists only while it's open
 │   │   └── youtube-connection.*  YouTube poll/send loop
 │   ├── chat-dock.*        the dock widget
 │   ├── settings-dialog.*
+│   ├── stream-info-dialog.*  Stream Info window (✎ on the dock, Tools > OBS Tools > Stream Info…)
 │   ├── target-switch.*    the Twitch / YouTube / Both switch
 │   ├── platform-icons.*   icons painted with QPainter (no image assets)
 │   └── plugin-main.cpp    module entry, dock registration (obs_frontend_add_dock_by_id)

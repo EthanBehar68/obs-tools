@@ -6,11 +6,12 @@ An OBS Studio plugin that adds one dockable chat window showing **Twitch** and *
 - One text field at the bottom, next to a **Twitch / YouTube / Both** switch that picks where your message goes.
 - Twitch chat is read-only without signing in. Signing in lets you send messages.
 - YouTube chat attaches to your current live broadcast automatically, or to a video you choose.
+- **Stream info** (✎ on the dock, or Tools → OBS Tools → Stream Info…): set the title on both platforms, the Twitch category (search with box art) and tags, and the YouTube category, without leaving OBS.
 - Sign-in uses the OAuth device-code flow for both platforms: open a URL and type a code. No local web server is involved.
 
 ```
 ┌ Unified Chat ─────────────────────────────────┐
-│ [T] Connected  [▶] Connected    Clear Settings │
+│ [T] Connected  [▶] Connected  Clear ✎ Settings │
 │ [T] CoolViewer: hello from twitch             │
 │ [▶] Jane Doe: hi from youtube!                │
 │ [T] you: thanks both                          │

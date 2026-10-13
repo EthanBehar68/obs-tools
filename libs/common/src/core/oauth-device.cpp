@@ -32,14 +32,15 @@ static constexpr const char *kDeviceGrant = "urn:ietf:params:oauth:grant-type:de
 
 Provider TwitchProvider(const std::string &clientId)
 {
-	// One sign-in serves every plugin, so it asks for all of their scopes: chat over IRC and EventSub, ban events
-	// and moderating from the chat dock (unified-chat), follower and cheer alerts (stream-alerts).
+	// One sign-in serves every plugin, so it asks for all of their scopes: chat over IRC and EventSub, ban events,
+	// moderating from the chat dock and setting the title, category and tags (unified-chat), follower and cheer
+	// alerts (stream-alerts).
 	return {"https://id.twitch.tv/oauth2/device",
 		"https://id.twitch.tv/oauth2/token",
 		Trim(clientId),
 		{},
 		"chat:read chat:edit user:read:chat user:write:chat channel:moderate moderator:manage:banned_users "
-		"moderator:manage:chat_messages moderator:read:followers bits:read"};
+		"moderator:manage:chat_messages channel:manage:broadcast moderator:read:followers bits:read"};
 }
 
 std::string MergeScopes(const std::string &a, const std::string &b)

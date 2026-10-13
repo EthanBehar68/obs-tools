@@ -121,7 +121,14 @@ HttpResponse CurlHttpClient::Post(const std::string &url, const std::vector<std:
 
 HttpResponse CurlHttpClient::Delete(const std::string &url, const std::vector<std::string> &headers)
 {
-	return Perform(url, headers, nullptr, {}, nullptr, nullptr, true);
+	return Perform(url, headers, nullptr, {}, nullptr, nullptr, "DELETE");
+}
+
+HttpResponse CurlHttpClient::Send(const std::string &method, const std::string &url,
+				  const std::vector<std::string> &headers, const std::string &body,
+				  const std::string &contentType)
+{
+	return Perform(url, headers, &body, contentType, nullptr, nullptr, method.c_str());
 }
 
 HttpResponse CurlHttpClient::GetStream(const std::string &url, const std::vector<std::string> &headers,
@@ -134,7 +141,7 @@ HttpResponse CurlHttpClient::GetStream(const std::string &url, const std::vector
 HttpResponse CurlHttpClient::Perform(const std::string &url, const std::vector<std::string> &headers,
 				     const std::string *body, const std::string &contentType,
 				     const std::function<bool(std::string_view)> *onData,
-				     const std::function<bool()> *interrupt, bool deleteMethod)
+				     const std::function<bool()> *interrupt, const char *method)
 {
 	HttpResponse response;
 	if (!curl_)
@@ -170,8 +177,8 @@ HttpResponse CurlHttpClient::Perform(const std::string &url, const std::vector<s
 #ifdef _WIN32
 	curl_easy_setopt(curl, CURLOPT_SSL_OPTIONS, (long)CURLSSLOPT_REVOKE_BEST_EFFORT);
 #endif
-	if (deleteMethod)
-		curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "DELETE");
+	if (method)
+		curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, method); // with a body: sent like a POST's
 	if (body) {
 		curl_easy_setopt(curl, CURLOPT_POST, 1L);
 		curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body->c_str());
@@ -200,17 +207,17 @@ HttpResponse CurlHttpClient::Perform(const std::string &url, const std::vector<s
 	const bool failed = !response.interrupted && !cancelled &&
 			    (response.status == 0 || (response.status >= 400 && response.status != 401));
 	if (failed && logFailures_ && (logNotFound_ || response.status != 404)) {
-		const char *method = deleteMethod ? "DELETE" : body ? "POST" : "GET";
+		const char *verb = method ? method : body ? "POST" : "GET";
 		const std::string connection =
 			connects > 0 ? "new connection (connect " + std::to_string(connectUs / 1000) +
 					       " ms, TLS done at " + std::to_string(tlsUs / 1000) + " ms)"
 				     : std::string("reused connection");
 		if (response.status == 0)
-			obs_log(LOG_WARNING, "HTTP %s %s failed: curl %d, %s; after %lld ms, %s", method,
+			obs_log(LOG_WARNING, "HTTP %s %s failed: curl %d, %s; after %lld ms, %s", verb,
 				WithoutQuery(url).c_str(), (int)code, response.error.c_str(),
 				(long long)(totalUs / 1000), connection.c_str());
 		else
-			obs_log(LOG_WARNING, "HTTP %s %s: %ld after %lld ms, %s: %s", method, WithoutQuery(url).c_str(),
+			obs_log(LOG_WARNING, "HTTP %s %s: %ld after %lld ms, %s: %s", verb, WithoutQuery(url).c_str(),
 				response.status, (long long)(totalUs / 1000), connection.c_str(),
 				Excerpt(response.body).c_str());
 	}
