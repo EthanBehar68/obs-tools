@@ -47,6 +47,8 @@ Built 2026-10-13 (sections 1 and 2 above), not yet tried in OBS:
 6. Stream Info: sign in to Twitch again, then title / category search and box art / tags / recent categories, Apply on each platform, YouTube before going live (upcoming broadcast), Enter in the search box doesn't Apply.
 7. Stream Alerts: Use selected (group with one text source fills both; Studio Mode uses the preview scene), the Tools menu entry, the settings window staying open while you click in Sources.
 
+8. Monitoring repair: change one character of `MonitoringDeviceId` in the profile's `basic.ini` (OBS closed), start OBS: a dock notice, and alerts play in the headphones again.
+
 From 2026-10-12:
 
 1. Twitch re-sign-in, then EventSub chat: sending, your own echo, `/me`, refused messages, role badges. (Verified 2026-10-13: the Watching without audio badge shows.)
