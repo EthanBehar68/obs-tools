@@ -13,6 +13,7 @@
 - **YouTube Jewels gifts** (needs the matching Unified Chat): one alert per gift, or per batch of a combo, with `{gift}`, `{count}` and `{amount}` (Jewels); a second message for several gifts at once, and a minimum in Jewels.
 - **Use selected:** pick an alert's source or text source by selecting it in OBS's Sources list. A group with one text source sets both. **Tools → OBS Tools → Assign selected source to alert** does the same from the menu. The settings window no longer blocks OBS while it's open.
 - **Create group…** on each kind's page builds a ready alert group: a text source (bold, outlined, centred, with a sample of the message) plus an optional picture (image, GIF or video) and sound, hidden, in the current scene and, by default, every scene as a reference. Sounds and videos restart each time and are monitored so you hear them.
+- **Test alerts of every kind show in Unified Chat's dock**, marked "(test)", with the message as it shows on screen. Before, only follow and YouTube subscriber tests did, since real subs, cheers and raids reach the dock from the chats themselves. Needs Unified Chat from the same release (OBS Tools protocol 3); an older one just doesn't show them.
 - Internal: the EventSub WebSocket code is shared with Unified Chat.
 
 ## 0.1.0 (2026-09-27)

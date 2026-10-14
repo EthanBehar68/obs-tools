@@ -19,6 +19,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "chat-dock.hpp"
 #include "platform-icons.hpp"
 #include "net/secret-store.hpp"
+#include "core/test-alert.hpp"
 #include "monitoring-repair.hpp"
 #include "scene-category.hpp"
 #include "settings-dialog.hpp"
@@ -1590,6 +1591,22 @@ void ChatDock::OnAlert(bool follow, const std::string &name, bool test)
 		     follow ? HighlightKind::Follow : HighlightKind::Subscriber,
 		     name + (follow ? " followed" : " subscribed") + (test ? " (test)" : ""),
 		     {}});
+}
+
+void ChatDock::OnTestAlert(const std::string &alertJson)
+{
+	const auto alert = ParseTestAlert(alertJson);
+	if (!started_ || !alert)
+		return;
+	for (size_t i = 0; i < kHighlightKinds; ++i) {
+		if (alert->kind == HighlightKey((HighlightKind)i)) {
+			AppendEvent({alert->twitch ? Platform::Twitch : Platform::YouTube,
+				     (HighlightKind)i,
+				     alert->text + " (test)",
+				     {}});
+			return;
+		}
+	}
 }
 
 void ChatDock::AppendEvent(const ChatEvent &event)

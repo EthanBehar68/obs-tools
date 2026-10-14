@@ -88,6 +88,10 @@ bool obs_module_load(void)
 		if (guarded)
 			guarded->OnAlert(follow, name, test);
 	});
+	obs_tools::SetTestAlertHandler([guarded](const std::string &alertJson) {
+		if (guarded)
+			guarded->OnTestAlert(alertJson);
+	});
 	obs_log(LOG_INFO, "plugin loaded successfully (version %s)", PLUGIN_VERSION);
 	return true;
 }
@@ -96,6 +100,7 @@ void obs_module_unload(void)
 {
 	obs_tools::ClearAccountsChangedHandler();
 	obs_tools::ClearAlertHandler();
+	obs_tools::ClearTestAlertHandler();
 	if (s_dock)
 		obs_frontend_remove_event_callback(OnFrontendEvent, s_dock);
 	s_dock = nullptr;
