@@ -62,6 +62,10 @@ Built 2026-10-13, not yet tried in OBS:
 10. Stream Alerts Create group…: with a picture and a sound, with neither, and with a video; the group lands hidden in every scene (Studio Mode: built in the preview scene), Test alert plays it with sound you hear, OK keeps it assigned; a second Create gives "… 2".
 11. Category by scene: link two scenes (Use for scene ▾), tick the switch, go live: a linked scene sets its category after 10 s (dock notice), a quick hop to BRB and back changes nothing, an unlinked scene leaves it, Studio Mode preview doesn't count, a scene rename keeps its link.
 
+12. Fixed after the first desktop test: Stream Info and Settings → Highlights maximized (lists / preview take the extra height, rows stay together; Use for scene ▾ no longer under the list), and Test alert for a Twitch sub (and cheer, raid, Super Chat…) leaves a "(test)" line in the dock.
+
+Seen working in the first desktop test (2026-10-13, screenshots): Stream Info reads Twitch, category search with box art, scene links saved; Create group… built the group with its sound; follow and subscriber tests in the dock. YouTube was out of quota for the day (HTTP 403), so Stream Info's YouTube side is untested.
+
 From 2026-10-12:
 
 1. Twitch re-sign-in, then EventSub chat: sending, your own echo, `/me`, refused messages, role badges. (Verified 2026-10-13: the Watching without audio badge shows.)
