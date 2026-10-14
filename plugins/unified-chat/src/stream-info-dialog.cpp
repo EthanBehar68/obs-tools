@@ -102,7 +102,8 @@ StreamInfoDialog::StreamInfoDialog(const ChatConfig &config, SaveSettings save, 
 	form->addRow(QString(), search_);
 	categories_ = new QListWidget(this);
 	categories_->setIconSize(QSize(kBoxArtWidth, kBoxArtHeight));
-	categories_->setFixedHeight((kBoxArtHeight + 6) * 4);
+	// Lists grow with the window, so a taller window shows more rather than spreading the rows apart.
+	categories_->setMinimumHeight((kBoxArtHeight + 6) * 3);
 	form->addRow(QString(), categories_);
 
 	// Link the selected category to a scene: switching to it while streaming sets the category.
@@ -138,7 +139,7 @@ StreamInfoDialog::StreamInfoDialog(const ChatConfig &config, SaveSettings save, 
 	targets->addWidget(changeYouTube_);
 	targets->addStretch();
 	form->addRow(Text("StreamInfo.Change"), targets);
-	layout->addLayout(form);
+	layout->addLayout(form, 1);
 
 	// Scenes linked to a category.
 	auto scenesTitle = new QLabel(Text("StreamInfo.Scenes"), this);
@@ -160,12 +161,12 @@ StreamInfoDialog::StreamInfoDialog(const ChatConfig &config, SaveSettings save, 
 	layout->addLayout(byRow);
 	sceneList_ = new QListWidget(this);
 	sceneList_->setIconSize(QSize(kBoxArtWidth, kBoxArtHeight));
-	sceneList_->setFixedHeight((kBoxArtHeight + 6) * 3);
+	sceneList_->setMinimumHeight((kBoxArtHeight + 6) * 2);
 	unlink_ = new QPushButton(Text("StreamInfo.Unlink"), this);
 	auto listRow = new QHBoxLayout();
 	listRow->addWidget(sceneList_, 1);
 	listRow->addWidget(unlink_, 0, Qt::AlignTop);
-	layout->addLayout(listRow);
+	layout->addLayout(listRow, 1);
 	connect(byScene_, &QCheckBox::toggled, this, [this]() { Save(); });
 	connect(sceneDelay_, &QSpinBox::valueChanged, this, [this]() { Save(); });
 	connect(sceneList_, &QListWidget::currentRowChanged, this,

@@ -394,7 +394,7 @@ QWidget *SettingsDialog::MakeHighlightsTab(QWidget *parent)
 	// What each highlight looks like on the dock's own background.
 	preview_ = new QTextBrowser(box);
 	preview_->setOpenLinks(false);
-	preview_->setFixedHeight(preview_->fontMetrics().lineSpacing() * 8); // scrolls: keeps the dialog short
+	preview_->setMinimumHeight(preview_->fontMetrics().lineSpacing() * 8); // grows with the window, not the rows
 	if (!chatBackground_.empty()) {
 		QPalette palette = preview_->palette();
 		palette.setColor(QPalette::Base, QColor(QString::fromStdString(chatBackground_)));
@@ -408,7 +408,7 @@ QWidget *SettingsDialog::MakeHighlightsTab(QWidget *parent)
 	doc->addResource(QTextDocument::ImageResource, QUrl(QString::fromUtf8(kYouTubeIconResource)),
 			 PlatformImage(Platform::YouTube, size, dpr));
 	layout->addWidget(new QLabel(Text("Settings.Highlights.Preview"), box));
-	layout->addWidget(preview_);
+	layout->addWidget(preview_, 1);
 	UpdatePreview();
 	return box;
 }
