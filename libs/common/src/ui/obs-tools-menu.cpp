@@ -40,6 +40,12 @@ static constexpr const char *kAlertSignal = "obs_tools_alert";
 static constexpr const char *kAlertSignalDecl = "void obs_tools_alert(bool follow, string name, bool test)";
 static constexpr const char *kYouTubeEventSignal = "obs_tools_youtube_event";
 static constexpr const char *kYouTubeEventSignalDecl = "void obs_tools_youtube_event(string event)";
+// Added after the signals above were published together: it has its own marker, so it's declared even when an older
+// plugin declared the others first.
+static constexpr const char *kTestAlertSignal = "obs_tools_test_alert";
+static constexpr const char *kTestAlertSignalDecl = "void obs_tools_test_alert(string alert)";
+static constexpr const char *kTestAlertProc = "obs_tools_test_alert_signal";
+static constexpr const char *kTestAlertProcDecl = "void obs_tools_test_alert_signal()";
 
 // libobs warns when a signal is declared twice and can't say whether one exists, so the first plugin to declare
 // them also publishes this marker. (1.3.0 / 0.1.0 declared the first two without it: those warn once, harmlessly.)
@@ -56,11 +62,18 @@ static void DeclareSignals()
 	calldata_init(&cd);
 	const bool exists = proc_handler_call(obs_get_proc_handler(), kSignalsProc, &cd);
 	calldata_free(&cd);
-	if (exists)
-		return;
-	proc_handler_add(obs_get_proc_handler(), kSignalsProcDecl, [](void *, calldata_t *) {}, nullptr);
-	for (const char *decl : {kChangedSignalDecl, kAlertSignalDecl, kYouTubeEventSignalDecl})
-		signal_handler_add(obs_get_signal_handler(), decl);
+	if (!exists) {
+		proc_handler_add(obs_get_proc_handler(), kSignalsProcDecl, [](void *, calldata_t *) {}, nullptr);
+		for (const char *decl : {kChangedSignalDecl, kAlertSignalDecl, kYouTubeEventSignalDecl})
+			signal_handler_add(obs_get_signal_handler(), decl);
+	}
+	calldata_init(&cd);
+	const bool testAlertExists = proc_handler_call(obs_get_proc_handler(), kTestAlertProc, &cd);
+	calldata_free(&cd);
+	if (!testAlertExists) {
+		proc_handler_add(obs_get_proc_handler(), kTestAlertProcDecl, [](void *, calldata_t *) {}, nullptr);
+		signal_handler_add(obs_get_signal_handler(), kTestAlertSignalDecl);
+	}
 }
 
 struct KnownPluginEntry {
@@ -416,6 +429,42 @@ void NotifyYouTubeEvent(const std::string &eventJson)
 	calldata_init(&cd);
 	calldata_set_string(&cd, "event", eventJson.c_str());
 	signal_handler_signal(obs_get_signal_handler(), kYouTubeEventSignal, &cd);
+	calldata_free(&cd);
+}
+
+static std::function<void(const std::string &)> &TestAlertHandler()
+{
+	static std::function<void(const std::string &)> handler;
+	return handler;
+}
+
+static void OnTestAlert(void *, calldata_t *cd)
+{
+	const char *alert = calldata_string(cd, "alert");
+	if (TestAlertHandler() && alert)
+		TestAlertHandler()(alert);
+}
+
+void SetTestAlertHandler(std::function<void(const std::string &alertJson)> handler)
+{
+	DeclareSignals();
+	TestAlertHandler() = std::move(handler);
+	signal_handler_connect(obs_get_signal_handler(), kTestAlertSignal, OnTestAlert, nullptr);
+}
+
+void ClearTestAlertHandler()
+{
+	signal_handler_disconnect(obs_get_signal_handler(), kTestAlertSignal, OnTestAlert, nullptr);
+	TestAlertHandler() = nullptr;
+}
+
+void NotifyTestAlert(const std::string &alertJson)
+{
+	DeclareSignals();
+	calldata_t cd;
+	calldata_init(&cd);
+	calldata_set_string(&cd, "alert", alertJson.c_str());
+	signal_handler_signal(obs_get_signal_handler(), kTestAlertSignal, &cd);
 	calldata_free(&cd);
 }
 

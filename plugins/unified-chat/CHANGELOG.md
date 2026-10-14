@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Test alerts
+- **Stream Alerts' tests of subs, gift subs, cheers, raids, Super Chats, memberships and Jewels** now show in the dock as that kind's alert line, marked "(test)". Needs Stream Alerts from the same release (OBS Tools protocol 3).
+
 ### Display
 - **Settings → General → Display:** **Text size** (80 to 200% of OBS's font; icons, badges and emotes grow with it), **Timestamps** (24-hour or 12-hour, on every line: chat, notices and alerts) and **Compact** (emotes at 1.2× text height instead of 1.5×, a header of icons with viewer counts, tighter margins; nothing is hidden). All three also change the lines already in the dock.
 

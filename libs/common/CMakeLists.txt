@@ -16,6 +16,8 @@ target_sources(
     src/core/secret-codec.hpp
     src/core/text-util.cpp
     src/core/text-util.hpp
+    src/core/test-alert.cpp
+    src/core/test-alert.hpp
     src/core/youtube-events.cpp
     src/core/youtube-events.hpp
 )
@@ -77,6 +79,7 @@ if(ENABLE_TESTS)
       tests/test-json-array-reader.cpp
       tests/test-oauth.cpp
       tests/test-text-util.cpp
+      tests/test-test-alert.cpp
       tests/test-youtube-events.cpp
   )
   target_link_libraries(common-tests PRIVATE obs-tools-core obs-tools-test-main)

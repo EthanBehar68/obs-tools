@@ -29,7 +29,7 @@ namespace obs_tools {
 
 // What OBS Tools plugins exchange: the accounts file, the Twitch scopes, the signals below and their JSON. Bump it
 // when any of that changes in a way an older plugin would get wrong, and release both plugins together.
-constexpr long long kObsToolsProtocol = 2;
+constexpr long long kObsToolsProtocol = 3; // 3: obs_tools_test_alert
 // The oldest protocol this plugin still works with. Raise it to kObsToolsProtocol when a bump breaks the older
 // one; leave it when the change is only an addition the older plugin can ignore (then no warning is shown).
 constexpr long long kObsToolsMinProtocol = 2;
@@ -69,5 +69,12 @@ void NotifyAlert(bool follow, const std::string &name, bool test);
 void SetYouTubeEventHandler(std::function<void(const std::string &eventJson)> handler);
 void ClearYouTubeEventHandler();
 void NotifyYouTubeEvent(const std::string &eventJson);
+
+// Stream Alerts' tests of the kinds the chat dock otherwise hears from the chats (core/test-alert JSON), so the dock
+// shows those tests too. Emitted and handled on the UI thread. A plugin older than protocol 3 doesn't send or handle
+// it, and nothing else changes, so the oldest protocol stays 2.
+void SetTestAlertHandler(std::function<void(const std::string &alertJson)> handler);
+void ClearTestAlertHandler();
+void NotifyTestAlert(const std::string &alertJson);
 
 } // namespace obs_tools

@@ -87,6 +87,8 @@ public:
 	void CheckMonitoringDevice();
 	// A new follower or subscriber from Stream Alerts.
 	void OnAlert(bool follow, const std::string &name, bool test);
+	// A Stream Alerts test of a sub, cheer, raid, Super Chat... (core/test-alert JSON).
+	void OnTestAlert(const std::string &alertJson);
 
 protected:
 	void changeEvent(QEvent *event) override;

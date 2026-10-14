@@ -71,6 +71,7 @@ Each library and plugin keeps its unit tests in its own `tests\` folder. They us
 | Shared accounts file: JSON round trip, keeping a newer plugin's fields, encrypted secrets, which plugin may spend a refresh token, adopting legacy sign-ins | `test-accounts.cpp` |
 | Text helpers (trim, UTF-8 / UTF-16 length, escaping, colours, RFC 3339 times, durations, Base64, URL encoding) | `test-text-util.cpp` |
 | YouTube paid and membership events passed between plugins | `test-youtube-events.cpp` |
+| Test alerts passed from Stream Alerts to the dock | `test-test-alert.cpp` |
 | **plugins\unified-chat** (`unified-chat-tests.exe`) | |
 | Twitch IRC parsing, tag unescaping, login/PING/RECONNECT state machine, `/me`, replies, CRLF injection, viewer count and validate parsing | `test-twitch-irc.cpp` |
 | Twitch EventSub chat events (messages, emote fragments, replies, deletions, clears, bans), chat notifications (subs, raids, announcements), chat subscriptions, Get Users, Send Chat Message, echo updates | `test-twitch-eventsub.cpp` |
@@ -106,6 +107,7 @@ libs\
 │   │   ├── oauth-device.*       RFC 8628 device flow for Twitch and Google; the Twitch scopes of every plugin
 │   │   ├── json-array-reader.*  splits a chunked JSON array into complete objects
 │   │   ├── text-util.*          UTF-8, escaping, URL encoding
+│   │   ├── test-alert.*         Stream Alerts tests of subs, cheers, raids... as JSON, for the chat dock
 │   │   ├── youtube-events.*     YouTube Super Chats / memberships / Jewels as JSON, from Unified Chat to Stream Alerts
 │   │   ├── http-client.hpp      the HttpClient interface the cores are tested against
 │   │   └── secret-codec.*       the SecretCodec interface, "enc:v1:" sealing

@@ -19,6 +19,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "alerts-controller.hpp"
 #include "alerts-dialog.hpp"
 #include "core/platform-events.hpp"
+#include "core/test-alert.hpp"
 #include "core/youtube-events.hpp"
 #include "ui/obs-tools-menu.hpp"
 
@@ -403,8 +404,17 @@ void AlertsController::Push(const AlertEvent &event, bool test)
 	obs_log(LOG_INFO, "%s: %s", KindName(event.kind), event.name.c_str());
 	// The chat dock shows each follower and subscriber as they arrive, including those a combined alert will
 	// cover. Subs, cheers and the rest are already in the chat.
-	if (!IsPriority(event.kind))
+	if (!IsPriority(event.kind)) {
 		obs_tools::NotifyAlert(event.kind == AlertKind::Follow, event.name, test);
+	} else if (test) {
+		// Real ones reach the dock from the chats themselves; a test only from here, as it shows on screen.
+		const AlertSettings &settings = config_.For(event.kind);
+		const std::string &message = event.variant && !settings.variantMessage.empty() ? settings.variantMessage
+											       : settings.message;
+		obs_tools::NotifyTestAlert(obs_tools::SerializeTestAlert(
+			{KindKey(event.kind), IsTwitch(event.kind),
+			 FormatAlert(Alert{event.kind, {event.name}, false, event}, message, {})}));
+	}
 	if (phase_ == Phase::Idle)
 		ShowNext();
 }
